@@ -30,6 +30,11 @@
   to = "/.netlify/functions/:splat"
   status = 200
 
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
 [functions]
   # 함수 디렉토리 명시
   directory = "netlify/functions"

@@ -10,7 +10,7 @@
       </div>
 
       <div v-if="combinedGalleryItems.length === 0 && processingImages.length === 0" class="empty-state">
-        <div class="empty-icon">🖼️</div>
+        <Image :size="48" class="empty-icon" />
         <p>아직 생성된 이미지가 없습니다.</p>
         <p class="hint">새 이미지 생성 버튼을 눌러 시작하세요.</p>
       </div>
@@ -32,7 +32,7 @@
           <!-- 생성 제안 카드 -->
           <template v-if="item.type === 'suggestion'">
             <div class="suggestion-content">
-              <div class="suggestion-icon">👤</div>
+              <User :size="40" class="suggestion-icon" />
               <h5>{{ item.character }}</h5>
               <p class="suggestion-hint">캐릭터 이미지 생성</p>
               <button 
@@ -71,7 +71,8 @@
                     class="btn-favorite"
                     :class="{ active: item.is_favorite }"
                   >
-                    {{ item.is_favorite ? '⭐' : '☆' }}
+                    <Star v-if="item.is_favorite" :size="16" fill="currentColor" />
+                    <Star v-else :size="16" />
                   </button>
                   <button 
                     @click.stop="connectToScene(item)"
@@ -79,20 +80,20 @@
                     :class="{ connected: item.production_sheet_id }"
                     title="스토리보드에 연결"
                   >
-                    🔗
+                    <Link :size="16" />
                   </button>
                   <button 
                     @click.stop="openTagEditor(item)"
                     class="btn-tags"
                     title="태그 편집"
                   >
-                    🏷️
+                    <Tag :size="16" />
                   </button>
                 </div>
                 <div class="info-bottom">
                   <p class="image-model">{{ item.generation_model || 'Unknown' }}</p>
                   <p v-if="item.element_name" class="image-character">
-                    👤 {{ item.element_name }}
+                    {{ item.element_name }}
                   </p>
                   <div v-if="item.tags && item.tags.length > 0" class="image-tags">
                     <span 
@@ -164,6 +165,7 @@ import { supabase } from '@/utils/supabase'
 import { useProductionStore } from '@/stores/production'
 import ImageGenerationModal from './ImageGenerationModal.vue'
 import SceneConnectionModal from './SceneConnectionModal.vue'
+import { Link, Tag, Download, Trash2, Loader, Plus, User, Image, Star } from 'lucide-vue-next'
 import TagEditModal from './TagEditModal.vue'
 import ImageDetailModal from './ImageDetailModal.vue'
 
@@ -683,9 +685,9 @@ defineExpose({
 }
 
 .suggestion-icon {
-  font-size: 2.5rem;
   margin-bottom: 12px;
   opacity: 0.7;
+  color: var(--text-secondary);
 }
 
 .suggestion-content h5 {
@@ -949,9 +951,9 @@ defineExpose({
 }
 
 .empty-icon {
-  font-size: 3rem;
   margin-bottom: 16px;
   opacity: 0.5;
+  color: var(--text-secondary);
 }
 
 .empty-state p {

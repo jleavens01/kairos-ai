@@ -10,7 +10,7 @@
       </div>
 
       <div v-if="!loading && filteredVideos.length === 0 && processingVideos.length === 0" class="empty-state">
-        <div class="empty-icon">🎬</div>
+        <Video :size="48" class="empty-icon" />
         <p>아직 생성된 비디오가 없습니다.</p>
         <p class="hint">새 비디오 생성 버튼을 눌러 시작하세요.</p>
       </div>
@@ -64,7 +64,7 @@
                 :alt="video.description || 'Video thumbnail'"
               />
               <div v-else class="no-preview">
-                <span>🎬</span>
+                <Video :size="48" />
               </div>
             </div>
 
@@ -77,21 +77,22 @@
                   :class="{ connected: video.production_sheet_id }"
                   title="스토리보드에 연결"
                 >
-                  🔗
+                  <Link :size="16" />
                 </button>
                 <button 
                   @click.stop="toggleFavorite(video)"
                   class="btn-favorite"
                   :class="{ active: video.is_favorite }"
                 >
-                  {{ video.is_favorite ? '⭐' : '☆' }}
+                  <Star v-if="video.is_favorite" :size="16" fill="currentColor" />
+                  <Star v-else :size="16" />
                 </button>
                 <button 
                   @click.stop="downloadVideo(video)"
                   class="btn-download"
                   title="다운로드"
                 >
-                  📥
+                  <Download :size="16" />
                 </button>
               </div>
               <div class="info-bottom">
@@ -153,6 +154,7 @@ import { supabase } from '@/utils/supabase'
 import { useProductionStore } from '@/stores/production'
 import VideoGenerationModal from './VideoGenerationModal.vue'
 import VideoDetailModal from './VideoDetailModal.vue'
+import { Plus, Link, Download, Trash2, Loader, Clock, AlertCircle, Video, Star } from 'lucide-vue-next'
 import SceneConnectionModal from './SceneConnectionModal.vue'
 
 const props = defineProps({
@@ -682,11 +684,11 @@ defineExpose({
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 3rem;
   opacity: 0.3;
   width: 100%;
   min-height: 150px;
   aspect-ratio: 16/9;
+  color: var(--text-secondary);
 }
 
 .processing-wrapper {
@@ -847,9 +849,9 @@ defineExpose({
 }
 
 .empty-icon {
-  font-size: 3rem;
   margin-bottom: 16px;
   opacity: 0.5;
+  color: var(--text-secondary);
 }
 
 .empty-state p {

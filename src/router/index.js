@@ -52,6 +52,18 @@ const router = createRouter({
       name: 'billing',
       component: () => import('../views/BillingView.vue'),
       meta: { requiresAuth: true }
+    },
+    {
+      path: '/library',
+      name: 'library',
+      component: () => import('../views/LibraryView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/explore',
+      name: 'explore',
+      component: () => import('../views/ExploreView.vue'),
+      meta: { requiresAuth: true }
     }
   ]
 })

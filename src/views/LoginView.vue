@@ -63,25 +63,31 @@ const handleGoogleLogin = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--bg-secondary);
   padding: 20px;
+  transition: background-color 0.3s;
 }
 
 .login-card {
-  background: white;
+  background: var(--bg-primary);
   border-radius: 10px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-lg);
   padding: 40px;
   width: 100%;
   max-width: 400px;
+  transition: all 0.3s;
 }
 
 .login-title {
   font-size: 2rem;
   font-weight: 700;
-  color: #2c3e50;
+  background: linear-gradient(to right, #4ade80, #34d399);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
   text-align: center;
-  margin-bottom: 30px;
+  margin-bottom: 10px;
 }
 
 .login-form {
@@ -115,12 +121,13 @@ const handleGoogleLogin = async () => {
 }
 
 .error-message {
-  background-color: #f8d7da;
-  color: #721c24;
+  background-color: rgba(239, 68, 68, 0.1);
+  color: var(--danger-color);
   padding: 10px;
   border-radius: 5px;
   margin-bottom: 15px;
   font-size: 0.9rem;
+  border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
 .submit-button {
@@ -172,9 +179,9 @@ const handleGoogleLogin = async () => {
 .google-button {
   width: 100%;
   padding: 12px;
-  background-color: white;
-  color: #495057;
-  border: 1px solid #dee2e6;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
   border-radius: 5px;
   font-size: 1rem;
   font-weight: 500;
@@ -186,8 +193,8 @@ const handleGoogleLogin = async () => {
 }
 
 .google-button:hover:not(:disabled) {
-  background-color: #f8f9fa;
-  border-color: #adb5bd;
+  background-color: var(--bg-secondary);
+  border-color: var(--primary-color);
 }
 
 .google-button:disabled {
@@ -206,7 +213,7 @@ const handleGoogleLogin = async () => {
 
 .login-subtitle {
   text-align: center;
-  color: #6c757d;
+  color: var(--text-secondary);
   margin-bottom: 30px;
 }
 
@@ -223,13 +230,13 @@ const handleGoogleLogin = async () => {
 
 .terms-text {
   font-size: 0.85rem;
-  color: #6c757d;
+  color: var(--text-secondary);
   text-align: center;
   line-height: 1.5;
 }
 
 .terms-text a {
-  color: #667eea;
+  color: var(--primary-color);
   text-decoration: none;
 }
 

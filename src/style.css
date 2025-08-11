@@ -73,15 +73,15 @@
   --warning-color: #fbbf24;
   --info-color: #06b6d4;
   
-  --text-primary: #1f2937;
-  --text-secondary: #6b7280;
-  --text-light: #9ca3af;
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --text-light: #6b7280;
   
   --bg-primary: #ffffff;
   --bg-secondary: #f9fafb;
   --bg-dark: #ffffff;
   
-  --border-color: #dee2e6;
+  --border-color: #e5e7eb;
   --shadow-sm: 0 2px 5px rgba(0, 0, 0, 0.1);
   --shadow-md: 0 5px 15px rgba(0, 0, 0, 0.1);
   --shadow-lg: 0 10px 30px rgba(0, 0, 0, 0.1);

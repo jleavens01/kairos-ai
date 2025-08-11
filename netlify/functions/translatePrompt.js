@@ -20,14 +20,17 @@ export const handler = async (event) => {
       throw new Error('Prompt is required');
     }
 
-    // API 키 확인
-    if (!process.env.GOOGLE_API_KEY) {
-      console.error('GOOGLE_API_KEY is not set in environment variables');
+    // API 키 확인 - Netlify 환경변수 디버깅
+    const apiKey = process.env.GOOGLE_API_KEY || process.env.VITE_GOOGLE_API_KEY;
+    
+    if (!apiKey) {
+      console.error('Neither GOOGLE_API_KEY nor VITE_GOOGLE_API_KEY is set in environment variables');
+      console.error('Available env vars:', Object.keys(process.env).filter(key => key.includes('GOOGLE') || key.includes('API')));
       throw new Error('Translation service is not configured');
     }
 
     // Gemini API 초기화
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+    const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     // 번역 프롬프트 생성
@@ -92,8 +95,9 @@ ${negativePrompt}
     console.error('Error details:', {
       message: error.message,
       stack: error.stack,
-      hasApiKey: !!process.env.GOOGLE_API_KEY,
-      apiKeyLength: process.env.GOOGLE_API_KEY ? process.env.GOOGLE_API_KEY.length : 0
+      hasApiKey: !!apiKey,
+      apiKeyLength: apiKey ? apiKey.length : 0,
+      envKeys: Object.keys(process.env).filter(key => key.includes('GOOGLE') || key.includes('API')).slice(0, 5)
     });
     
     return {

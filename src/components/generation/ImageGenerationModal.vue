@@ -2,8 +2,8 @@
   <div v-if="show" class="modal-overlay" @click.self="close">
     <div class="modal-container">
       <div class="modal-header">
-        <h3>🎨 AI 이미지 생성</h3>
-        <button @click="close" class="btn-close">✕</button>
+        <h3><Palette :size="20" class="modal-icon" /> AI 이미지 생성</h3>
+        <button @click="close" class="btn-close"><X :size="20" /></button>
       </div>
 
       <div class="modal-body">
@@ -407,6 +407,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { supabase } from '@/utils/supabase'
 import { useProductionStore } from '@/stores/production'
 import { useProjectsStore } from '@/stores/projects'
+import { Palette, X } from 'lucide-vue-next'
 
 const props = defineProps({
   show: {

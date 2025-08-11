@@ -2,8 +2,8 @@
   <div v-if="show" class="modal-overlay" @click.self="close">
     <div class="modal-container">
       <div class="modal-header">
-        <h2>🎬 AI 비디오 생성</h2>
-        <button @click="close" class="btn-close">✕</button>
+        <h2><Video :size="20" class="modal-icon" /> AI 비디오 생성</h2>
+        <button @click="close" class="btn-close"><X :size="20" /></button>
       </div>
 
       <div class="modal-body">
@@ -36,21 +36,21 @@
                 :class="{ active: referenceTab === 'storyboard' }"
                 class="tab-btn"
               >
-                📋 스토리보드
+                <Layers :size="16" /> 스토리보드
               </button>
               <button 
                 @click="referenceTab = 'upload'"
                 :class="{ active: referenceTab === 'upload' }"
                 class="tab-btn"
               >
-                📤 업로드
+                <Upload :size="16" /> 업로드
               </button>
               <button 
                 @click="referenceTab = 'library'"
                 :class="{ active: referenceTab === 'library' }"
                 class="tab-btn"
               >
-                📚 라이브러리
+                <BookOpen :size="16" /> 라이브러리
               </button>
               <button 
                 @click="referenceTab = 'url'"
@@ -463,6 +463,7 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { supabase } from '@/utils/supabase'
+import { Video, X, Layers, Upload, BookOpen, ImagePlus } from 'lucide-vue-next'
 
 const props = defineProps({
   show: {

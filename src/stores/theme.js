@@ -3,7 +3,7 @@ import { useProfileStore } from './profile'
 
 export const useThemeStore = defineStore('theme', {
   state: () => ({
-    mode: localStorage.getItem('theme') || 'light'
+    mode: localStorage.getItem('theme') || 'dark'
   }),
 
   getters: {
@@ -25,9 +25,8 @@ export const useThemeStore = defineStore('theme', {
         if (savedTheme) {
           this.mode = savedTheme
         } else {
-          // 시스템 테마 감지
-          const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-          this.mode = prefersDark ? 'dark' : 'light'
+          // 기본값은 다크 모드
+          this.mode = 'dark'
         }
       }
       

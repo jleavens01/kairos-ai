@@ -165,8 +165,8 @@
                     class="tts-play-btn"
                     :class="{ 'playing': playingTTS[scene.id] }"
                   >
-                    <span v-if="playingTTS[scene.id]">⏸</span>
-                    <span v-else>▶</span>
+                    <Pause v-if="playingTTS[scene.id]" :size="14" />
+                    <Play v-else :size="14" />
                   </button>
                   
                   <span class="tts-duration" v-if="ttsData[scene.id]?.duration">
@@ -188,7 +188,7 @@
                     class="tts-download-btn"
                     title="다운로드"
                   >
-                    📥
+                    <Download :size="14" />
                   </button>
                 </template>
               </div>
@@ -228,6 +228,7 @@ import { useProjectsStore } from '@/stores/projects'
 import { supabase } from '@/utils/supabase'
 import SceneImageUploader from './SceneImageUploader.vue'
 import JSZip from 'jszip'
+import { Download, Play, Pause } from 'lucide-vue-next'
 
 const props = defineProps({
   scenes: {

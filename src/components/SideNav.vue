@@ -11,11 +11,11 @@
       <!-- 비로그인 메뉴 -->
       <div v-if="!authStore.isLoggedIn" class="nav-section">
         <router-link to="/home" class="nav-item" @click="closeMobileNav">
-          <span class="nav-icon">🏠</span>
+          <Home :size="20" />
           <span class="nav-text">홈</span>
         </router-link>
         <router-link to="/login" class="nav-item" @click="closeMobileNav">
-          <span class="nav-icon">🔐</span>
+          <LogIn :size="20" />
           <span class="nav-text">로그인</span>
         </router-link>
       </div>
@@ -23,7 +23,7 @@
       <!-- 로그인 후 메뉴 -->
       <div v-else class="nav-section">
         <router-link to="/projects" class="nav-item main-nav-item" @click="closeMobileNav">
-          <span class="nav-icon">📁</span>
+          <FolderOpen :size="20" />
           <span class="nav-text">프로젝트</span>
         </router-link>
         
@@ -43,12 +43,19 @@
         <div v-else-if="authStore.isLoggedIn" class="recent-projects-placeholder">
           <span>최근 프로젝트 없음</span>
         </div>
-        <router-link to="/profile" class="nav-item" @click="closeMobileNav">
-          <span class="nav-icon">👤</span>
-          <span class="nav-text">프로필</span>
+        
+        <router-link to="/library" class="nav-item" @click="closeMobileNav">
+          <BookOpen :size="20" />
+          <span class="nav-text">라이브러리</span>
         </router-link>
+        
+        <router-link to="/explore" class="nav-item" @click="closeMobileNav">
+          <Compass :size="20" />
+          <span class="nav-text">Explore</span>
+        </router-link>
+        
         <router-link to="/billing" class="nav-item" @click="closeMobileNav">
-          <span class="nav-icon">💳</span>
+          <CreditCard :size="20" />
           <span class="nav-text">결제</span>
         </router-link>
       </div>
@@ -76,22 +83,32 @@
             </div>
             <div class="user-email">{{ authStore.user?.email }}</div>
           </div>
+          <div class="profile-menu">
+            <button @click="toggleProfileMenu" class="menu-button">
+              <MoreVertical :size="18" />
+            </button>
+            <div v-if="showProfileMenu" class="dropdown-menu">
+              <router-link to="/profile" class="dropdown-item" @click="closeProfileMenu">
+                <User :size="16" />
+                <span>프로필 설정</span>
+              </router-link>
+              <button @click="handleSignOut" class="dropdown-item">
+                <LogOut :size="16" />
+                <span>로그아웃</span>
+              </button>
+            </div>
+          </div>
         </div>
         <div class="credits-info">
           <span class="credits-label">크레딧:</span>
           <span class="credits-value" :class="{ 'low': profileStore.isCreditsLow }">
-            {{ profileStore.availableCredits }}
+            {{ profileStore.availableCredits.toLocaleString() }}
           </span>
         </div>
       </div>
       
       <!-- 테마 전환 버튼 -->
       <ThemeToggle />
-      
-      <!-- 로그아웃 버튼 -->
-      <button @click="handleSignOut" class="logout-button">
-        로그아웃
-      </button>
     </div>
   </nav>
 </template>
@@ -104,6 +121,7 @@ import { useProjectsStore } from '@/stores/projects';
 import { useRouter, useRoute } from 'vue-router';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import ThemeToggle from '@/components/ui/ThemeToggle.vue';
+import { Home, LogIn, FolderOpen, BookOpen, Compass, CreditCard, User, LogOut, MoreVertical } from 'lucide-vue-next';
 
 const props = defineProps({
   isMobileNavOpen: {
@@ -124,6 +142,7 @@ const route = useRoute();
 const isMobile = ref(false);
 const recentProjects = ref([]);
 const currentProjectId = computed(() => route.params.projectId);
+const showProfileMenu = ref(false);
 
 const checkMobile = () => {
   isMobile.value = window.innerWidth <= 768;
@@ -140,7 +159,17 @@ const handleSignOut = async () => {
   if (result.success) {
     router.push('/home');
     closeMobileNav();
+    showProfileMenu.value = false;
   }
+};
+
+const toggleProfileMenu = () => {
+  showProfileMenu.value = !showProfileMenu.value;
+};
+
+const closeProfileMenu = () => {
+  showProfileMenu.value = false;
+  closeMobileNav();
 };
 
 // 티어별 아이콘 반환
@@ -500,6 +529,65 @@ onUnmounted(() => {
 
 .credits-value.low {
   color: var(--warning-color);
+}
+
+/* 프로필 메뉴 스타일 */
+.profile-menu {
+  position: relative;
+}
+
+.menu-button {
+  background: transparent;
+  border: none;
+  padding: 4px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.menu-button:hover {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.dropdown-menu {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 8px;
+  margin-bottom: 8px;
+  min-width: 180px;
+  box-shadow: var(--shadow-lg);
+  z-index: 1000;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  color: var(--text-primary);
+  text-decoration: none;
+  transition: all 0.2s;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+  font-size: 0.9rem;
+}
+
+.dropdown-item:hover {
+  background-color: var(--bg-secondary);
+  color: var(--primary-color);
 }
 
 /* 모바일 스타일 */
