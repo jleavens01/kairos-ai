@@ -1,0 +1,13 @@
+{
+  "name": "kairos-scripts",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "import-videos": "node import-videos.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4",
+    "csv-parser": "^3.0.0",
+    "uuid": "^10.0.0"
+  }
+}
