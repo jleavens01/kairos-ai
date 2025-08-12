@@ -80,7 +80,38 @@ export const useProductionStore = defineStore('production', {
       this.currentJobStatus = 'AI 분석 시작 중...'
 
       try {
-        // 1. 분석 작업 시작
+        // 1. 짧은 스크립트는 즉시 처리 (5000자 이하)
+        if (scriptText.length <= 5000) {
+          const response = await fetch('/.netlify/functions/analyze-script-quick', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              projectId,
+              scriptText
+            })
+          })
+
+          const result = await response.json()
+          
+          if (!result.success) {
+            throw new Error(result.error || '스크립트 분석 실패')
+          }
+
+          // 즉시 처리 완료
+          console.log('스크립트 분석 완료:', result.data)
+          
+          // 프로덕션 시트 다시 로드
+          await this.fetchProductionSheets(projectId)
+          
+          return {
+            success: true,
+            data: result.data
+          }
+        }
+        
+        // 2. 긴 스크립트는 기존 비동기 처리
         const response = await fetch('/.netlify/functions/analyze-script', {
           method: 'POST',
           headers: {
@@ -98,11 +129,11 @@ export const useProductionStore = defineStore('production', {
           throw new Error(result.error || '스크립트 분석 시작 실패')
         }
 
-        // 2. job_id를 받아서 폴링 시작
+        // 3. job_id를 받아서 폴링 시작
         const jobId = result.job_id
         console.log('분석 작업 시작됨:', jobId)
         
-        // 3. 작업 상태를 주기적으로 확인 (최대 10분)
+        // 4. 작업 상태를 주기적으로 확인 (최대 10분)
         const maxAttempts = 120 // 5초 간격으로 120번 = 10분
         let attempts = 0
         

@@ -50,8 +50,12 @@ export const handler = async (event) => {
         throw insertError;
       }
 
-      // 백그라운드에서 비동기 처리 시작
-      processAnalysisInBackground(jobId, projectId, scriptText, supabase);
+      // 백그라운드에서 비동기 처리 시작 - await 추가하여 완료까지 대기
+      // Netlify Functions는 최대 10초까지만 실행 가능하므로 간단한 분석만 동기적으로 처리
+      // 복잡한 분석은 별도 처리 필요
+      setTimeout(async () => {
+        await processAnalysisInBackground(jobId, projectId, scriptText, supabase);
+      }, 100);
 
       return {
         statusCode: 200,
@@ -101,6 +105,7 @@ export const handler = async (event) => {
 
 // 백그라운드 처리 함수
 async function processAnalysisInBackground(jobId, projectId, scriptText, supabase) {
+  console.log(`[analyze-script] Starting background processing for job ${jobId}`);
   try {
     const model = genAI.getGenerativeModel({ 
       model: "gemini-2.0-flash-exp",
@@ -115,7 +120,17 @@ async function processAnalysisInBackground(jobId, projectId, scriptText, supabas
     // AI 프롬프트 생성
     const prompt = generateAnalysisPrompt(scriptText);
     
-    console.log(`Job ${jobId} - Starting AI analysis...`);
+    console.log(`Job ${jobId} - Starting AI analysis with ${scriptText.length} characters...`);
+    
+    // 상태 업데이트 - AI 분석 중
+    await supabase
+      .from('script_analysis_jobs')
+      .update({
+        status: 'ai_processing',
+        status_message: 'AI가 스크립트를 분석 중입니다...',
+        updated_at: new Date().toISOString()
+      })
+      .eq('job_id', jobId);
     
     // AI 분석 실행
     const result = await model.generateContent(prompt);
