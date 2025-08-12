@@ -1107,27 +1107,27 @@ const generateImage = async () => {
       if (validReferenceImages.length > 1) {
         // 참조 이미지가 2개 이상일 때 (스타일 + 다른 참조 이미지)
         if (category.value === 'character') {
-          finalPrompt = `첫번째 이미지 스타일로 두번째 이미지의 캐릭터를 정면으로 그려달라. 인물 전체가 완전하게 보이게 그려줘. 이미지 비율: ${imageSize.value}. ${stylePrompt}`
+          finalPrompt = `Draw the character from the second image in a front-facing view using the style of the first image. Show the full figure completely. Aspect ratio: ${imageSize.value}. ${stylePrompt}`
         } else if (category.value === 'background') {
-          finalPrompt = `첫번째 이미지 스타일로 두번째 이미지의 배경을 그려달라. 이미지 비율: ${imageSize.value}. ${stylePrompt}`
+          finalPrompt = `Draw the background from the second image using the style of the first image. Aspect ratio: ${imageSize.value}. ${stylePrompt}`
         } else if (category.value === 'object') {
-          finalPrompt = `첫번째 이미지 스타일로 두번째 이미지의 소품/오브젝트를 그려달라. 이미지 비율: ${imageSize.value}. ${stylePrompt}`
+          finalPrompt = `Draw the props/objects from the second image using the style of the first image. Aspect ratio: ${imageSize.value}. ${stylePrompt}`
         }
       } else {
         // 스타일 이미지만 있을 때
         if (category.value === 'character') {
-          const nameDesc = characterName.value || prompt.value
-          finalPrompt = `첨부한 기준이미지 스타일로 ${nameDesc} 캐릭터를 정면으로 그려달라. 인물 전체가 들어가게 해줘. 이미지 비율: ${imageSize.value}. ${stylePrompt}`
+          const nameDesc = characterName.value || finalPrompt
+          finalPrompt = `Draw a ${nameDesc} character in a front-facing view using the attached reference image style. Show the full figure. Aspect ratio: ${imageSize.value}. ${stylePrompt}`
         } else if (category.value === 'background') {
-          const nameDesc = characterName.value || prompt.value
-          finalPrompt = `첨부한 기준이미지 스타일로 ${nameDesc} 배경을 그려달라. 이미지 비율: ${imageSize.value}. ${stylePrompt}`
+          const nameDesc = characterName.value || finalPrompt
+          finalPrompt = `Draw a ${nameDesc} background using the attached reference image style. Aspect ratio: ${imageSize.value}. ${stylePrompt}`
         } else if (category.value === 'object') {
-          const nameDesc = characterName.value || prompt.value
-          finalPrompt = `첨부한 기준이미지 스타일로 ${nameDesc} 소품/오브젝트를 그려달라. 이미지 비율: ${imageSize.value}. ${stylePrompt}`
+          const nameDesc = characterName.value || finalPrompt
+          finalPrompt = `Draw a ${nameDesc} prop/object using the attached reference image style. Aspect ratio: ${imageSize.value}. ${stylePrompt}`
         } else if (category.value === 'scene') {
           // 씬 카테고리이고 다른 참조 이미지가 없을 때
           if (validReferenceImages.length === 1) {
-            finalPrompt += `\n\n1. 첨부한 스타일 이미지의 아트 스타일(색감, 질감, 그림체, 눈코입 모양, 눈동자 스타일(중요))에 맞춰서 그리세요.\n2. 스타일 이미지에 있는 캐릭터는 절대 사용하지 마세요.\n3. characters에 대한 언급이 없다면 어떤 캐릭터도 그리지 마세요.`
+            finalPrompt += `\n\n1. Match the art style of the attached style image (colors, textures, drawing style, facial features, eye style(important)).\n2. Never use characters from the style image.\n3. If no characters are mentioned, do not draw any characters.`
           }
         }
       }
