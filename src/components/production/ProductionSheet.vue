@@ -35,7 +35,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useProductionStore } from '@/stores/production'
 import ScriptInputModal from './ScriptInputModal.vue'
 import ProductionTable from './ProductionTable.vue'
@@ -109,6 +109,15 @@ const loadProductionData = async () => {
 // Lifecycle
 onMounted(() => {
   loadProductionData()
+})
+
+// projectId 변경 감지
+watch(() => props.projectId, async (newId, oldId) => {
+  if (newId && newId !== oldId) {
+    // 스토어 초기화 및 새 데이터 로드
+    productionStore.clearProductionData()
+    await loadProductionData()
+  }
 })
 
 // Expose method for parent component

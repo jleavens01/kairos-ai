@@ -149,7 +149,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { supabase } from '@/utils/supabase'
 import { useProductionStore } from '@/stores/production'
 import VideoGenerationModal from './VideoGenerationModal.vue'
@@ -536,6 +536,18 @@ onMounted(async () => {
 onUnmounted(() => {
   // cleanupRealtimeSubscription() - Realtime 제거
   stopPolling()
+})
+
+// projectId 변경 감지
+watch(() => props.projectId, async (newId, oldId) => {
+  if (newId && newId !== oldId) {
+    // 비디오 목록 초기화 및 새 데이터 로드
+    videos.value = []
+    processingVideos.value = []
+    loading.value = true
+    filterModel.value = 'all'
+    await fetchVideos()
+  }
 })
 
 // Method to set filter model from parent

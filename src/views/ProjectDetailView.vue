@@ -179,21 +179,39 @@ const productionSheetRef = ref(null)
 const imageGalleryRef = ref(null)
 const mediaViewRef = ref(null)
 
-onMounted(async () => {
-  const id = route.params.id
-  if (!id) {
+// 프로젝트 로드 함수
+const loadProject = async (projectId) => {
+  loading.value = true
+  error.value = null
+  
+  if (!projectId) {
     error.value = '프로젝트 ID가 없습니다.'
     loading.value = false
     return
   }
 
-  const result = await projectsStore.getProject(id)
+  const result = await projectsStore.getProject(projectId)
   
   if (!result.success) {
     error.value = result.error || '프로젝트를 불러올 수 없습니다.'
   }
   
   loading.value = false
+}
+
+// route 변경 감지
+watch(() => route.params.id, async (newId, oldId) => {
+  if (newId && newId !== oldId) {
+    // 탭을 첫 번째 탭으로 초기화
+    activeTab.value = 'production'
+    // 새 프로젝트 로드
+    await loadProject(newId)
+  }
+})
+
+onMounted(async () => {
+  const id = route.params.id
+  await loadProject(id)
 })
 
 const formatDate = (date) => {

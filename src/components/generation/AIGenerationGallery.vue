@@ -160,7 +160,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { supabase } from '@/utils/supabase'
 import { useProductionStore } from '@/stores/production'
 import ImageGenerationModal from './ImageGenerationModal.vue'
@@ -661,6 +661,20 @@ onMounted(async () => {
 onUnmounted(() => {
   // cleanupRealtimeSubscription() - Realtime 제거
   stopPollingWorker()
+})
+
+// projectId 변경 감지
+watch(() => props.projectId, async (newId, oldId) => {
+  if (newId && newId !== oldId) {
+    // 이미지 목록 초기화 및 새 데이터 로드
+    images.value = []
+    processingImages.value = []
+    loading.value = true
+    filterCategory.value = 'all'
+    await fetchImages()
+    // 스토리보드 데이터도 다시 로드
+    await productionStore.fetchProductionSheets(newId)
+  }
 })
 
 // Method to set filter category from parent
