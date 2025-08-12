@@ -1,7 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createClient } from '@supabase/supabase-js';
 
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || process.env.VITE_GOOGLE_API_KEY);
 
 export const handler = async (event) => {
   const headers = {
@@ -15,8 +15,8 @@ export const handler = async (event) => {
   }
 
   const supabase = createClient(
-    process.env.VITE_SUPABASE_URL,
-    process.env.VITE_SUPABASE_ANON_KEY
+    process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,
+    process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY
   );
 
   try {
@@ -108,7 +108,7 @@ async function processAnalysisInBackground(jobId, projectId, scriptText, supabas
         temperature: 0.7,
         topK: 40,
         topP: 0.9,
-        maxOutputTokens: 8192,
+        maxOutputTokens: 30000,  // 대용량 스크립트 지원
       }
     });
 

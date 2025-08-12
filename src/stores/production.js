@@ -102,12 +102,12 @@ export const useProductionStore = defineStore('production', {
         const jobId = result.job_id
         console.log('분석 작업 시작됨:', jobId)
         
-        // 3. 작업 상태를 주기적으로 확인 (최대 3분)
-        const maxAttempts = 60 // 3초 간격으로 60번 = 3분
+        // 3. 작업 상태를 주기적으로 확인 (최대 10분)
+        const maxAttempts = 120 // 5초 간격으로 120번 = 10분
         let attempts = 0
         
         while (attempts < maxAttempts) {
-          await new Promise(resolve => setTimeout(resolve, 3000)) // 3초 대기
+          await new Promise(resolve => setTimeout(resolve, 5000)) // 5초 대기
           
           const statusResponse = await fetch(`/.netlify/functions/check-job-status?job_id=${jobId}`)
           const statusResult = await statusResponse.json()

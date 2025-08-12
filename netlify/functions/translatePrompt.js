@@ -1,5 +1,4 @@
 // Gemini 1.5 Flash를 사용한 프롬프트 번역 함수
-import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export const handler = async (event) => {
   const headers = {
@@ -12,6 +11,9 @@ export const handler = async (event) => {
     return { statusCode: 200, headers };
   }
 
+  // API 키를 함수 밖에서 먼저 정의
+  const apiKey = process.env.GOOGLE_API_KEY || process.env.VITE_GOOGLE_API_KEY;
+
   try {
     // 요청 데이터 파싱
     const { prompt, negativePrompt } = JSON.parse(event.body || '{}');
@@ -21,14 +23,34 @@ export const handler = async (event) => {
     }
 
     // API 키 확인 - Netlify 환경변수 디버깅
-    const apiKey = process.env.GOOGLE_API_KEY || process.env.VITE_GOOGLE_API_KEY;
-    
     if (!apiKey) {
-      console.error('Neither GOOGLE_API_KEY nor VITE_GOOGLE_API_KEY is set in environment variables');
-      console.error('Available env vars:', Object.keys(process.env).filter(key => key.includes('GOOGLE') || key.includes('API')));
-      throw new Error('Translation service is not configured');
+      console.error('Google API key is not configured');
+      console.error('Environment check:', {
+        hasGoogleApiKey: !!process.env.GOOGLE_API_KEY,
+        hasViteGoogleApiKey: !!process.env.VITE_GOOGLE_API_KEY,
+        availableKeys: Object.keys(process.env).filter(key => key.includes('GOOGLE') || key.includes('API')).slice(0, 5)
+      });
+      
+      // 환경변수가 없을 때는 원문을 그대로 반환
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          success: true,
+          data: {
+            originalPrompt: prompt,
+            translatedPrompt: prompt, // 번역 없이 원문 반환
+            originalNegativePrompt: negativePrompt || null,
+            translatedNegativePrompt: negativePrompt || null,
+            warning: 'Translation service not configured - returning original text'
+          }
+        })
+      };
     }
 
+    // GoogleGenerativeAI 동적 import로 변경
+    const { GoogleGenerativeAI } = await import('@google/generative-ai');
+    
     // Gemini API 초기화
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
@@ -91,21 +113,20 @@ ${negativePrompt}
     };
 
   } catch (error) {
-    console.error('Translation error:', error);
-    console.error('Error details:', {
-      message: error.message,
-      stack: error.stack,
-      hasApiKey: !!apiKey,
-      apiKeyLength: apiKey ? apiKey.length : 0,
-      envKeys: Object.keys(process.env).filter(key => key.includes('GOOGLE') || key.includes('API')).slice(0, 5)
-    });
+    console.error('Translation error:', error.message);
+    console.error('Error type:', error.constructor.name);
+    console.error('Error stack:', error.stack);
     
+    // 더 자세한 에러 정보 반환
     return {
       statusCode: 500,
       headers,
       body: JSON.stringify({
         success: false,
         error: error.message || 'Translation failed',
+        errorType: error.constructor.name,
+        hasApiKey: !!apiKey,
+        apiKeyLength: apiKey ? apiKey.length : 0,
         details: process.env.NODE_ENV === 'development' ? error.stack : undefined
       })
     };

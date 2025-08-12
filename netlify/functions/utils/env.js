@@ -18,7 +18,7 @@ export function getGoogleApiKey() {
 }
 
 export function getFalKey() {
-  return process.env.FAL_KEY || process.env.VITE_FAL_KEY;
+  return process.env.FAL_API_KEY || process.env.FAL_KEY || process.env.VITE_FAL_API_KEY || process.env.VITE_FAL_KEY;
 }
 
 // 디버깅용

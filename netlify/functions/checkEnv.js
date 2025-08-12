@@ -25,7 +25,7 @@ export const handler = async (event) => {
     // FAL Key
     falKey: {
       hasKey: !!getFalKey(),
-      source: process.env.FAL_KEY ? 'FAL_KEY' : process.env.VITE_FAL_KEY ? 'VITE_FAL_KEY' : 'not set',
+      source: process.env.FAL_API_KEY ? 'FAL_API_KEY' : process.env.FAL_KEY ? 'FAL_KEY' : process.env.VITE_FAL_API_KEY ? 'VITE_FAL_API_KEY' : process.env.VITE_FAL_KEY ? 'VITE_FAL_KEY' : 'not set',
       length: getFalKey() ? getFalKey().length : 0
     },
     
