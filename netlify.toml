@@ -9,7 +9,7 @@
   functions = "netlify/functions"
 
 [build.environment]
-  NODE_VERSION = "18"
+  NODE_VERSION = "20"
 
 [dev]
   # 'netlify dev' 명령어를 실행할 때 사용되는 로컬 개발 서버 명령어입니다.
