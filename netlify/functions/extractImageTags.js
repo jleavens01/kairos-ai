@@ -68,21 +68,20 @@ export const handler = async (event) => {
       }
     });
 
-    // 태그 추출 프롬프트
-    const tagPrompt = `Analyze this AI-generated image and extract relevant tags.
+    // 태그 추출 프롬프트 (한글 5개)
+    const tagPrompt = `이 AI 생성 이미지를 분석하고 가장 중요한 특징을 나타내는 한글 태그 5개를 추출해주세요.
 
-Provide tags in the following categories:
-1. Style tags (art style, visual style, rendering style)
-2. Subject tags (main subjects, characters, objects)
-3. Mood/Atmosphere tags (emotional tone, atmosphere)
-4. Color tags (dominant colors, color scheme)
-5. Technical tags (composition, lighting, perspective)
-6. Scene tags (location, setting, environment)
+다음 카테고리에서 균형있게 선택해주세요:
+1. 스타일 (예: 애니메이션, 실사, 수채화)
+2. 주제/대상 (예: 인물, 풍경, 동물)
+3. 분위기 (예: 따뜻한, 차가운, 신비로운)
+4. 색상 (예: 파란색, 붉은톤, 파스텔)
+5. 장면/배경 (예: 실내, 야외, 도시)
 
-Return ONLY a JSON array of tags without any explanation or markdown formatting.
-Example: ["anime style", "character portrait", "warm lighting", "orange tones", "front view", "indoor scene"]
+JSON 배열 형태로만 반환하고 다른 설명은 하지 마세요.
+예시: ["애니메이션", "캐릭터", "따뜻한분위기", "주황색톤", "실내"]
 
-Be specific and use commonly understood terms. Provide 15-20 relevant tags.`;
+정확히 5개의 간단명료한 한글 태그를 제공해주세요.`;
 
     const result = await model.generateContent([
       tagPrompt,

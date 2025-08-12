@@ -24,7 +24,8 @@ const videoGalleryRef = ref(null)
 defineExpose({
   openGenerationModal: () => videoGalleryRef.value?.openGenerationModal(),
   setFilterModel: (model) => videoGalleryRef.value?.setFilterModel(model),
-  filterModel: () => videoGalleryRef.value?.filterModel
+  filterModel: () => videoGalleryRef.value?.filterModel,
+  toggleKeptView: (showKept) => videoGalleryRef.value?.toggleKeptView(showKept)
 })
 </script>
 

@@ -59,7 +59,8 @@ export const handler = async (event) => {
       model,
       imageSize,
       category,
-      hasReferenceImages: referenceImages.length > 0
+      hasReferenceImages: referenceImages.length > 0,
+      parameters
     });
 
     // 1. 먼저 DB에 pending 상태로 기록 생성
@@ -106,10 +107,11 @@ export const handler = async (event) => {
       apiEndpoint = 'https://queue.fal.run/fal-ai/flux-pro';
       requestBody = {
         prompt: prompt,
-        image_size: imageSize, // Flux는 비율 형식 사용 (예: "16:9")
+        aspect_ratio: imageSize, // aspect_ratio 사용 (image_size 대신)
         num_inference_steps: parameters.steps || 28,
         guidance_scale: parameters.guidance_scale || 3.5,
         num_images: 1,
+        output_format: 'jpeg',
         safety_tolerance: parameters.safety_tolerance || 2,
         seed: parameters.seed || Math.floor(Math.random() * 1000000)
       };
@@ -124,8 +126,9 @@ export const handler = async (event) => {
       requestBody = {
         prompt: prompt,
         image_url: referenceImages[0],
+        aspect_ratio: imageSize, // aspect_ratio 사용 (image_size 대신)
         guidance_scale: parameters.guidance_scale || 3.5,
-        safety_tolerance: parameters.safety_tolerance || 2,
+        output_format: 'jpeg',
         num_images: 1,
         seed: parameters.seed || Math.floor(Math.random() * 1000000)
       };
@@ -140,8 +143,9 @@ export const handler = async (event) => {
       requestBody = {
         prompt: prompt,
         image_urls: referenceImages,
+        aspect_ratio: imageSize, // aspect_ratio 사용 (image_size 대신)
         guidance_scale: parameters.guidance_scale || 3.5,
-        safety_tolerance: parameters.safety_tolerance || 2,
+        output_format: 'jpeg',
         num_images: 1,
         seed: parameters.seed || Math.floor(Math.random() * 1000000)
       };
@@ -172,7 +176,8 @@ export const handler = async (event) => {
 
     console.log('FAL API Request:', {
       endpoint: apiEndpoint,
-      model: model
+      model: model,
+      requestBody: requestBody
     });
 
     // 3. FAL AI API 호출 (비동기 큐)
@@ -189,17 +194,37 @@ export const handler = async (event) => {
       const errorText = await falResponse.text();
       console.error('FAL API Error:', errorText);
       
-      // 에러 발생 시 DB 상태 업데이트
+      // 422 오류 또는 다른 오류 발생 시 DB 상태를 즉시 failed로 업데이트
+      let errorMessage = errorText;
+      let errorDetails = {};
+      
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorMessage = errorJson.message || errorJson.detail || errorText;
+        errorDetails = errorJson;
+      } catch (e) {
+        // JSON 파싱 실패 시 원본 텍스트 사용
+      }
+      
       await supabaseAdmin
         .from('gen_images')
         .update({
           generation_status: 'failed',
           metadata: {
             ...imageRecord.metadata,
-            error: errorText
+            error: errorMessage,
+            error_code: falResponse.status,
+            error_details: errorDetails,
+            failed_at: new Date().toISOString()
           }
         })
         .eq('id', imageRecord.id);
+        
+      // 422 오류는 특별히 처리 (Validation Error)
+      if (falResponse.status === 422) {
+        console.error('FAL API Validation Error (422):', errorMessage);
+        throw new Error(`이미지 생성 실패: ${errorMessage}`);
+      }
         
       throw new Error(`FAL AI API request failed: ${errorText}`);
     }

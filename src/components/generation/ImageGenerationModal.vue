@@ -190,6 +190,13 @@
                   />
                   현재 프로젝트만
                 </label>
+                <label class="checkbox-label">
+                  <input 
+                    type="checkbox" 
+                    v-model="includeKept"
+                  />
+                  보관함 포함
+                </label>
               </div>
             </div>
 
@@ -233,6 +240,30 @@
                 @keyup.enter="addImageFromUrl"
               />
               <button @click="addImageFromUrl" class="btn-add-url">추가</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 프롬프트 프리셋 -->
+        <div class="form-group">
+          <div class="preset-header">
+            <label>프롬프트 프리셋</label>
+            <button @click="showPresetModal = true" class="btn-preset-manage">
+              <Plus :size="16" /> 프리셋 관리
+            </button>
+          </div>
+          <div class="preset-chips">
+            <div v-if="presets.length === 0" class="no-presets">
+              프리셋이 없습니다. 프리셋을 추가해보세요.
+            </div>
+            <div 
+              v-for="preset in presets" 
+              :key="preset.id"
+              @click="togglePreset(preset)"
+              class="preset-chip"
+              :class="{ active: selectedPresets.includes(preset.id) }"
+            >
+              {{ preset.name }}
             </div>
           </div>
         </div>
@@ -399,6 +430,16 @@
         </button>
       </div>
     </div>
+    
+    <!-- 프리셋 관리 모달 -->
+    <PresetManageModal
+      v-if="showPresetModal"
+      :show="showPresetModal"
+      :project-id="projectId"
+      media-type="image"
+      @close="showPresetModal = false"
+      @saved="handlePresetSaved"
+    />
   </div>
 </template>
 
@@ -407,7 +448,8 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { supabase } from '@/utils/supabase'
 import { useProductionStore } from '@/stores/production'
 import { useProjectsStore } from '@/stores/projects'
-import { Palette, X } from 'lucide-vue-next'
+import { Palette, X, Plus } from 'lucide-vue-next'
+import PresetManageModal from './PresetManageModal.vue'
 
 const props = defineProps({
   show: {
@@ -450,6 +492,7 @@ const fileInput = ref(null)
 const referenceTab = ref('upload')
 const librarySource = ref('my-images')
 const currentProjectOnly = ref(true)
+const includeKept = ref(false) // 보관함 포함 옵션 (기본값: false)
 const libraryImages = ref([])
 const loadingLibrary = ref(false)
 
@@ -479,6 +522,11 @@ const guidanceScale = ref(3.5)
 const safetyTolerance = ref(2)
 const seed = ref(null)
 
+// Preset data
+const showPresetModal = ref(false)
+const presets = ref([])
+const selectedPresets = ref([])  // 선택된 프리셋 ID 배열
+
 // Watch for prop changes
 watch(() => props.initialPrompt, (newVal) => {
   prompt.value = newVal
@@ -499,7 +547,7 @@ watch(referenceTab, (newTab) => {
 })
 
 // 라이브러리 필터 변경 시 이미지 로드
-watch([librarySource, currentProjectOnly], () => {
+watch([librarySource, currentProjectOnly, includeKept], () => {
   if (referenceTab.value === 'library') {
     loadLibraryImages()
   }
@@ -679,6 +727,12 @@ const loadLibraryImages = async () => {
       // else {
       //   query = query.eq('user_id', session.user.id)
       // }
+      
+      // 보관함 포함 여부
+      if (!includeKept.value) {
+        // 보관함 이미지 제외 (is_kept가 null이거나 false인 것만)
+        query = query.or('is_kept.is.null,is_kept.eq.false')
+      }
     }
     // 공유 이미지 (구현 예정)
     // else if (librarySource.value === 'shared') {
@@ -929,6 +983,47 @@ const convertScriptToVisualDescription = (scene) => {
   return `${script.substring(0, 50)}... 장면`
 }
 
+// 프리셋 관련 함수들
+const loadPresets = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('prompt_presets')
+      .select('*')
+      .eq('project_id', props.projectId)
+      .in('media_type', ['image', 'both'])
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: false })
+    
+    if (error) throw error
+    presets.value = data || []
+  } catch (error) {
+    console.error('프리셋 로드 실패:', error)
+  }
+}
+
+const togglePreset = (preset) => {
+  const index = selectedPresets.value.indexOf(preset.id)
+  if (index > -1) {
+    selectedPresets.value.splice(index, 1)
+  } else {
+    selectedPresets.value.push(preset.id)
+  }
+}
+
+const handlePresetSaved = () => {
+  loadPresets()
+  showPresetModal.value = false
+}
+
+// 선택된 프리셋들의 프롬프트를 합치기
+const getPresetsPrompt = () => {
+  return presets.value
+    .filter(p => selectedPresets.value.includes(p.id))
+    .map(p => p.prompt)
+    .join(', ')
+}
+
 // 캐릭터에 맥락 추가
 const addCharacterContext = (characterName) => {
   const characterContexts = {
@@ -1094,9 +1189,17 @@ const generateImage = async () => {
       .filter(item => item.url && !item.uploading)
       .map(item => item.url)
 
+    // 프리셋 프롬프트 추가
+    const presetPrompt = getPresetsPrompt()
+    
     // 스타일이 선택된 경우 처리
     // 번역이 활성화되어 있고 번역된 프롬프트가 있으면 사용
     let finalPrompt = enableTranslation.value && translatedPrompt.value ? translatedPrompt.value : prompt.value
+    
+    // 프리셋이 있으면 프롬프트에 추가
+    if (presetPrompt) {
+      finalPrompt = `${finalPrompt}, ${presetPrompt}`
+    }
     if (selectedStyle.value) {
       // 스타일의 base_image_url을 참조 이미지 맨 앞에 추가
       validReferenceImages = [selectedStyle.value.base_image_url, ...validReferenceImages]
@@ -1220,6 +1323,9 @@ const toggleStyleDropdown = () => {
 onMounted(() => {
   // 스타일 로드
   loadStyles()
+  
+  // 프리셋 로드
+  loadPresets()
   
   // 카테고리가 이미 scene이면 씬 목록 로드
   if (category.value === 'scene') {
@@ -1821,6 +1927,72 @@ onMounted(() => {
 .drop-icon-small {
   font-size: 1.5rem;
   opacity: 0.7;
+}
+
+/* 프리셋 스타일 */
+.preset-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.btn-preset-manage {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-preset-manage:hover {
+  background: var(--primary-dark);
+  transform: translateY(-1px);
+}
+
+.preset-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 36px;
+  padding: 8px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+}
+
+.no-presets {
+  color: var(--text-tertiary);
+  font-size: 0.85rem;
+  font-style: italic;
+  padding: 4px;
+}
+
+.preset-chip {
+  padding: 6px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+}
+
+.preset-chip:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--primary-color);
+}
+
+.preset-chip.active {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
 }
 
 /* 라이브러리 */

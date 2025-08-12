@@ -24,6 +24,10 @@
   functions = "netlify/functions"
   # Netlify CLI의 주 서버 포트 
   port = 8888
+  # Functions 자동 리로드 활성화
+  functionsSource = "netlify/functions"
+  # 파일 변경 감지 활성화
+  autoLaunch = false
 
 [[redirects]]
   from = "/api/*"

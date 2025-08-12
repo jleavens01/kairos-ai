@@ -75,6 +75,15 @@
                     <Star v-else :size="16" />
                   </button>
                   <button 
+                    @click.stop="toggleKeep(item)"
+                    class="btn-keep"
+                    :class="{ active: item.is_kept }"
+                    :title="item.is_kept ? '보관함에서 제거' : '보관함에 추가'"
+                  >
+                    <Archive v-if="item.is_kept" :size="16" fill="currentColor" />
+                    <Archive v-else :size="16" />
+                  </button>
+                  <button 
                     @click.stop="connectToScene(item)"
                     class="btn-connect"
                     :class="{ connected: item.production_sheet_id }"
@@ -88,6 +97,13 @@
                     title="태그 편집"
                   >
                     <Tag :size="16" />
+                  </button>
+                  <button 
+                    @click.stop="deleteImage(item)"
+                    class="btn-delete"
+                    title="삭제"
+                  >
+                    <Trash2 :size="16" />
                   </button>
                 </div>
                 <div class="info-bottom">
@@ -165,7 +181,7 @@ import { supabase } from '@/utils/supabase'
 import { useProductionStore } from '@/stores/production'
 import ImageGenerationModal from './ImageGenerationModal.vue'
 import SceneConnectionModal from './SceneConnectionModal.vue'
-import { Link, Tag, Download, Trash2, Loader, Plus, User, Image, Star } from 'lucide-vue-next'
+import { Link, Tag, Download, Trash2, Loader, Plus, User, Image, Star, Archive } from 'lucide-vue-next'
 import TagEditModal from './TagEditModal.vue'
 import ImageDetailModal from './ImageDetailModal.vue'
 
@@ -183,6 +199,7 @@ const loading = ref(false)
 const images = ref([])
 const selectedImage = ref(null)
 const filterCategory = ref('')
+const showKeptOnly = ref(false) // 보관함 보기 상태
 const showGenerationModal = ref(false)
 const showSceneModal = ref(false)
 const showTagModal = ref(false)
@@ -221,6 +238,13 @@ const filteredImages = computed(() => {
   let filtered = images.value.filter(img => {
     return img.generation_status === 'completed'
   })
+  
+  // 보관함 필터
+  if (showKeptOnly.value) {
+    filtered = filtered.filter(img => img.is_kept === true)
+  } else {
+    filtered = filtered.filter(img => !img.is_kept) // 보관함이 아닐 때는 보관되지 않은 것만
+  }
   
   if (filterCategory.value) {
     filtered = filtered.filter(img => img.image_type === filterCategory.value)
@@ -286,6 +310,19 @@ const fetchImages = async () => {
     if (error) throw error
     
     console.log('Fetched images from gen_images:', data) // 디버깅용 로그
+    
+    // 첫 번째 이미지의 URL 필드들 확인
+    if (data && data.length > 0) {
+      console.log('First image URL fields:', {
+        id: data[0].id,
+        storage_image_url: data[0].storage_image_url,
+        result_image_url: data[0].result_image_url,
+        thumbnail_url: data[0].thumbnail_url,
+        image_url: data[0].image_url,
+        allKeys: Object.keys(data[0])
+      })
+    }
+    
     images.value = data || []
   } catch (error) {
     console.error('이미지 로드 실패:', error)
@@ -409,6 +446,12 @@ const callPollingWorker = async () => {
       await fetchImages() // 갤러리 데이터 새로고침
     }
     
+    // 실패한 이미지가 있으면 갤러리 새로고침 및 폴링 중지 검토
+    if (result.summary && result.summary.failed > 0) {
+      console.log(`${result.summary.failed}개 이미지 생성 실패`)
+      await fetchImages() // 갤러리 데이터 새로고침 (실패 상태 표시)
+    }
+    
     // 처리 중인 이미지 다시 확인
     const stillProcessing = images.value.filter(
       img => img.generation_status === 'pending' || img.generation_status === 'processing'
@@ -446,6 +489,69 @@ const toggleFavorite = async (image) => {
     image.is_favorite = !image.is_favorite
   } catch (error) {
     console.error('즐겨찾기 토글 실패:', error)
+  }
+}
+
+const toggleKeep = async (image) => {
+  try {
+    const newKeptStatus = !image.is_kept
+    const { error } = await supabase
+      .from('gen_images')
+      .update({ is_kept: newKeptStatus })
+      .eq('id', image.id)
+    
+    if (error) throw error
+    
+    // 로컬 상태 업데이트
+    image.is_kept = newKeptStatus
+    
+    // 갤러리 재로드
+    await fetchImages()
+  } catch (error) {
+    console.error('보관함 토글 실패:', error)
+  }
+}
+
+const deleteImage = async (image) => {
+  if (!confirm('이 이미지를 삭제하시겠습니까?')) {
+    return
+  }
+  
+  try {
+    // Storage에서 이미지 파일 삭제
+    if (image.storage_image_url) {
+      // Storage URL에서 파일 경로 추출
+      const url = new URL(image.storage_image_url)
+      const pathParts = url.pathname.split('/storage/v1/object/public/gen-images/')
+      if (pathParts[1]) {
+        const { error: storageError } = await supabase.storage
+          .from('gen-images')
+          .remove([pathParts[1]])
+        
+        if (storageError) {
+          console.error('Storage 이미지 삭제 실패:', storageError)
+        }
+      }
+    }
+    
+    // DB에서 레코드 삭제
+    const { error } = await supabase
+      .from('gen_images')
+      .delete()
+      .eq('id', image.id)
+    
+    if (error) throw error
+    
+    // 로컬 상태에서 제거
+    const index = images.value.findIndex(img => img.id === image.id)
+    if (index !== -1) {
+      images.value.splice(index, 1)
+    }
+    
+    console.log('이미지가 삭제되었습니다.')
+  } catch (error) {
+    console.error('이미지 삭제 실패:', error)
+    alert('이미지 삭제에 실패했습니다.')
   }
 }
 
@@ -550,9 +656,32 @@ const handleSceneConnection = async (result) => {
       throw new Error('이미지 URL을 찾을 수 없습니다.')
     }
     
-    console.log('Connecting image to scene:', { sceneId, imageUrl, result })
+    console.log('Connecting image to scene:', { 
+      sceneId, 
+      imageUrl, 
+      result,
+      imageToConnect: {
+        id: imageToConnect.value.id,
+        storage_image_url: imageToConnect.value.storage_image_url,
+        result_image_url: imageToConnect.value.result_image_url,
+        thumbnail_url: imageToConnect.value.thumbnail_url,
+        allKeys: Object.keys(imageToConnect.value)
+      }
+    })
     
-    // production_sheets 테이블의 scene_image_url 업데이트
+    // 1. 먼저 해당 씬에 이미 연결된 다른 이미지들의 production_sheet_id를 null로 업데이트
+    const { error: clearError } = await supabase
+      .from('gen_images')
+      .update({ production_sheet_id: null })
+      .eq('production_sheet_id', sceneId)
+      .neq('id', imageToConnect.value.id) // 현재 연결하려는 이미지는 제외
+    
+    if (clearError) {
+      console.error('기존 연결 해제 실패:', clearError)
+      // 에러가 발생해도 계속 진행
+    }
+    
+    // 2. production_sheets 테이블의 scene_image_url 업데이트
     const { error } = await supabase
       .from('production_sheets')
       .update({ scene_image_url: imageUrl })
@@ -560,11 +689,14 @@ const handleSceneConnection = async (result) => {
     
     if (error) throw error
     
-    // gen_images 테이블의 production_sheet_id 업데이트
+    // 3. 현재 이미지의 production_sheet_id 업데이트
     await supabase
       .from('gen_images')
       .update({ production_sheet_id: sceneId })
       .eq('id', imageToConnect.value.id)
+    
+    // 이미지 목록 새로고침 (연결 상태 업데이트를 위해)
+    await fetchImages()
     
     // 스토어 업데이트
     await productionStore.fetchProductionSheets(props.projectId)
@@ -682,11 +814,17 @@ const setFilterCategory = (category) => {
   filterCategory.value = category
 }
 
+// 보관함 토글 메서드
+const toggleKeptView = (showKept) => {
+  showKeptOnly.value = showKept
+}
+
 // Expose method for parent component
 defineExpose({
   openGenerationModal,
   setFilterCategory,
-  filterCategory
+  filterCategory,
+  toggleKeptView
 })
 </script>
 
@@ -902,6 +1040,7 @@ defineExpose({
 }
 
 .btn-favorite,
+.btn-keep,
 .btn-connect,
 .btn-tags {
   width: 36px;
@@ -920,15 +1059,43 @@ defineExpose({
 }
 
 .btn-favorite:hover,
+.btn-keep:hover,
 .btn-connect:hover,
-.btn-tags:hover {
+.btn-tags:hover,
+.btn-delete:hover {
   background: rgba(255, 255, 255, 0.3);
   transform: scale(1.1);
+}
+
+.btn-delete {
+  background: rgba(239, 68, 68, 0.2);
+  backdrop-filter: blur(10px);
+  color: #ef4444;
+  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.btn-delete:hover {
+  background: rgba(239, 68, 68, 0.4);
+  color: white;
 }
 
 .btn-favorite.active {
   color: #fbbf24;
   background: rgba(251, 191, 36, 0.3);
+}
+
+.btn-keep.active {
+  color: #60a5fa;
+  background: rgba(96, 165, 250, 0.3);
 }
 
 .btn-connect.connected {

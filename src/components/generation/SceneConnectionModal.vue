@@ -114,16 +114,34 @@ const connectToScene = async () => {
     if (props.mediaType === 'image') {
       updateData.scene_image_url = props.media.storage_image_url || props.media.result_image_url || props.media.image_url
       updateData.scene_media_type = 'image'
+      console.log('Image URL to update:', {
+        storage_image_url: props.media.storage_image_url,
+        result_image_url: props.media.result_image_url,
+        image_url: props.media.image_url,
+        selected: updateData.scene_image_url,
+        media: props.media
+      })
     } else if (props.mediaType === 'video') {
       updateData.scene_video_url = props.media.storage_video_url
       updateData.scene_media_type = 'video'
     }
     updateData.updated_at = new Date().toISOString()
     
-    const { error: sceneError } = await supabase
+    console.log('Updating production_sheets with:', {
+      sceneId: selectedSceneId.value,
+      updateData: updateData
+    })
+    
+    const { data: updateResult, error: sceneError } = await supabase
       .from('production_sheets')
       .update(updateData)
       .eq('id', selectedSceneId.value)
+      .select()
+    
+    console.log('Production_sheets update result:', {
+      updateResult,
+      error: sceneError
+    })
     
     if (sceneError) throw sceneError
     
@@ -131,6 +149,23 @@ const connectToScene = async () => {
     // gen_images는 production_sheet_id 사용
     // gen_videos는 production_sheet_id 사용 (linked_scene_id는 별도 용도)
     const mediaTable = props.mediaType === 'image' ? 'gen_images' : 'gen_videos'
+    
+    // 1. 먼저 해당 씬에 이미 연결된 다른 미디어들의 production_sheet_id를 null로 업데이트
+    const { error: clearError } = await supabase
+      .from(mediaTable)
+      .update({ 
+        production_sheet_id: null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('production_sheet_id', selectedSceneId.value)
+      .neq('id', props.media.id) // 현재 연결하려는 미디어는 제외
+    
+    if (clearError) {
+      console.error('기존 연결 해제 실패:', clearError)
+      // 에러가 발생해도 계속 진행
+    }
+    
+    // 2. 현재 미디어의 production_sheet_id 업데이트
     const { error: mediaError } = await supabase
       .from(mediaTable)
       .update({

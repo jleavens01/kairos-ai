@@ -47,8 +47,17 @@
             >
               새 이미지
             </button>
-            <select 
+            <button 
               v-if="activeTab === 'generate'"
+              @click="toggleImageKeptView" 
+              class="tab-action-btn"
+              :class="{ active: showImageKeptOnly }"
+            >
+              <Archive :size="16" style="margin-right: 4px" />
+              {{ showImageKeptOnly ? '보관함' : '전체' }}
+            </button>
+            <select 
+              v-if="activeTab === 'generate' && !showImageKeptOnly"
               v-model="imageFilterCategory" 
               @change="handleImageFilterChange"
               class="filter-select"
@@ -67,8 +76,17 @@
             >
               새 비디오
             </button>
-            <select 
+            <button 
               v-if="activeTab === 'media'"
+              @click="toggleVideoKeptView" 
+              class="tab-action-btn"
+              :class="{ active: showVideoKeptOnly }"
+            >
+              <Archive :size="16" style="margin-right: 4px" />
+              {{ showVideoKeptOnly ? '보관함' : '전체' }}
+            </button>
+            <select 
+              v-if="activeTab === 'media' && !showVideoKeptOnly"
               v-model="videoFilterModel" 
               @change="handleVideoFilterChange"
               class="filter-select"
@@ -152,6 +170,7 @@ import { useProjectsStore } from '@/stores/projects'
 import ProductionSheet from '@/components/production/ProductionSheet.vue'
 import AIGenerationGallery from '@/components/generation/AIGenerationGallery.vue'
 import MediaView from '@/components/project/MediaView.vue'
+import { Archive } from 'lucide-vue-next'
 
 const route = useRoute()
 const router = useRouter()
@@ -173,6 +192,8 @@ const tabs = [
 // 필터 상태
 const imageFilterCategory = ref('')
 const videoFilterModel = ref('')
+const showImageKeptOnly = ref(false)
+const showVideoKeptOnly = ref(false)
 
 // 컴포넌트 refs
 const productionSheetRef = ref(null)
@@ -283,6 +304,17 @@ const handleImageFilterChange = () => {
 
 const handleVideoFilterChange = () => {
   mediaViewRef.value?.setFilterModel(videoFilterModel.value)
+}
+
+// 보관함 토글 함수들
+const toggleImageKeptView = () => {
+  showImageKeptOnly.value = !showImageKeptOnly.value
+  imageGalleryRef.value?.toggleKeptView(showImageKeptOnly.value)
+}
+
+const toggleVideoKeptView = () => {
+  showVideoKeptOnly.value = !showVideoKeptOnly.value
+  mediaViewRef.value?.toggleKeptView(showVideoKeptOnly.value)
 }
 </script>
 
@@ -409,12 +441,19 @@ const handleVideoFilterChange = () => {
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
 }
 
 .tab-action-btn:hover {
   background: var(--primary-dark);
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+}
+
+.tab-action-btn.active {
+  background: linear-gradient(to right, #4ade80, #34d399);
+  color: #1a1a1a;
 }
 
 .filter-select {

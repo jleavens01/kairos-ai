@@ -88,11 +88,27 @@
                   <Star v-else :size="16" />
                 </button>
                 <button 
+                  @click.stop="toggleKeep(video)"
+                  class="btn-keep"
+                  :class="{ active: video.is_kept }"
+                  :title="video.is_kept ? '보관함에서 제거' : '보관함에 추가'"
+                >
+                  <Archive v-if="video.is_kept" :size="16" fill="currentColor" />
+                  <Archive v-else :size="16" />
+                </button>
+                <button 
                   @click.stop="downloadVideo(video)"
                   class="btn-download"
                   title="다운로드"
                 >
                   <Download :size="16" />
+                </button>
+                <button 
+                  @click.stop="deleteVideo(video)"
+                  class="btn-delete"
+                  title="삭제"
+                >
+                  <Trash2 :size="16" />
                 </button>
               </div>
               <div class="info-bottom">
@@ -154,7 +170,7 @@ import { supabase } from '@/utils/supabase'
 import { useProductionStore } from '@/stores/production'
 import VideoGenerationModal from './VideoGenerationModal.vue'
 import VideoDetailModal from './VideoDetailModal.vue'
-import { Plus, Link, Download, Trash2, Loader, Clock, AlertCircle, Video, Star } from 'lucide-vue-next'
+import { Plus, Link, Download, Trash2, Loader, Clock, AlertCircle, Video, Star, Archive } from 'lucide-vue-next'
 import SceneConnectionModal from './SceneConnectionModal.vue'
 
 const props = defineProps({
@@ -171,6 +187,7 @@ const productionStore = useProductionStore()
 const loading = ref(false)
 const videos = ref([])
 const filterModel = ref('')
+const showKeptOnly = ref(false)
 const showGenerationModal = ref(false)
 const showDetailModal = ref(false)
 const showSceneModal = ref(false)
@@ -191,6 +208,14 @@ const processingVideos = computed(() => {
 const filteredVideos = computed(() => {
   let filtered = videos.value.filter(v => v.generation_status === 'completed')
   
+  // 보관함 필터링
+  if (showKeptOnly.value) {
+    filtered = filtered.filter(v => v.is_kept === true)
+  } else {
+    filtered = filtered.filter(v => !v.is_kept)
+  }
+  
+  // 모델 필터링
   if (filterModel.value) {
     filtered = filtered.filter(v => v.generation_model === filterModel.value)
   }
@@ -273,6 +298,26 @@ const toggleFavorite = async (video) => {
     video.is_favorite = !video.is_favorite
   } catch (error) {
     console.error('즐겨찾기 토글 실패:', error)
+  }
+}
+
+const toggleKeep = async (video) => {
+  try {
+    const newKeptStatus = !video.is_kept
+    const { error } = await supabase
+      .from('gen_videos')
+      .update({ is_kept: newKeptStatus })
+      .eq('id', video.id)
+    
+    if (error) throw error
+    
+    // 로컬 상태 업데이트
+    video.is_kept = newKeptStatus
+    
+    // 갤러리 재로드
+    await fetchVideos()
+  } catch (error) {
+    console.error('보관함 토글 실패:', error)
   }
 }
 
@@ -397,6 +442,64 @@ const connectToScene = async (video) => {
 const connectToSceneFromDetail = async (video) => {
   showDetailModal.value = false
   await connectToScene(video)
+}
+
+const deleteVideo = async (video) => {
+  if (!confirm('이 비디오를 삭제하시겠습니까?')) {
+    return
+  }
+  
+  try {
+    // Storage에서 비디오 파일 삭제
+    if (video.storage_video_url) {
+      // Storage URL에서 파일 경로 추출
+      const url = new URL(video.storage_video_url)
+      const pathParts = url.pathname.split('/storage/v1/object/public/gen-videos/')
+      if (pathParts[1]) {
+        const { error: storageError } = await supabase.storage
+          .from('gen-videos')
+          .remove([pathParts[1]])
+        
+        if (storageError) {
+          console.error('Storage 비디오 삭제 실패:', storageError)
+        }
+      }
+    }
+    
+    // 썸네일도 삭제 (있는 경우)
+    if (video.thumbnail_url && video.thumbnail_url.includes('gen-videos')) {
+      const thumbUrl = new URL(video.thumbnail_url)
+      const thumbParts = thumbUrl.pathname.split('/storage/v1/object/public/gen-videos/')
+      if (thumbParts[1]) {
+        const { error: thumbError } = await supabase.storage
+          .from('gen-videos')
+          .remove([thumbParts[1]])
+        
+        if (thumbError) {
+          console.error('썸네일 삭제 실패:', thumbError)
+        }
+      }
+    }
+    
+    // DB에서 레코드 삭제
+    const { error } = await supabase
+      .from('gen_videos')
+      .delete()
+      .eq('id', video.id)
+    
+    if (error) throw error
+    
+    // 로컬 상태에서 제거
+    const index = videos.value.findIndex(v => v.id === video.id)
+    if (index !== -1) {
+      videos.value.splice(index, 1)
+    }
+    
+    console.log('비디오가 삭제되었습니다.')
+  } catch (error) {
+    console.error('비디오 삭제 실패:', error)
+    alert('비디오 삭제에 실패했습니다.')
+  }
 }
 
 const handleSceneConnection = async (result) => {
@@ -555,11 +658,16 @@ const setFilterModel = (model) => {
   filterModel.value = model
 }
 
+const toggleKeptView = (showKept) => {
+  showKeptOnly.value = showKept
+}
+
 // Expose method for parent component
 defineExpose({
   openGenerationModal,
   setFilterModel,
-  filterModel
+  filterModel,
+  toggleKeptView
 })
 </script>
 
@@ -770,7 +878,9 @@ defineExpose({
 
 .btn-scene-link,
 .btn-favorite,
-.btn-download {
+.btn-keep,
+.btn-download,
+.btn-delete {
   width: 36px;
   height: 36px;
   border-radius: 8px;
@@ -786,16 +896,33 @@ defineExpose({
   font-size: 1.1rem;
 }
 
+.btn-delete {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
 .btn-scene-link:hover,
 .btn-favorite:hover,
-.btn-download:hover {
+.btn-keep:hover,
+.btn-download:hover,
+.btn-delete:hover {
   background: rgba(255, 255, 255, 0.3);
   transform: scale(1.1);
+}
+
+.btn-delete:hover {
+  background: rgba(239, 68, 68, 0.4);
+  color: white;
 }
 
 .btn-favorite.active {
   color: #fbbf24;
   background: rgba(251, 191, 36, 0.3);
+}
+
+.btn-keep.active {
+  color: #60a5fa;
+  background: rgba(96, 165, 250, 0.3);
 }
 
 .btn-scene-link.connected {
