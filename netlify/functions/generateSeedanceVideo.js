@@ -70,8 +70,17 @@ export const handler = async (event) => {
     });
 
     // 개발 환경 여부 확인 (Netlify 환경 변수 체크)
-    const isDevelopment = !process.env.CONTEXT || process.env.CONTEXT === 'dev' || 
-                         !process.env.URL || process.env.URL.includes('localhost');
+    // CONTEXT는 'production', 'deploy-preview', 'branch-deploy', 'dev' 중 하나
+    const isDevelopment = process.env.CONTEXT === 'dev' || 
+                         process.env.NETLIFY_DEV === 'true' ||
+                         (process.env.URL && process.env.URL.includes('localhost'));
+    
+    console.log('Environment check:', {
+      CONTEXT: process.env.CONTEXT,
+      NETLIFY_DEV: process.env.NETLIFY_DEV,
+      URL: process.env.URL,
+      isDevelopment
+    });
     
     // FAL AI 엔드포인트 - SeedDance Pro
     const apiEndpoint = 'fal-ai/bytedance/seedance/v1/pro/image-to-video';

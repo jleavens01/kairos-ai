@@ -92,8 +92,10 @@ export async function generateImage({
     });
 
     // 개발 환경 여부 확인 (Netlify 환경 변수 체크)
-    const isDevelopment = !process.env.CONTEXT || process.env.CONTEXT === 'dev' || 
-                         !process.env.URL || process.env.URL.includes('localhost');
+    // CONTEXT는 'production', 'deploy-preview', 'branch-deploy', 'dev' 중 하나
+    const isDevelopment = process.env.CONTEXT === 'dev' || 
+                         process.env.NETLIFY_DEV === 'true' ||
+                         (process.env.URL && process.env.URL.includes('localhost'));
     
     // FAL AI 큐에 제출
     const submitOptions = {
