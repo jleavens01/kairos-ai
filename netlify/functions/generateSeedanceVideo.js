@@ -39,18 +39,25 @@ export const handler = async (event) => {
     }
 
     // 요청 데이터 파싱
+    const requestBody = JSON.parse(event.body || '{}');
     const {
       projectId,
+      videoId,  // generateVideoAsync에서 전달한 비디오 ID
+      imageUrl,
+      prompt = '',
+      parameters = {},
+      modelParams = {},
       sceneNumber,
       sceneName,
-      prompt = '',
-      imageUrl,
-      resolution = '360p',
-      duration = 3,
-      cameraFixed = false,
-      seed,
       sourceImageId
-    } = JSON.parse(event.body || '{}');
+    } = requestBody;
+
+    // 파라미터 병합 (modelParams 우선)
+    const mergedParams = { ...parameters, ...modelParams };
+    const resolution = mergedParams.resolution || '480p';
+    const duration = mergedParams.duration || 5;
+    const cameraFixed = mergedParams.cameraFixed !== undefined ? mergedParams.cameraFixed : false;
+    const seed = mergedParams.seed;
 
     if (!projectId || !imageUrl) {
       throw new Error("Missing required parameters.");
@@ -66,7 +73,9 @@ export const handler = async (event) => {
       prompt: prompt.substring(0, 100), 
       resolution, 
       duration,
-      cameraFixed 
+      cameraFixed,
+      videoId,
+      hasVideoId: !!videoId
     });
 
     // 개발 환경 여부 확인 (Netlify 환경 변수 체크)
@@ -88,7 +97,7 @@ export const handler = async (event) => {
     // SeedDance Pro는 360p를 지원하지 않음, 480p로 변경
     const validResolution = resolution === '360p' ? '480p' : resolution;
     
-    const requestBody = {
+    const falRequestBody = {
       prompt,
       image_url: imageUrl,
       resolution: validResolution, // "480p", "720p", "1080p" 중 하나
@@ -97,12 +106,12 @@ export const handler = async (event) => {
     };
     
     if (seed !== undefined) {
-      requestBody.seed = seed;
+      falRequestBody.seed = seed;
     }
 
     // FAL AI 큐에 제출
     const submitOptions = {
-      input: requestBody
+      input: falRequestBody
     };
     
     // 프로덕션 환경에서만 웹훅 사용
@@ -136,41 +145,78 @@ export const handler = async (event) => {
 
     const creditsUsed = calculateCredits();
 
-    // 먼저 DB에 초기 레코드 생성 (request_id 없이)
-    const { data: videoRecord, error: dbError } = await supabaseAdmin
-      .from('gen_videos')
-      .insert({
-        project_id: projectId,
-        scene_number: sceneNumber,
-        scene_name: sceneName,
-        prompt_used: prompt,
-        generation_model: 'seedance-pro',
-        model_parameters: {
-          resolution: validResolution,  // 실제 사용되는 해상도
-          duration,
-          camera_fixed: cameraFixed,
-          seed
-        },
-        reference_image_url: imageUrl,  // 수정: image_reference_url → reference_image_url
-        source_image_id: sourceImageId,
-        generation_status: 'pending',
-        credits_used: creditsUsed
-        // user_id 제거 - gen_videos 테이블에 없음
-      })
-      .select()
-      .single();
+    let videoRecord;
 
-    if (dbError) {
-      console.error('Database insert error:', {
-        error: dbError,
-        data: {
+    // videoId가 있으면 기존 레코드 업데이트, 없으면 새로 생성
+    if (videoId) {
+      // generateVideoAsync에서 호출된 경우 - 기존 레코드 업데이트
+      console.log('Updating existing video record:', videoId);
+      
+      const { data: updatedRecord, error: updateError } = await supabaseAdmin
+        .from('gen_videos')
+        .update({
+          prompt_used: prompt,
+          generation_model: 'seedance-pro',
+          model_parameters: {
+            resolution: validResolution,
+            duration,
+            camera_fixed: cameraFixed,
+            seed
+          },
+          reference_image_url: imageUrl,
+          source_image_id: sourceImageId,
+          generation_status: 'pending',
+          credits_used: creditsUsed
+        })
+        .eq('id', videoId)
+        .select()
+        .single();
+
+      if (updateError) {
+        console.error('Database update error:', updateError);
+        throw new Error(`Failed to update video record: ${updateError.message || updateError}`);
+      }
+
+      videoRecord = updatedRecord;
+    } else {
+      // 직접 호출된 경우 - 새 레코드 생성
+      console.log('Creating new video record');
+      
+      const { data: newRecord, error: dbError } = await supabaseAdmin
+        .from('gen_videos')
+        .insert({
           project_id: projectId,
-          user_id: user.sub,
           scene_number: sceneNumber,
-          scene_name: sceneName
-        }
-      });
-      throw new Error(`Failed to create video record: ${dbError.message || dbError}`);
+          scene_name: sceneName,
+          prompt_used: prompt,
+          generation_model: 'seedance-pro',
+          model_parameters: {
+            resolution: validResolution,
+            duration,
+            camera_fixed: cameraFixed,
+            seed
+          },
+          reference_image_url: imageUrl,
+          source_image_id: sourceImageId,
+          generation_status: 'pending',
+          credits_used: creditsUsed
+        })
+        .select()
+        .single();
+
+      if (dbError) {
+        console.error('Database insert error:', {
+          error: dbError,
+          data: {
+            project_id: projectId,
+            scene_number: sceneNumber,
+            scene_name: sceneName
+          }
+        });
+        throw new Error(`Failed to create video record: ${dbError.message || dbError}`);
+      }
+
+      videoRecord = newRecord;
     }
 
     // FAL AI에 제출
