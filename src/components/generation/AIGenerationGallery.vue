@@ -57,8 +57,17 @@
           
           <!-- 생성된 이미지 카드 -->
           <template v-else>
-            <div class="image-wrapper">
+            <div class="image-wrapper" :class="{ 'failed-wrapper': item.generation_status === 'failed' }">
+              <!-- 실패한 이미지 표시 -->
+              <div v-if="item.generation_status === 'failed'" class="failed-image">
+                <div class="failed-icon">❌</div>
+                <p class="failed-text">생성 실패</p>
+                <p class="failed-model">{{ item.generation_model }}</p>
+                <p v-if="item.error_message" class="failed-reason">{{ item.error_message }}</p>
+              </div>
+              <!-- 성공한 이미지 표시 -->
               <img 
+                v-else
                 :src="item.thumbnail_url || item.storage_image_url || item.result_image_url" 
                 :alt="item.prompt_used || 'AI Generated Image'"
                 loading="lazy"
@@ -138,6 +147,11 @@
       :project-id="projectId"
       :initial-prompt="currentPrompt"
       :character-name="currentCharacter"
+      :initial-model="editImageData?.model"
+      :initial-size="editImageData?.size"
+      :initial-category="editImageData?.category"
+      :initial-name="editImageData?.name"
+      :reference-image="editImageData?.referenceImage"
       @close="closeGenerationModal"
       @success="handleGenerationSuccess"
     />
@@ -171,6 +185,7 @@
       @update="handleImageUpdate"
       @edit-tags="openTagEditorFromDetail"
       @connect-scene="connectToSceneFromDetail"
+      @edit-image="handleEditImage"
     />
   </div>
 </template>
@@ -209,6 +224,7 @@ const currentCharacter = ref('')
 const imageToConnect = ref(null)
 const imageToEdit = ref(null)
 const imageToView = ref(null)
+const editImageData = ref(null) // 이미지 수정을 위한 데이터
 // const realtimeChannel = ref(null) - Realtime 제거
 
 // Computed
@@ -234,9 +250,9 @@ const characters = computed(() => {
 
 // 필터링된 이미지 목록
 const filteredImages = computed(() => {
-  // completed 상태의 이미지만 표시
+  // completed 또는 failed 상태의 이미지 표시
   let filtered = images.value.filter(img => {
-    return img.generation_status === 'completed'
+    return img.generation_status === 'completed' || img.generation_status === 'failed'
   })
   
   // 보관함 필터
@@ -345,6 +361,7 @@ const closeGenerationModal = () => {
   showGenerationModal.value = false
   currentPrompt.value = ''
   currentCharacter.value = ''
+  editImageData.value = null // 수정 데이터 초기화
 }
 
 const handleGenerationSuccess = async (result) => {
@@ -438,33 +455,16 @@ const callPollingWorker = async () => {
     }
     
     const result = await response.json()
-    console.log('Polling worker result:', result)
+    console.log('이미지 큐 처리 결과:', result.summary)
     
-    // 완료된 이미지가 있으면 갤러리 새로고침
-    if (result.summary && result.summary.completed > 0) {
-      console.log(`${result.summary.completed}개 이미지 생성 완료, 갤러리 새로고침`)
-      await fetchImages() // 갤러리 데이터 새로고침
-    }
+    // 항상 갤러리를 새로고침하여 상태 업데이트
+    await fetchImages() // 갤러리 데이터 새로고침
     
-    // 실패한 이미지가 있으면 갤러리 새로고침 및 폴링 중지 검토
-    if (result.summary && result.summary.failed > 0) {
-      console.log(`${result.summary.failed}개 이미지 생성 실패`)
-      await fetchImages() // 갤러리 데이터 새로고침 (실패 상태 표시)
-    }
-    
-    // 처리 중인 이미지 다시 확인
-    const stillProcessing = images.value.filter(
-      img => img.generation_status === 'pending' || img.generation_status === 'processing'
-    )
-    
-    // 모든 이미지가 완료되거나 실패하면 폴링 중지
-    if (stillProcessing.length === 0) {
-      console.log('All images processed, stopping polling')
-      stopPollingWorker()
-    } else if (result.summary && 
-               result.summary.processing === 0 && 
-               result.summary.pending === 0) {
-      console.log('No more images to process, stopping polling')
+    // 더 이상 처리 중인 이미지가 없으면 폴링 중지
+    if (result.summary && 
+        result.summary.processing === 0 && 
+        result.summary.pending === 0) {
+      console.log('모든 이미지 처리 완료, 폴링 중지')
       stopPollingWorker()
     }
   } catch (error) {
@@ -771,6 +771,16 @@ const connectToSceneFromDetail = (image) => {
   showSceneModal.value = true
 }
 
+const handleEditImage = (editData) => {
+  // 이미지 수정 데이터 설정
+  editImageData.value = editData
+  currentPrompt.value = editData.prompt || ''
+  currentCharacter.value = editData.name || ''
+  
+  // 생성 모달 열기
+  showGenerationModal.value = true
+}
+
 // Lifecycle
 onMounted(async () => {
   await fetchImages()
@@ -779,10 +789,10 @@ onMounted(async () => {
     await productionStore.fetchProductionSheets(props.projectId)
   }
   
-  // Realtime 구독 시작
-  // setupRealtimeSubscription() - Realtime 제거, 폴링 사용
+  // Supabase Realtime으로 이미지 업데이트 감지 (웹훅 방식)
+  setupRealtimeSubscription()
   
-  // 처리 중인 이미지가 있으면 폴링 시작
+  // 폴링 백업 (필요시 사용)
   if (processingImages.value.length > 0) {
     console.log(`Found ${processingImages.value.length} processing images, starting polling...`)
     startPollingWorker()
@@ -791,13 +801,49 @@ onMounted(async () => {
 
 // 컴포넌트 언마운트 시 Realtime 구독 해제 및 폴링 중지
 onUnmounted(() => {
-  // cleanupRealtimeSubscription() - Realtime 제거
+  cleanupRealtimeSubscription()
   stopPollingWorker()
 })
+
+// Supabase Realtime 설정 (웹훅 결과 수신용)
+let realtimeChannel = null
+
+const setupRealtimeSubscription = () => {
+  console.log('Setting up Realtime subscription for images')
+  
+  realtimeChannel = supabase
+    .channel(`images-${props.projectId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'gen_images',
+        filter: `project_id=eq.${props.projectId}`
+      },
+      (payload) => {
+        console.log('Image updated via webhook:', payload.new)
+        handleImageUpdate(payload.new)
+      }
+    )
+    .subscribe()
+}
+
+const cleanupRealtimeSubscription = () => {
+  if (realtimeChannel) {
+    console.log('Cleaning up Realtime subscription')
+    supabase.removeChannel(realtimeChannel)
+    realtimeChannel = null
+  }
+}
 
 // projectId 변경 감지
 watch(() => props.projectId, async (newId, oldId) => {
   if (newId && newId !== oldId) {
+    // Realtime 구독 재설정
+    cleanupRealtimeSubscription()
+    setupRealtimeSubscription()
+    
     // 이미지 목록 초기화 및 새 데이터 로드
     images.value = []
     processingImages.value = []
@@ -1124,6 +1170,50 @@ defineExpose({
   border-radius: 50%;
   animation: spin 1s linear infinite;
   margin-bottom: 16px;
+}
+
+/* 실패한 이미지 스타일 */
+.failed-wrapper {
+  background: var(--bg-secondary);
+  border-color: rgba(239, 68, 68, 0.5) !important;
+}
+
+.failed-image {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  min-height: 200px;
+  text-align: center;
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: 8px;
+}
+
+.failed-icon {
+  font-size: 2.5rem;
+  margin-bottom: 12px;
+}
+
+.failed-text {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #ef4444;
+  margin-bottom: 4px;
+}
+
+.failed-model {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.failed-reason {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  max-width: 200px;
+  word-wrap: break-word;
+  line-height: 1.3;
 }
 
 @keyframes spin {

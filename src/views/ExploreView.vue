@@ -60,21 +60,6 @@
       </div>
     </div>
 
-    <!-- 스타일 필터 -->
-    <div class="style-filter">
-      <h3 class="filter-title">스타일</h3>
-      <div class="style-tags">
-        <button 
-          v-for="style in popularStyles"
-          :key="style"
-          :class="['style-tag', { active: selectedStyles.includes(style) }]"
-          @click="toggleStyle(style)"
-        >
-          {{ style }}
-        </button>
-      </div>
-    </div>
-
     <!-- 콘텐츠 그리드 -->
     <div class="content-container">
       <div v-if="loading" class="loading-state">
@@ -82,18 +67,42 @@
         <p>콘텐츠를 불러오는 중...</p>
       </div>
 
-      <div v-else-if="filteredContent.length === 0" class="empty-state">
+      <div v-else-if="displayedContent.length === 0" class="empty-state">
         <Package :size="64" class="empty-icon" />
         <h3>검색 결과가 없습니다</h3>
         <p>다른 검색어나 필터를 시도해보세요</p>
       </div>
 
-      <div v-else :class="['content-grid', viewMode]">
+      <!-- Masonry 그리드 -->
+      <div v-else-if="viewMode === 'grid'" class="masonry-grid">
         <ExploreCard 
-          v-for="item in filteredContent"
+          v-for="item in displayedContent"
           :key="item.id"
           :item="item"
-          :view-mode="viewMode"
+          @click="openDetail(item)"
+          @like="toggleLike(item)"
+          @save="saveToLibrary(item)"
+        />
+        
+        <!-- 무한 스크롤 트리거 -->
+        <div 
+          v-if="displayedContent.length < filteredContent.length"
+          ref="loadMoreTrigger" 
+          class="load-more-trigger"
+        >
+          <div v-if="isLoadingMore" class="loading-indicator">
+            <div class="spinner"></div>
+            <span>더 불러오는 중...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 리스트 뷰 -->
+      <div v-else class="list-view">
+        <ExploreCard 
+          v-for="item in displayedContent"
+          :key="item.id"
+          :item="item"
           @click="openDetail(item)"
           @like="toggleLike(item)"
           @save="saveToLibrary(item)"
@@ -113,8 +122,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
-import { Search, X, Grid, List, Package, Sparkles, Image, Video, Palette } from 'lucide-vue-next';
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import { Search, X, Grid, List, Package, Sparkles, Image, Video } from 'lucide-vue-next';
 import ExploreCard from '@/components/explore/ExploreCard.vue';
 import ExploreDetailModal from '@/components/explore/ExploreDetailModal.vue';
 import { supabase } from '@/utils/supabase';
@@ -124,32 +133,23 @@ const selectedCategory = ref('all');
 const searchQuery = ref('');
 const sortBy = ref('trending');
 const viewMode = ref('grid');
-const selectedStyles = ref([]);
 const loading = ref(false);
 const selectedItem = ref(null);
 const exploreContent = ref([]);
+
+// 무한 스크롤 상태
+const displayedContent = ref([]);
+const itemsPerLoad = 20;
+const loadMoreTrigger = ref(null);
+const isLoadingMore = ref(false);
+let observer = null;
 
 // 카테고리 설정
 const categories = [
   { id: 'all', name: '전체', icon: Sparkles },
   { id: 'images', name: '이미지', icon: Image },
-  { id: 'videos', name: '비디오', icon: Video },
-  { id: 'styles', name: '스타일', icon: Palette }
+  { id: 'videos', name: '비디오', icon: Video }
 ];
-
-// 인기 스타일
-const popularStyles = ref([
-  'Realistic',
-  'Anime',
-  'Digital Art',
-  'Watercolor',
-  '3D Render',
-  'Sketch',
-  'Oil Painting',
-  'Minimalist',
-  'Abstract',
-  'Cyberpunk'
-]);
 
 // Computed
 const filteredContent = computed(() => {
@@ -160,7 +160,6 @@ const filteredContent = computed(() => {
     content = content.filter(item => {
       if (selectedCategory.value === 'images') return item.type === 'image';
       if (selectedCategory.value === 'videos') return item.type === 'video';
-      if (selectedCategory.value === 'styles') return item.style !== null;
       return true;
     });
   }
@@ -173,13 +172,6 @@ const filteredContent = computed(() => {
              item.style?.toLowerCase().includes(query) ||
              item.tags?.some(tag => tag.toLowerCase().includes(query));
     });
-  }
-  
-  // 스타일 필터
-  if (selectedStyles.value.length > 0) {
-    content = content.filter(item => 
-      selectedStyles.value.includes(item.style)
-    );
   }
   
   // 정렬
@@ -200,15 +192,6 @@ const filteredContent = computed(() => {
 });
 
 // Methods
-const toggleStyle = (style) => {
-  const index = selectedStyles.value.indexOf(style);
-  if (index > -1) {
-    selectedStyles.value.splice(index, 1);
-  } else {
-    selectedStyles.value.push(style);
-  }
-};
-
 const openDetail = (item) => {
   selectedItem.value = item;
 };
@@ -244,8 +227,20 @@ const loadExploreContent = async () => {
     
     // 데이터 병합 및 타입 추가
     const allContent = [
-      ...(images || []).map(img => ({ ...img, type: 'image' })),
-      ...(videos || []).map(vid => ({ ...vid, type: 'video' }))
+      ...(images || []).map(img => ({ 
+        ...img, 
+        type: 'image',
+        prompt: img.prompt_used || img.custom_prompt || img.prompt || '',
+        model: img.generation_model || img.model || '',
+        style: img.style_name || img.style || ''
+      })),
+      ...(videos || []).map(vid => ({ 
+        ...vid, 
+        type: 'video',
+        prompt: vid.prompt_used || vid.custom_prompt || vid.prompt || '',
+        model: vid.generation_model || vid.model || '',
+        video_url: vid.storage_video_url || vid.result_video_url || ''
+      }))
     ];
     
     exploreContent.value = allContent;
@@ -256,9 +251,76 @@ const loadExploreContent = async () => {
   }
 };
 
+// 초기 아이템 로드
+const loadInitialItems = () => {
+  if (!filteredContent.value) return;
+  displayedContent.value = filteredContent.value.slice(0, itemsPerLoad);
+};
+
+// 더 많은 아이템 로드
+const loadMoreItems = () => {
+  if (isLoadingMore.value || !filteredContent.value) return;
+  
+  const currentLength = displayedContent.value.length;
+  if (currentLength >= filteredContent.value.length) return;
+  
+  isLoadingMore.value = true;
+  
+  setTimeout(() => {
+    const nextItems = filteredContent.value.slice(currentLength, currentLength + itemsPerLoad);
+    displayedContent.value = [...displayedContent.value, ...nextItems];
+    isLoadingMore.value = false;
+  }, 100);
+};
+
+// Intersection Observer 설정
+const setupIntersectionObserver = () => {
+  if (!loadMoreTrigger.value || viewMode.value !== 'grid') return;
+  
+  observer = new IntersectionObserver(
+    (entries) => {
+      if (entries[0].isIntersecting && !isLoadingMore.value) {
+        loadMoreItems();
+      }
+    },
+    { rootMargin: '100px' }
+  );
+  
+  observer.observe(loadMoreTrigger.value);
+};
+
+// filteredContent 변경 감지
+watch(filteredContent, (newContent) => {
+  if (newContent) {
+    displayedContent.value = newContent.slice(0, itemsPerLoad);
+    nextTick(() => {
+      if (observer) observer.disconnect();
+      setupIntersectionObserver();
+    });
+  }
+}, { immediate: true });
+
+// viewMode 변경 감지
+watch(viewMode, () => {
+  nextTick(() => {
+    if (observer) observer.disconnect();
+    setupIntersectionObserver();
+  });
+});
+
 // Lifecycle
 onMounted(() => {
   loadExploreContent();
+  loadInitialItems();
+  nextTick(() => {
+    setupIntersectionObserver();
+  });
+});
+
+onUnmounted(() => {
+  if (observer) {
+    observer.disconnect();
+  }
 });
 </script>
 
@@ -426,48 +488,6 @@ onMounted(() => {
   color: var(--primary-color);
 }
 
-/* 스타일 필터 */
-.style-filter {
-  margin-bottom: 25px;
-}
-
-.filter-title {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 10px;
-}
-
-.style-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.style-tag {
-  padding: 6px 14px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 20px;
-  color: var(--text-secondary);
-  font-size: 0.9rem;
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.style-tag:hover {
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-}
-
-.style-tag.active {
-  background: rgba(74, 222, 128, 0.1);
-  color: var(--primary-color);
-  border-color: var(--primary-color);
-}
-
 /* 콘텐츠 컨테이너 */
 .content-container {
   min-height: 400px;
@@ -514,18 +534,51 @@ onMounted(() => {
   color: var(--text-secondary);
 }
 
-/* 콘텐츠 그리드 */
-.content-grid {
-  display: grid;
+/* 무한 스크롤 로딩 */
+.load-more-trigger {
+  width: 100%;
+  padding: 20px;
+  text-align: center;
+}
+
+.loading-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--text-secondary);
+}
+
+/* Masonry 그리드 레이아웃 */
+.masonry-grid {
+  column-count: 2;
+  column-gap: 20px;
+  padding: 0;
+}
+
+@media (min-width: 768px) {
+  .masonry-grid {
+    column-count: 3;
+  }
+}
+
+@media (min-width: 1024px) {
+  .masonry-grid {
+    column-count: 4;
+  }
+}
+
+@media (min-width: 1440px) {
+  .masonry-grid {
+    column-count: 5;
+  }
+}
+
+/* 리스트 뷰 */
+.list-view {
+  display: flex;
+  flex-direction: column;
   gap: 20px;
-}
-
-.content-grid.grid {
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-}
-
-.content-grid.list {
-  grid-template-columns: 1fr;
 }
 
 /* 모바일 반응형 */
@@ -547,10 +600,6 @@ onMounted(() => {
   .view-controls {
     width: 100%;
     justify-content: space-between;
-  }
-  
-  .content-grid.grid {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   }
 }
 </style>

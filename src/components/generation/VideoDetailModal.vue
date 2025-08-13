@@ -66,7 +66,9 @@
                   class="favorite-btn"
                   :class="{ active: localFavorite }"
                 >
-                  {{ localFavorite ? '⭐' : '☆' }}
+                  <svg width="20" height="20" viewBox="0 0 24 24" :fill="localFavorite ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                  </svg>
                 </button>
               </div>
             </div>
@@ -80,7 +82,10 @@
                   class="copy-btn"
                   title="프롬프트 복사"
                 >
-                  📋
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                  </svg>
                 </button>
               </div>
               <div class="prompt-text">
@@ -105,16 +110,32 @@
               <div class="frame-capture-controls">
                 <div class="capture-buttons">
                   <button @click="captureCurrentFrame" class="capture-btn" title="현재 프레임 캡처">
-                    📸 현재 프레임
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                      <circle cx="12" cy="13" r="4"/>
+                    </svg>
+                    <span>현재</span>
                   </button>
                   <button @click="captureFirstFrame" class="capture-btn" title="첫 프레임 캡처">
-                    ⏮️ 첫 프레임
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polygon points="11 19 2 12 11 5 11 19"/>
+                      <line x1="22" y1="5" x2="22" y2="19"/>
+                    </svg>
+                    <span>첫 프레임</span>
                   </button>
                   <button @click="captureMiddleFrame" class="capture-btn" title="중간 프레임 캡처">
-                    ⏸️ 중간 프레임
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <rect x="6" y="4" width="4" height="16"/>
+                      <rect x="14" y="4" width="4" height="16"/>
+                    </svg>
+                    <span>중간</span>
                   </button>
                   <button @click="captureLastFrame" class="capture-btn" title="마지막 프레임 캡처">
-                    ⏭️ 마지막 프레임
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polygon points="13 5 22 12 13 19 13 5"/>
+                      <line x1="2" y1="5" x2="2" y2="19"/>
+                    </svg>
+                    <span>마지막</span>
                   </button>
                 </div>
                 <div v-if="capturingFrame" class="capturing-indicator">
@@ -132,13 +153,23 @@
                       <span>{{ frame.time.toFixed(1) }}초</span>
                       <div class="frame-actions">
                         <button @click="downloadFrame(frame)" class="frame-btn" title="다운로드">
-                          💾
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                            <polyline points="7 10 12 15 17 10"/>
+                            <line x1="12" y1="15" x2="12" y2="3"/>
+                          </svg>
                         </button>
                         <button @click="saveFrameToSupabase(frame)" class="frame-btn" title="저장">
-                          ☁️
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                            <polyline points="22 4 12 14.01 9 11.01"/>
+                          </svg>
                         </button>
                         <button @click="removeFrame(index)" class="frame-btn" title="삭제">
-                          ❌
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                          </svg>
                         </button>
                       </div>
                     </div>
@@ -149,17 +180,31 @@
 
             <!-- 액션 버튼들 -->
             <div class="action-buttons">
-              <button @click="downloadVideo" class="btn-action">
-                💾 비디오 다운로드
+              <button @click="downloadVideo" class="icon-btn" title="비디오 다운로드">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
               </button>
-              <button @click="$emit('connect-scene', video)" class="btn-action">
-                🔗 씬에 연결
+              <button @click="$emit('connect-scene', video)" class="icon-btn" title="씬에 연결">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                </svg>
               </button>
-              <button v-if="capturedFrames.length > 0" @click="downloadAllFrames" class="btn-action">
-                📦 모든 프레임 다운로드
+              <button v-if="capturedFrames.length > 0" @click="downloadAllFrames" class="icon-btn" title="모든 프레임 다운로드">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
+                  <path d="M16 3l-4 4-4-4"/>
+                </svg>
               </button>
-              <button v-if="hasChanges" @click="saveChanges" class="btn-action btn-primary">
-                💾 변경사항 저장
+              <button v-if="hasChanges" @click="saveChanges" class="icon-btn btn-primary" title="변경사항 저장">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                  <polyline points="17 21 17 13 7 13 7 21"/>
+                  <polyline points="7 3 7 8 15 8"/>
+                </svg>
               </button>
             </div>
           </div>
@@ -239,11 +284,48 @@ const toggleFavorite = () => {
   localFavorite.value = !localFavorite.value
 }
 
-const downloadVideo = () => {
+const downloadVideo = async () => {
   if (props.video.storage_video_url) {
+    // 프로젝트 이름 가져오기
+    let projectName = 'project'
+    if (props.video.project_id) {
+      try {
+        const { data } = await supabase
+          .from('projects')
+          .select('name')
+          .eq('id', props.video.project_id)
+          .single()
+        if (data && data.name) {
+          projectName = data.name.replace(/[^a-zA-Z0-9가-힣]/g, '_')
+        }
+      } catch (error) {
+        console.error('프로젝트 이름 가져오기 실패:', error)
+      }
+    }
+    
+    // 씬 번호 가져오기
+    let sceneNumber = ''
+    if (props.video.production_sheet_id || props.video.linked_scene_id) {
+      const sheetId = props.video.production_sheet_id || props.video.linked_scene_id
+      try {
+        const { data } = await supabase
+          .from('production_sheets')
+          .select('scene_number')
+          .eq('id', sheetId)
+          .single()
+        if (data && data.scene_number) {
+          sceneNumber = `_${data.scene_number}`
+        }
+      } catch (error) {
+        console.error('씬 번호 가져오기 실패:', error)
+      }
+    } else if (props.video.linked_scene_number) {
+      sceneNumber = `_${props.video.linked_scene_number}`
+    }
+    
     const link = document.createElement('a')
     link.href = props.video.storage_video_url
-    link.download = `video-${props.video.id}.mp4`
+    link.download = `video_${projectName}${sceneNumber}.mp4`
     link.target = '_blank'
     document.body.appendChild(link)
     link.click()
@@ -669,15 +751,22 @@ watch(() => props.show, (newShow) => {
   background: none;
   border: 1px solid var(--border-color);
   border-radius: 6px;
-  padding: 4px 8px;
+  padding: 6px;
   cursor: pointer;
-  font-size: 1rem;
   transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .copy-btn:hover {
   background: var(--bg-secondary);
   transform: scale(1.1);
+}
+
+.copy-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 .info-item {
@@ -701,10 +790,12 @@ watch(() => props.show, (newShow) => {
 .favorite-btn {
   background: none;
   border: none;
-  font-size: 1.5rem;
   cursor: pointer;
   transition: all 0.2s;
   padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .favorite-btn:hover {
@@ -713,6 +804,11 @@ watch(() => props.show, (newShow) => {
 
 .favorite-btn.active {
   color: #fbbf24;
+}
+
+.favorite-btn svg {
+  width: 20px;
+  height: 20px;
 }
 
 .prompt-text {
@@ -768,42 +864,50 @@ watch(() => props.show, (newShow) => {
 /* 액션 버튼들 */
 .action-buttons {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 8px;
   margin-top: 24px;
   padding-top: 24px;
   border-top: 1px solid var(--border-color);
+  justify-content: flex-start;
 }
 
-.btn-action {
-  padding: 10px 16px;
+.icon-btn {
+  width: 40px;
+  height: 40px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
   color: var(--text-primary);
-  font-size: 0.95rem;
   cursor: pointer;
   transition: all 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  flex-shrink: 0;
 }
 
-.btn-action:hover {
+.icon-btn:hover {
   background: var(--bg-tertiary);
-  transform: translateX(2px);
+  transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.btn-action.btn-primary {
+.icon-btn.btn-primary {
   background: var(--primary-color);
   color: white;
   border-color: var(--primary-color);
 }
 
-.btn-action.btn-primary:hover {
+.icon-btn.btn-primary:hover {
   background: var(--primary-dark, #4338ca);
   border-color: var(--primary-dark, #4338ca);
+  box-shadow: 0 2px 8px rgba(74, 222, 128, 0.3);
+}
+
+.icon-btn svg {
+  width: 20px;
+  height: 20px;
 }
 
 /* 프레임 캡처 스타일 */
@@ -813,24 +917,38 @@ watch(() => props.show, (newShow) => {
 
 .capture-buttons {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
   margin-bottom: 12px;
 }
 
 .capture-btn {
-  padding: 8px 12px;
+  padding: 6px 4px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 6px;
   color: var(--text-primary);
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   cursor: pointer;
   transition: all 0.2s;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 4px;
+  min-height: 50px;
+}
+
+.capture-btn svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.capture-btn span {
+  font-size: 0.7rem;
+  line-height: 1;
+  text-align: center;
 }
 
 .capture-btn:hover {
@@ -919,7 +1037,11 @@ watch(() => props.show, (newShow) => {
   align-items: center;
   justify-content: center;
   transition: all 0.2s;
-  font-size: 0.9rem;
+}
+
+.frame-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 .frame-btn:hover {

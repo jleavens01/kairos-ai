@@ -47,11 +47,13 @@ const checkMobile = () => {
   isMobile.value = newIsMobile;
   
   if (!isMobile.value) { 
-    isMobileNavOpen.value = true;
-    console.log("App.vue: Desktop mode, forced isMobileNavOpen to true.");
-  } else { 
+    // 데스크탑 모드에서는 모바일 네비를 닫아야 함
     isMobileNavOpen.value = false;
-    console.log("App.vue: Mobile mode, forced isMobileNavOpen to false.");
+    console.log("App.vue: Desktop mode, forced isMobileNavOpen to false.");
+  } else { 
+    // 모바일 모드에서도 기본적으로 닫힌 상태로 시작
+    isMobileNavOpen.value = false;
+    console.log("App.vue: Mobile mode, set isMobileNavOpen to false.");
   }
 };
 

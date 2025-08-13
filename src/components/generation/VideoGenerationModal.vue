@@ -188,16 +188,25 @@
         <div class="form-group">
           <div class="label-with-toggle">
             <label>프롬프트</label>
-            <div class="translation-toggle">
-              <span class="toggle-label">자동 번역</span>
-              <label class="toggle-switch">
-                <input 
-                  type="checkbox" 
-                  v-model="enableTranslation"
-                  @change="handleTranslationToggle"
+            <div class="label-actions">
+              <button 
+                @click="showPresetModal = true" 
+                class="btn-preset-manage"
+                title="프리셋 관리"
+              >
+                <Settings :size="16" /> 프리셋
+              </button>
+              <div class="translation-toggle">
+                <span class="toggle-label">자동 번역</span>
+                <label class="toggle-switch">
+                  <input 
+                    type="checkbox" 
+                    v-model="enableTranslation"
+                    @change="handleTranslationToggle"
                 />
                 <span class="toggle-slider"></span>
               </label>
+            </div>
             </div>
           </div>
           <textarea
@@ -214,6 +223,23 @@
           <div v-if="translatedPrompt && enableTranslation && !isTranslating" class="translated-preview">
             <span class="preview-label">번역된 프롬프트:</span>
             <span class="preview-text">{{ translatedPrompt }}</span>
+          </div>
+          
+          <!-- 프리셋 선택 -->
+          <div v-if="availablePresets.length > 0" class="preset-selection">
+            <label class="preset-label">프리셋 적용:</label>
+            <div class="preset-chips">
+              <button
+                v-for="preset in availablePresets"
+                :key="preset.id"
+                @click="togglePreset(preset)"
+                :class="{ active: selectedPresets.includes(preset.id) }"
+                class="preset-chip"
+                :title="preset.prompt"
+              >
+                {{ preset.name }}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -458,12 +484,23 @@
       </div>
     </div>
   </div>
+  
+  <!-- 프리셋 관리 모달 -->
+  <PresetManageModal
+    v-if="showPresetModal"
+    :show="showPresetModal"
+    :project-id="props.projectId"
+    media-type="video"
+    @close="showPresetModal = false"
+    @saved="onPresetsSaved"
+  />
 </template>
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { supabase } from '@/utils/supabase'
-import { Video, X, Layers, Upload, BookOpen, ImagePlus } from 'lucide-vue-next'
+import { Video, X, Layers, Upload, BookOpen, ImagePlus, Settings } from 'lucide-vue-next'
+import PresetManageModal from './PresetManageModal.vue'
 
 const props = defineProps({
   show: {
@@ -504,6 +541,11 @@ const translatedPrompt = ref('')
 const translatedNegativePrompt = ref('')
 const isTranslating = ref(false)
 // translationTimer 제거 - blur 이벤트 사용
+
+// 프리셋 관련 상태
+const showPresetModal = ref(false)
+const availablePresets = ref([])
+const selectedPresets = ref([])
 
 // 모델별 파라미터
 const veo2Params = ref({
@@ -554,6 +596,45 @@ const seedanceLiteParams = ref({
   seed: null
 })
 
+// 마지막 사용 설정 불러오기
+const loadLastUsedSettings = async () => {
+  if (!props.projectId) return
+  
+  try {
+    const { data, error } = await supabase
+      .from('projects')
+      .select('last_video_model')
+      .eq('id', props.projectId)
+      .single()
+    
+    if (error) throw error
+    
+    if (data && data.last_video_model) {
+      selectedModel.value = data.last_video_model
+    }
+  } catch (error) {
+    console.error('마지막 설정 불러오기 오류:', error)
+  }
+}
+
+// 마지막 사용 설정 저장
+const saveLastUsedSettings = async () => {
+  if (!props.projectId) return
+  
+  try {
+    const { error } = await supabase
+      .from('projects')
+      .update({
+        last_video_model: selectedModel.value
+      })
+      .eq('id', props.projectId)
+    
+    if (error) throw error
+  } catch (error) {
+    console.error('설정 저장 오류:', error)
+  }
+}
+
 // 초기화
 onMounted(async () => {
   if (props.initialPrompt) {
@@ -561,6 +642,8 @@ onMounted(async () => {
   }
   await loadLibraryImages()
   await loadStoryboardImages()
+  await loadPresets()
+  await loadLastUsedSettings()
 })
 
 // watch props 변경
@@ -667,6 +750,60 @@ const addImageFromUrl = () => {
     }]
     urlInput.value = ''
   }
+}
+
+// 프리셋 관련 메서드
+const loadPresets = async () => {
+  if (!props.projectId) return
+  
+  try {
+    const { data, error } = await supabase
+      .from('prompt_presets')
+      .select('*')
+      .eq('project_id', props.projectId)
+      .eq('is_active', true)
+      .in('media_type', ['video', 'both'])
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: false })
+    
+    if (error) throw error
+    availablePresets.value = data || []
+  } catch (error) {
+    console.error('프리셋 로드 실패:', error)
+    availablePresets.value = []
+  }
+}
+
+const togglePreset = (preset) => {
+  const index = selectedPresets.value.indexOf(preset.id)
+  if (index > -1) {
+    selectedPresets.value.splice(index, 1)
+  } else {
+    selectedPresets.value.push(preset.id)
+  }
+}
+
+const getPresetsPrompt = () => {
+  return availablePresets.value
+    .filter(preset => selectedPresets.value.includes(preset.id))
+    .map(preset => preset.prompt)
+    .join(', ')
+}
+
+const getFinalPrompt = () => {
+  let finalPrompt = enableTranslation.value && translatedPrompt.value ? translatedPrompt.value : prompt.value
+  
+  // 프리셋이 있으면 프롬프트에 추가
+  const presetPrompt = getPresetsPrompt()
+  if (presetPrompt) {
+    finalPrompt = `${finalPrompt}, ${presetPrompt}`
+  }
+  
+  return finalPrompt
+}
+
+const onPresetsSaved = () => {
+  loadPresets()
 }
 
 // 스토리보드 이미지 로드
@@ -860,7 +997,7 @@ const generateVideo = async () => {
         'Authorization': `Bearer ${session.access_token}`
       },
       body: JSON.stringify({
-        prompt: enableTranslation.value && translatedPrompt.value ? translatedPrompt.value : prompt.value,
+        prompt: getFinalPrompt(),
         negativePrompt: enableTranslation.value && translatedNegativePrompt.value ? translatedNegativePrompt.value : negativePromptToSend,
         model: selectedModel.value,
         projectId: props.projectId,
@@ -877,6 +1014,9 @@ const generateVideo = async () => {
     if (!response.ok) {
       throw new Error(result.error || '비디오 생성 실패')
     }
+
+    // 프로젝트의 마지막 사용 설정 저장
+    await saveLastUsedSettings()
 
     emit('generated', result)
     close()
@@ -1425,6 +1565,12 @@ const generateVideo = async () => {
   margin-bottom: 8px;
 }
 
+.label-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .translation-toggle {
   display: flex;
   align-items: center;
@@ -1521,5 +1667,72 @@ const generateVideo = async () => {
 .preview-text {
   color: var(--text-secondary);
   line-height: 1.4;
+}
+
+/* 프리셋 관련 스타일 */
+.btn-preset-manage {
+  padding: 6px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+}
+
+.btn-preset-manage:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--primary-color);
+}
+
+.preset-selection {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.preset-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.preset-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.preset-chip {
+  padding: 6px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.preset-chip:hover {
+  background: var(--bg-primary);
+  border-color: var(--primary-color);
+  color: var(--text-primary);
+}
+
+.preset-chip.active {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+  color: white;
 }
 </style>

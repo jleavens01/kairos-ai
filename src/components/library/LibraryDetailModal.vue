@@ -1,12 +1,9 @@
 <template>
   <div class="modal-overlay" @click="$emit('close')">
     <div class="modal-content" @click.stop>
-      <div class="modal-header">
-        <h2>{{ item.prompt || '제목 없음' }}</h2>
-        <button class="modal-close-button" @click="$emit('close')">
-          <X :size="24" />
-        </button>
-      </div>
+      <button class="modal-close-button" @click="$emit('close')">
+        <X :size="24" />
+      </button>
       
       <div class="modal-body">
         <div class="detail-media">
@@ -79,13 +76,11 @@
       </div>
       
       <div class="modal-actions">
-        <button @click="$emit('copy', item)" class="action-button primary-button">
-          <Copy :size="18" />
-          프로젝트에 복사
+        <button @click="copyPrompt" class="icon-button" title="프롬프트 복사">
+          <Clipboard :size="20" />
         </button>
-        <button @click="$emit('download', item)" class="action-button secondary-button">
-          <Download :size="18" />
-          다운로드
+        <button @click="$emit('download', item)" class="icon-button" title="다운로드">
+          <Download :size="20" />
         </button>
       </div>
     </div>
@@ -93,13 +88,13 @@
 </template>
 
 <script setup>
-import { X, Copy, Download, Image, Video } from 'lucide-vue-next';
+import { X, Clipboard, Download, Image, Video } from 'lucide-vue-next';
 
-defineProps({
+const props = defineProps({
   item: Object
 });
 
-defineEmits(['close', 'copy', 'download']);
+const emit = defineEmits(['close', 'copy', 'download']);
 
 const getTypeIcon = (type) => {
   return type === 'video' ? Video : Image;
@@ -127,6 +122,14 @@ const formatParamLabel = (key) => {
     duration: '길이'
   };
   return labels[key] || key;
+};
+
+const copyPrompt = () => {
+  if (props.item?.prompt) {
+    navigator.clipboard.writeText(props.item.prompt);
+    // 알림 토스트 표시하려면 여기에 추가
+    alert('프롬프트가 클립보드에 복사되었습니다.');
+  }
 };
 </script>
 
@@ -156,27 +159,11 @@ const formatParamLabel = (key) => {
   flex-direction: column;
 }
 
-/* 모달 헤더 */
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 20px;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.modal-header h2 {
-  font-size: 1.3rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: calc(100% - 40px);
-}
 
 .modal-close-button {
+  position: absolute;
+  top: 20px;
+  right: 20px;
   background: transparent;
   border: none;
   color: var(--text-secondary);
@@ -187,6 +174,7 @@ const formatParamLabel = (key) => {
   justify-content: center;
   border-radius: 6px;
   transition: all 0.2s;
+  z-index: 10;
 }
 
 .modal-close-button:hover {
@@ -323,45 +311,32 @@ const formatParamLabel = (key) => {
 
 /* 모달 액션 */
 .modal-actions {
-  padding: 20px;
-  border-top: 1px solid var(--border-color);
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
   display: flex;
   gap: 10px;
-  justify-content: flex-end;
 }
 
-.action-button {
-  padding: 10px 20px;
-  border-radius: 6px;
-  font-size: 0.95rem;
-  font-weight: 500;
+.icon-button {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  border: none;
+  color: var(--text-primary);
   cursor: pointer;
-  transition: all 0.3s;
   display: flex;
   align-items: center;
-  gap: 8px;
-  border: none;
+  justify-content: center;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.primary-button {
-  background: var(--primary-gradient);
-  color: white;
-}
-
-.primary-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(74, 222, 128, 0.3);
-}
-
-.secondary-button {
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-}
-
-.secondary-button:hover {
-  background: var(--bg-primary);
-  border-color: var(--primary-color);
+.icon-button:hover {
+  transform: scale(1.1);
+  background: white;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 /* 모바일 반응형 */

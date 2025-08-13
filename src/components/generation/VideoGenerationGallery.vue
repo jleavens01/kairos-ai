@@ -37,13 +37,23 @@
           v-for="video in filteredVideos" 
           :key="video.id"
           class="gallery-item video-card"
+          :class="{ 'failed-card': video.generation_status === 'failed' }"
           @click="openDetailModal(video)"
           @mouseenter="() => handleVideoHover(video.id, true)"
           @mouseleave="() => handleVideoHover(video.id, false)"
         >
           <div class="video-wrapper">
+            <!-- 실패한 비디오 표시 -->
+            <div v-if="video.generation_status === 'failed'" class="video-preview failed-preview">
+              <div class="failed-content">
+                <div class="failed-icon">❌</div>
+                <p class="failed-text">생성 실패</p>
+                <p class="failed-model">{{ getModelName(video.generation_model) }}</p>
+                <p v-if="video.error_message" class="failed-reason">{{ video.error_message }}</p>
+              </div>
+            </div>
             <!-- 썸네일 또는 비디오 미리보기 -->
-            <div class="video-preview">
+            <div v-else class="video-preview">
               <video 
                 v-if="video.storage_video_url"
                 :ref="el => setVideoRef(el, video.id)"
@@ -206,7 +216,7 @@ const processingVideos = computed(() => {
 })
 
 const filteredVideos = computed(() => {
-  let filtered = videos.value.filter(v => v.generation_status === 'completed')
+  let filtered = videos.value.filter(v => v.generation_status === 'completed' || v.generation_status === 'failed')
   
   // 보관함 필터링
   if (showKeptOnly.value) {
@@ -566,13 +576,13 @@ const callPollingWorker = async () => {
     if (response.ok) {
       const result = await response.json()
       
-      // 완료된 비디오가 있으면 갤러리 새로고침
-      if (result.summary && result.summary.completed > 0) {
-        console.log(`${result.summary.completed}개 비디오 생성 완료, 갤러리 새로고침`)
-        await fetchVideos() // 갤러리 데이터 새로고침
-      }
+      // 항상 갤러리를 새로고침하여 상태 업데이트
+      console.log('비디오 큐 처리 결과:', result.summary)
+      await fetchVideos() // 갤러리 데이터 새로고침
       
-      if (result.summary && result.summary.processing === 0) {
+      // 더 이상 처리 중인 비디오가 없으면 폴링 중지
+      if (result.summary && result.summary.processing === 0 && result.summary.pending === 0) {
+        console.log('모든 비디오 처리 완료, 폴링 중지')
         stopPolling()
       }
     }
@@ -1001,5 +1011,51 @@ defineExpose({
 .hint {
   font-size: 0.9rem;
   color: var(--text-tertiary);
+}
+
+/* 실패한 비디오 스타일 */
+.failed-card {
+  border-color: rgba(239, 68, 68, 0.5) !important;
+  background: var(--bg-secondary);
+}
+
+.failed-preview {
+  background: rgba(239, 68, 68, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+}
+
+.failed-content {
+  text-align: center;
+  padding: 20px;
+}
+
+.failed-icon {
+  font-size: 2.5rem;
+  margin-bottom: 12px;
+}
+
+.failed-text {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #ef4444;
+  margin-bottom: 4px;
+}
+
+.failed-model {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.failed-reason {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  max-width: 200px;
+  word-wrap: break-word;
+  line-height: 1.3;
+  margin: 0 auto;
 }
 </style>

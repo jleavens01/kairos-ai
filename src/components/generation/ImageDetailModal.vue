@@ -61,7 +61,9 @@
                   class="favorite-btn"
                   :class="{ active: image.is_favorite }"
                 >
-                  {{ image.is_favorite ? '⭐' : '☆' }}
+                  <svg width="20" height="20" viewBox="0 0 24 24" :fill="image.is_favorite ? 'currentColor' : 'none'" stroke="currentColor" stroke-width="2">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                  </svg>
                 </button>
               </div>
             </div>
@@ -75,7 +77,10 @@
                   class="copy-btn"
                   title="프롬프트 복사"
                 >
-                  📋
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                  </svg>
                 </button>
               </div>
               <div class="prompt-text">
@@ -99,20 +104,36 @@
 
             <!-- 액션 버튼들 -->
             <div class="action-buttons">
-              <button @click="downloadImage" class="btn-action">
-                💾 다운로드
+              <button @click="downloadImage" class="icon-btn" title="다운로드">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
               </button>
-              <button @click="$emit('edit-tags', image)" class="btn-action">
-                🏷️ 태그 편집
+              <button @click="$emit('edit-tags', image)" class="icon-btn" title="태그 편집">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+                  <line x1="7" y1="7" x2="7.01" y2="7"/>
+                </svg>
               </button>
-              <button @click="$emit('connect-scene', image)" class="btn-action">
-                🔗 씬에 연결
+              <button @click="$emit('connect-scene', image)" class="icon-btn" title="씬에 연결">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                </svg>
               </button>
-              <button @click="handleImageEdit" class="btn-action btn-secondary">
-                ✏️ 이미지 수정
+              <button @click="handleImageEdit" class="icon-btn btn-secondary" title="이미지 수정">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
               </button>
-              <button @click="handleVideoGeneration" class="btn-action btn-primary">
-                🎬 영상 생성
+              <button @click="handleVideoGeneration" class="icon-btn btn-primary" title="영상 생성">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="23 7 16 12 23 17 23 7"/>
+                  <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                </svg>
               </button>
             </div>
           </div>
@@ -137,7 +158,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['close', 'update', 'edit-tags', 'connect-scene'])
+const emit = defineEmits(['close', 'update', 'edit-tags', 'connect-scene', 'edit-image'])
 
 // State
 const isZoomed = ref(false)
@@ -194,11 +215,46 @@ const toggleFavorite = async () => {
   }
 }
 
-const downloadImage = () => {
+const downloadImage = async () => {
   const imageUrl = props.image.storage_image_url || props.image.result_image_url || props.image.thumbnail_url
+  
+  // 프로젝트 이름 가져오기
+  let projectName = 'project'
+  if (props.image.project_id) {
+    try {
+      const { data } = await supabase
+        .from('projects')
+        .select('name')
+        .eq('id', props.image.project_id)
+        .single()
+      if (data && data.name) {
+        projectName = data.name.replace(/[^a-zA-Z0-9가-힣]/g, '_')
+      }
+    } catch (error) {
+      console.error('프로젝트 이름 가져오기 실패:', error)
+    }
+  }
+  
+  // 씬 번호 가져오기  
+  let sceneNumber = ''
+  if (props.image.production_sheet_id) {
+    try {
+      const { data } = await supabase
+        .from('production_sheets')
+        .select('scene_number')
+        .eq('id', props.image.production_sheet_id)
+        .single()
+      if (data && data.scene_number) {
+        sceneNumber = `_${data.scene_number}`
+      }
+    } catch (error) {
+      console.error('씬 번호 가져오기 실패:', error)
+    }
+  }
+  
   const link = document.createElement('a')
   link.href = imageUrl
-  link.download = `${props.image.element_name || 'image'}-${Date.now()}.png`
+  link.download = `image_${projectName}${sceneNumber}.png`
   link.target = '_blank'
   document.body.appendChild(link)
   link.click()
@@ -224,9 +280,18 @@ const copyPrompt = async () => {
 }
 
 const handleImageEdit = () => {
-  // TODO: 이미지 수정 기능 구현
-  console.log('이미지 수정 기능 - 추후 구현 예정')
-  alert('이미지 수정 기능은 준비 중입니다.')
+  // 이미지 수정을 위한 데이터 전달
+  const editData = {
+    model: props.image.generation_model || 'gpt-4o',
+    size: props.image.metadata?.image_size || '1024x1024',
+    category: props.image.image_type || 'scene',
+    name: props.image.element_name || '',
+    prompt: props.image.prompt_used || '',
+    referenceImage: props.image.storage_image_url || props.image.result_image_url || props.image.thumbnail_url
+  }
+  
+  emit('edit-image', editData)
+  emit('close')
 }
 
 const handleVideoGeneration = () => {
@@ -394,15 +459,22 @@ const handleVideoGeneration = () => {
   background: none;
   border: 1px solid var(--border-color);
   border-radius: 6px;
-  padding: 4px 8px;
+  padding: 6px;
   cursor: pointer;
-  font-size: 1rem;
   transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .copy-btn:hover {
   background: var(--bg-secondary);
   transform: scale(1.1);
+}
+
+.copy-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 .info-item {
@@ -426,10 +498,12 @@ const handleVideoGeneration = () => {
 .favorite-btn {
   background: none;
   border: none;
-  font-size: 1.5rem;
   cursor: pointer;
   transition: all 0.2s;
   padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .favorite-btn:hover {
@@ -438,6 +512,11 @@ const handleVideoGeneration = () => {
 
 .favorite-btn.active {
   color: #fbbf24;
+}
+
+.favorite-btn svg {
+  width: 20px;
+  height: 20px;
 }
 
 .prompt-text {
@@ -468,53 +547,62 @@ const handleVideoGeneration = () => {
 
 .action-buttons {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 8px;
   margin-top: 24px;
   padding-top: 24px;
   border-top: 1px solid var(--border-color);
+  justify-content: flex-start;
 }
 
-.btn-action {
-  padding: 10px 16px;
+.icon-btn {
+  width: 40px;
+  height: 40px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
   color: var(--text-primary);
-  font-size: 0.95rem;
   cursor: pointer;
   transition: all 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  flex-shrink: 0;
 }
 
-.btn-action:hover {
+.icon-btn:hover {
   background: var(--bg-tertiary);
-  transform: translateX(2px);
+  transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.btn-action.btn-primary {
+.icon-btn.btn-primary {
   background: var(--primary-color);
   color: white;
   border-color: var(--primary-color);
 }
 
-.btn-action.btn-primary:hover {
+.icon-btn.btn-primary:hover {
   background: var(--primary-dark);
   border-color: var(--primary-dark);
+  box-shadow: 0 2px 8px rgba(74, 222, 128, 0.3);
 }
 
-.btn-action.btn-secondary {
+.icon-btn.btn-secondary {
   background: #8b5cf6;
   color: white;
   border-color: #8b5cf6;
 }
 
-.btn-action.btn-secondary:hover {
+.icon-btn.btn-secondary:hover {
   background: #7c3aed;
   border-color: #7c3aed;
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+}
+
+.icon-btn svg {
+  width: 20px;
+  height: 20px;
 }
 
 /* 반응형 */

@@ -22,6 +22,21 @@
           </svg>
           TTS 다운로드
         </button>
+        <button @click="downloadBatchImages" class="btn-download-images">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            <circle cx="8.5" cy="8.5" r="1.5"></circle>
+            <polyline points="21 15 16 10 5 21"></polyline>
+          </svg>
+          이미지 다운로드
+        </button>
+        <button @click="downloadBatchVideos" class="btn-download-videos">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="23 7 16 12 23 17 23 7"></polygon>
+            <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+          </svg>
+          비디오 다운로드
+        </button>
         <button @click="deleteSelectedScenes" class="btn-delete">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="3 6 5 6 21 6"></polyline>
@@ -1000,6 +1015,182 @@ const downloadBatchTTS = async () => {
   }
 }
 
+// 이미지 일괄 다운로드 함수
+const downloadBatchImages = async () => {
+  if (props.selectedScenes.length === 0) {
+    alert('다운로드할 씬을 선택해주세요.')
+    return
+  }
+  
+  // 선택된 씬들 중 이미지가 있는 씬만 필터링
+  const scenesWithImages = props.scenes.filter(scene => {
+    return props.selectedScenes.includes(scene.id) && scene.scene_image_url
+  })
+  
+  if (scenesWithImages.length === 0) {
+    alert('선택된 씬에 다운로드 가능한 이미지가 없습니다.')
+    return
+  }
+  
+  try {
+    // 프로젝트 정보 가져오기
+    let projectName = projectsStore.currentProject?.name
+    
+    if (!projectName) {
+      await projectsStore.getProject(props.projectId)
+      projectName = projectsStore.currentProject?.name || 'project'
+    }
+    
+    // ZIP 파일 생성
+    const zip = new JSZip()
+    
+    // 각 이미지 파일 다운로드 및 ZIP에 추가
+    const downloadPromises = scenesWithImages.map(async (scene) => {
+      try {
+        const response = await fetch(scene.scene_image_url)
+        
+        if (!response.ok) {
+          throw new Error(`Failed to download image for scene ${scene.scene_number}`)
+        }
+        
+        const blob = await response.blob()
+        const fileName = `image_${projectName}_${scene.scene_number}.png`
+        
+        // ZIP에 파일 추가
+        zip.file(fileName, blob)
+        
+        return { success: true, sceneNumber: scene.scene_number }
+      } catch (error) {
+        console.error(`Scene ${scene.scene_number} image download failed:`, error)
+        return { success: false, sceneNumber: scene.scene_number, error: error.message }
+      }
+    })
+    
+    // 모든 다운로드 완료 대기
+    const results = await Promise.allSettled(downloadPromises)
+    const successCount = results.filter(r => r.value?.success).length
+    const failCount = results.filter(r => !r.value?.success).length
+    
+    if (successCount === 0) {
+      alert('다운로드 가능한 이미지 파일이 없습니다.')
+      return
+    }
+    
+    // ZIP 파일 생성 및 다운로드
+    const zipBlob = await zip.generateAsync({ type: 'blob' })
+    const url = URL.createObjectURL(zipBlob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `images_${projectName}_batch.zip`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    
+    // 결과 알림
+    if (failCount > 0) {
+      alert(`이미지 다운로드 완료: 성공 ${successCount}개, 실패 ${failCount}개`)
+    } else {
+      alert(`${successCount}개 이미지 파일이 다운로드되었습니다.`)
+    }
+    
+    // 선택 해제
+    clearSelection()
+    
+  } catch (error) {
+    console.error('이미지 일괄 다운로드 오류:', error)
+    alert(`이미지 다운로드 실패: ${error.message}`)
+  }
+}
+
+// 비디오 일괄 다운로드 함수
+const downloadBatchVideos = async () => {
+  if (props.selectedScenes.length === 0) {
+    alert('다운로드할 씬을 선택해주세요.')
+    return
+  }
+  
+  // 선택된 씬들 중 비디오가 있는 씬만 필터링
+  const scenesWithVideos = props.scenes.filter(scene => {
+    return props.selectedScenes.includes(scene.id) && scene.scene_video_url
+  })
+  
+  if (scenesWithVideos.length === 0) {
+    alert('선택된 씬에 다운로드 가능한 비디오가 없습니다.')
+    return
+  }
+  
+  try {
+    // 프로젝트 정보 가져오기
+    let projectName = projectsStore.currentProject?.name
+    
+    if (!projectName) {
+      await projectsStore.getProject(props.projectId)
+      projectName = projectsStore.currentProject?.name || 'project'
+    }
+    
+    // ZIP 파일 생성
+    const zip = new JSZip()
+    
+    // 각 비디오 파일 다운로드 및 ZIP에 추가
+    const downloadPromises = scenesWithVideos.map(async (scene) => {
+      try {
+        const response = await fetch(scene.scene_video_url)
+        
+        if (!response.ok) {
+          throw new Error(`Failed to download video for scene ${scene.scene_number}`)
+        }
+        
+        const blob = await response.blob()
+        const fileName = `video_${projectName}_${scene.scene_number}.mp4`
+        
+        // ZIP에 파일 추가
+        zip.file(fileName, blob)
+        
+        return { success: true, sceneNumber: scene.scene_number }
+      } catch (error) {
+        console.error(`Scene ${scene.scene_number} video download failed:`, error)
+        return { success: false, sceneNumber: scene.scene_number, error: error.message }
+      }
+    })
+    
+    // 모든 다운로드 완료 대기
+    const results = await Promise.allSettled(downloadPromises)
+    const successCount = results.filter(r => r.value?.success).length
+    const failCount = results.filter(r => !r.value?.success).length
+    
+    if (successCount === 0) {
+      alert('다운로드 가능한 비디오 파일이 없습니다.')
+      return
+    }
+    
+    // ZIP 파일 생성 및 다운로드
+    const zipBlob = await zip.generateAsync({ type: 'blob' })
+    const url = URL.createObjectURL(zipBlob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `videos_${projectName}_batch.zip`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    
+    // 결과 알림
+    if (failCount > 0) {
+      alert(`비디오 다운로드 완료: 성공 ${successCount}개, 실패 ${failCount}개`)
+    } else {
+      alert(`${successCount}개 비디오 파일이 다운로드되었습니다.`)
+    }
+    
+    // 선택 해제
+    clearSelection()
+    
+  } catch (error) {
+    console.error('비디오 일괄 다운로드 오류:', error)
+    alert(`비디오 다운로드 실패: ${error.message}`)
+  }
+}
+
 // TTS 다운로드 함수
 const downloadTTS = async (scene) => {
   const tts = ttsData.value[scene.id]
@@ -1249,6 +1440,36 @@ defineExpose({ deleteSelectedScenes })
   background-color: #10b981;
 }
 
+.btn-download-images {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background-color: #8b5cf6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-download-videos {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background-color: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
 .btn-tts:hover,
 .btn-download-tts:hover {
   background-color: var(--primary-dark);
@@ -1261,8 +1482,22 @@ defineExpose({ deleteSelectedScenes })
   box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
 }
 
+.btn-download-images:hover {
+  background-color: #7c3aed;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+}
+
+.btn-download-videos:hover {
+  background-color: #2563eb;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
 .btn-tts svg,
-.btn-download-tts svg {
+.btn-download-tts svg,
+.btn-download-images svg,
+.btn-download-videos svg {
   width: 16px;
   height: 16px;
 }

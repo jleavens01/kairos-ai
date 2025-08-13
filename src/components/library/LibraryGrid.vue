@@ -1,125 +1,221 @@
 <template>
-  <div :class="['items-container', viewMode]">
-    <div 
-      v-for="item in items" 
-      :key="item.id"
-      :class="['library-item', viewMode]"
-      @click="$emit('open-detail', item)"
-    >
-      <!-- 이미지/비디오 썸네일 -->
-      <div class="item-media">
-        <img 
-          v-if="item.type === 'image' && item.storage_image_url" 
-          :src="item.storage_image_url" 
-          :alt="item.prompt"
-          @error="handleImageError"
-        >
-        <video 
-          v-else-if="item.type === 'video' && item.video_url"
-          :src="item.video_url"
-          muted
-          loop
-          @mouseenter="$event.target.play()"
-          @mouseleave="$event.target.pause()"
-        />
-        <div v-else class="placeholder-media">
-          <component :is="getPlaceholderIcon(item.type)" :size="32" />
-        </div>
-        
-        <!-- 타입 배지 -->
-        <div class="type-badge">
-          <component :is="getTypeIcon(item.type)" :size="14" />
-          {{ item.type === 'image' ? '이미지' : '비디오' }}
-        </div>
+  <div class="library-grid-container">
+    <!-- Masonry 그리드 -->
+    <div v-if="viewMode === 'grid'" class="masonry-grid">
+      <div 
+        v-for="item in displayedItems" 
+        :key="item.id"
+        class="masonry-item"
+        @click="$emit('open-detail', item)"
+      >
+        <!-- 이미지/비디오 -->
+        <div class="media-wrapper">
+          <img 
+            v-if="item.type === 'image' && item.storage_image_url" 
+            :src="item.storage_image_url" 
+            :alt="item.prompt"
+            loading="lazy"
+          >
+          <video 
+            v-else-if="item.type === 'video' && item.video_url"
+            :src="item.video_url"
+            muted
+            loop
+            @mouseenter="$event.target.play()"
+            @mouseleave="$event.target.pause()"
+          />
+          <div v-else class="placeholder">
+            <component :is="getPlaceholderIcon(item.type)" :size="32" />
+          </div>
+          
+          <!-- 스타일/카테고리 배지 -->
+          <div v-if="item.style" class="style-badge">
+            {{ item.style }}
+          </div>
 
-        <!-- 그리드 뷰 오버레이 정보 (호버 시 표시) -->
-        <div v-if="viewMode === 'grid'" class="item-overlay">
-          <div class="overlay-content">
-            <h3 class="overlay-title">{{ getTruncatedPrompt(item.prompt) }}</h3>
-            <div class="overlay-meta">
-              <span class="overlay-date">{{ formatDate(item.created_at) }}</span>
-              <span v-if="item.model" class="overlay-model">{{ item.model }}</span>
-            </div>
-            <!-- 태그 -->
-            <div class="overlay-tags" v-if="item.tags && item.tags.length > 0">
-              <span 
-                v-for="tag in item.tags.slice(0, 2)" 
-                :key="tag" 
-                class="overlay-tag"
-              >{{ tag }}</span>
-              <span v-if="item.tags.length > 2" class="overlay-more-tags">
-                +{{ item.tags.length - 2 }}
-              </span>
+          <!-- 호버 오버레이 -->
+          <div class="hover-overlay">
+            <div class="overlay-info">
+              <span v-if="item.model" class="model-name">{{ formatModelName(item.model) }}</span>
+              <span class="date">{{ formatDate(item.created_at) }}</span>
             </div>
           </div>
+          
+          <!-- 좋아요 버튼 -->
+          <button 
+            @click.stop="toggleLike(item)" 
+            class="like-btn"
+            :class="{ liked: item.is_favorite }"
+            title="좋아요"
+          >
+            <Heart :size="16" :fill="item.is_favorite ? 'currentColor' : 'none'" />
+          </button>
         </div>
       </div>
-
-      <!-- 리스트 뷰 아이템 정보 -->
-      <div v-if="viewMode === 'list'" class="item-info">
-        <h3 class="item-title">{{ getTruncatedPrompt(item.prompt) }}</h3>
-        <div class="item-meta">
-          <span class="item-date">{{ formatDate(item.created_at) }}</span>
-          <span v-if="item.model" class="item-model">{{ item.model }}</span>
-          <span v-if="item.style" class="item-style">{{ item.style }}</span>
-        </div>
-        
-        <!-- 태그 -->
-        <div class="item-tags" v-if="item.tags && item.tags.length > 0">
-          <span 
-            v-for="tag in item.tags.slice(0, 3)" 
-            :key="tag" 
-            class="tag"
-          >{{ tag }}</span>
-          <span v-if="item.tags.length > 3" class="more-tags">
-            +{{ item.tags.length - 3 }}
-          </span>
+      
+      <!-- 무한 스크롤 트리거 -->
+      <div 
+        v-if="displayedItems.length < (items?.length || 0)"
+        ref="loadMoreTrigger" 
+        class="load-more-trigger"
+      >
+        <div v-if="isLoading" class="loading">
+          <div class="spinner"></div>
+          <span>더 불러오는 중...</span>
         </div>
       </div>
+    </div>
 
-      <!-- 액션 버튼 -->
-      <div class="item-actions">
-        <button 
-          @click.stop="$emit('copy-item', item)" 
-          class="action-btn copy-btn" 
-          title="프로젝트에 복사"
-        >
-          <Copy :size="16" />
-        </button>
-        <button 
-          @click.stop="$emit('delete-item', item)" 
-          class="action-btn delete-btn" 
-          title="삭제"
-        >
-          <Trash2 :size="16" />
-        </button>
+    <!-- 리스트 뷰 -->
+    <div v-else class="list-view">
+      <div 
+        v-for="item in displayedItems" 
+        :key="item.id"
+        class="list-item"
+        @click="$emit('open-detail', item)"
+      >
+        <div class="list-media">
+          <img 
+            v-if="item.type === 'image' && item.storage_image_url" 
+            :src="item.storage_image_url" 
+            :alt="item.prompt"
+          >
+          <video 
+            v-else-if="item.type === 'video' && item.video_url"
+            :src="item.video_url"
+            muted
+          />
+        </div>
+        <div class="list-info">
+          <h3>{{ getTruncatedPrompt(item.prompt) }}</h3>
+          <div class="meta">
+            <span>{{ formatDate(item.created_at) }}</span>
+            <span v-if="item.model">{{ formatModelName(item.model) }}</span>
+          </div>
+        </div>
+        <div class="list-actions">
+          <button @click.stop="$emit('copy-item', item)" class="action-btn">
+            <Copy :size="16" />
+          </button>
+          <button @click.stop="$emit('delete-item', item)" class="action-btn delete">
+            <Trash2 :size="16" />
+          </button>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { Image, Video, Copy, Trash2 } from 'lucide-vue-next';
+import { Image, Video, Copy, Trash2, Heart } from 'lucide-vue-next';
+import { onMounted, onUnmounted, watch, ref, nextTick } from 'vue';
 
-defineProps({
+const props = defineProps({
   items: Array,
   viewMode: String,
   activeTab: String
 });
 
-defineEmits(['open-detail', 'copy-item', 'delete-item']);
+const emit = defineEmits(['open-detail', 'copy-item', 'delete-item', 'toggle-like']);
 
-const getPlaceholderIcon = (type) => {
-  return type === 'video' ? Video : Image;
+// 무한 스크롤 상태
+const displayedItems = ref([]);
+const itemsPerLoad = 20;
+const loadMoreTrigger = ref(null);
+const isLoading = ref(false);
+let observer = null;
+
+// 초기 아이템 로드
+const loadInitialItems = () => {
+  if (!props.items) return;
+  displayedItems.value = props.items.slice(0, itemsPerLoad);
 };
 
-const getTypeIcon = (type) => {
-  return type === 'video' ? Video : Image;
+// 더 많은 아이템 로드
+const loadMoreItems = () => {
+  if (isLoading.value || !props.items) return;
+  
+  const currentLength = displayedItems.value.length;
+  if (currentLength >= props.items.length) return;
+  
+  isLoading.value = true;
+  
+  setTimeout(() => {
+    const nextItems = props.items.slice(currentLength, currentLength + itemsPerLoad);
+    displayedItems.value = [...displayedItems.value, ...nextItems];
+    isLoading.value = false;
+  }, 100);
 };
+
+// Intersection Observer 설정
+const setupIntersectionObserver = () => {
+  if (!loadMoreTrigger.value || props.viewMode !== 'grid') return;
+  
+  observer = new IntersectionObserver(
+    (entries) => {
+      if (entries[0].isIntersecting && !isLoading.value) {
+        loadMoreItems();
+      }
+    },
+    { rootMargin: '100px' }
+  );
+  
+  observer.observe(loadMoreTrigger.value);
+};
+
+// items prop 변경 감지
+watch(() => props.items, (newItems) => {
+  if (newItems) {
+    displayedItems.value = newItems.slice(0, itemsPerLoad);
+  }
+}, { immediate: true });
+
+// viewMode 변경 감지
+watch(() => props.viewMode, () => {
+  nextTick(() => {
+    if (observer) {
+      observer.disconnect();
+    }
+    setupIntersectionObserver();
+  });
+});
+
+onMounted(() => {
+  loadInitialItems();
+  nextTick(() => {
+    setupIntersectionObserver();
+  });
+});
+
+onUnmounted(() => {
+  if (observer) {
+    observer.disconnect();
+  }
+});
+
+// 헬퍼 함수들
+const getPlaceholderIcon = (type) => type === 'video' ? Video : Image;
+const getTypeIcon = (type) => type === 'video' ? Video : Image;
 
 const getTruncatedPrompt = (prompt) => {
   if (!prompt) return '제목 없음';
   return prompt.length > 60 ? prompt.substring(0, 60) + '...' : prompt;
+};
+
+const formatModelName = (model) => {
+  if (!model) return '';
+  const modelMap = {
+    'gpt-image-1': 'GPT Image',
+    'flux-1.1-pro': 'Flux 1.1 Pro',
+    'flux-schnell': 'Flux Schnell',
+    'veo2': 'Google Veo 2',
+    'kling21': 'Kling 2.1 Pro',
+    'hailou02': 'MiniMax Hailou',
+    'runway': 'Runway Gen-3',
+    'pika': 'Pika Labs',
+    'stable-video': 'Stable Video'
+  };
+  return modelMap[model] || model;
 };
 
 const formatDate = (dateString) => {
@@ -147,94 +243,79 @@ const formatDate = (dateString) => {
   });
 };
 
-const handleImageError = (event) => {
-  console.error('Image load error:', event);
+const toggleLike = (item) => {
+  emit('toggle-like', item);
 };
 </script>
 
 <style scoped>
-/* 컨테이너 */
-.items-container {
-  display: grid;
-  gap: 20px;
+.library-grid-container {
+  width: 100%;
 }
 
-.items-container.grid {
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+/* Masonry 그리드 레이아웃 */
+.masonry-grid {
+  column-count: 2;
+  column-gap: 20px;
+  padding: 0;
 }
 
-.items-container.list {
-  grid-template-columns: 1fr;
+@media (min-width: 768px) {
+  .masonry-grid {
+    column-count: 3;
+  }
 }
 
-/* 아이템 공통 */
-.library-item {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
+@media (min-width: 1024px) {
+  .masonry-grid {
+    column-count: 4;
+  }
+}
+
+@media (min-width: 1440px) {
+  .masonry-grid {
+    column-count: 5;
+  }
+}
+
+/* Masonry 아이템 */
+.masonry-item {
+  break-inside: avoid;
+  margin-bottom: 20px;
+  display: inline-block;
+  width: 100%;
+  position: relative;
   border-radius: 10px;
   overflow: hidden;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
   cursor: pointer;
   transition: all 0.3s;
-  position: relative;
 }
 
-.library-item:hover {
+.masonry-item:hover {
   transform: translateY(-2px);
   box-shadow: var(--shadow-md);
   border-color: var(--primary-color);
 }
 
-/* 그리드 뷰 */
-.library-item.grid {
-  aspect-ratio: 1;
-}
-
-.library-item.grid .item-media {
-  width: 100%;
-  height: 100%;
+/* 미디어 래퍼 */
+.media-wrapper {
   position: relative;
-}
-
-.library-item.grid .item-media img,
-.library-item.grid .item-media video {
   width: 100%;
-  height: 100%;
-  object-fit: cover;
 }
 
-/* 리스트 뷰 */
-.library-item.list {
-  display: flex;
-  gap: 15px;
-  padding: 15px;
-  align-items: center;
-}
-
-.library-item.list .item-media {
-  width: 120px;
-  height: 120px;
-  flex-shrink: 0;
-  border-radius: 6px;
-  overflow: hidden;
-  position: relative;
-}
-
-.library-item.list .item-media img,
-.library-item.list .item-media video {
+.media-wrapper img,
+.media-wrapper video {
   width: 100%;
-  height: 100%;
-  object-fit: cover;
+  height: auto;
+  display: block;
 }
 
-.library-item.list .item-info {
-  flex: 1;
-  min-width: 0;
-}
-
-/* 미디어 플레이스홀더 */
-.placeholder-media {
+/* 플레이스홀더 */
+.placeholder {
   width: 100%;
-  height: 100%;
+  min-height: 200px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -242,24 +323,23 @@ const handleImageError = (event) => {
   color: var(--text-secondary);
 }
 
-/* 타입 배지 */
-.type-badge {
+/* 스타일 배지 */
+.style-badge {
   position: absolute;
   top: 10px;
   left: 10px;
   background: rgba(0, 0, 0, 0.7);
   color: white;
-  padding: 4px 8px;
+  padding: 4px 10px;
   border-radius: 6px;
   font-size: 0.75rem;
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  font-weight: 600;
   backdrop-filter: blur(10px);
+  text-transform: capitalize;
 }
 
-/* 오버레이 (그리드 뷰) */
-.item-overlay {
+/* 호버 오버레이 */
+.hover-overlay {
   position: absolute;
   bottom: 0;
   left: 0;
@@ -271,40 +351,97 @@ const handleImageError = (event) => {
   transition: opacity 0.3s;
 }
 
-.library-item:hover .item-overlay {
+.masonry-item:hover .hover-overlay {
   opacity: 1;
 }
 
-.overlay-title {
-  font-size: 0.95rem;
+.overlay-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  font-size: 0.85rem;
+}
+
+.model-name {
   font-weight: 600;
-  margin-bottom: 8px;
-  line-height: 1.3;
+  color: #4ade80;
 }
 
-.overlay-meta {
+/* 좋아요 버튼 */
+.like-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--text-secondary);
+  cursor: pointer;
   display: flex;
-  gap: 10px;
-  font-size: 0.8rem;
-  opacity: 0.8;
-  margin-bottom: 8px;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.overlay-tags {
+.like-btn:hover {
+  transform: scale(1.1);
+  background: white;
+}
+
+.like-btn.liked {
+  color: #ef4444;
+  background: white;
+}
+
+/* 리스트 뷰 */
+.list-view {
   display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 20px;
 }
 
-.overlay-tag {
-  background: rgba(255, 255, 255, 0.2);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 0.75rem;
+.list-item {
+  display: flex;
+  gap: 15px;
+  padding: 15px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.3s;
+  align-items: center;
 }
 
-/* 아이템 정보 (리스트 뷰) */
-.item-title {
+.list-item:hover {
+  border-color: var(--primary-color);
+  box-shadow: var(--shadow-sm);
+}
+
+.list-media {
+  width: 120px;
+  height: 120px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.list-media img,
+.list-media video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.list-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.list-info h3 {
   font-size: 1.1rem;
   font-weight: 600;
   color: var(--text-primary);
@@ -314,91 +451,45 @@ const handleImageError = (event) => {
   white-space: nowrap;
 }
 
-.item-meta {
+.list-info .meta {
   display: flex;
   gap: 15px;
   font-size: 0.85rem;
   color: var(--text-secondary);
-  margin-bottom: 10px;
 }
 
-.item-tags {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
-.tag {
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 0.8rem;
-}
-
-/* 액션 버튼 */
-.item-actions {
+.list-actions {
   display: flex;
   gap: 8px;
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  opacity: 0;
-  transition: opacity 0.3s;
 }
 
-.library-item.list .item-actions {
-  position: static;
-  opacity: 1;
-  margin-left: auto;
+/* 무한 스크롤 로딩 */
+.load-more-trigger {
+  width: 100%;
+  padding: 20px;
+  text-align: center;
 }
 
-.library-item:hover .item-actions {
-  opacity: 1;
-}
-
-.action-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  border: none;
-  background: rgba(255, 255, 255, 0.9);
-  color: var(--text-primary);
-  cursor: pointer;
+.loading {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s;
+  gap: 10px;
+  color: var(--text-secondary);
 }
 
-.action-btn:hover {
-  transform: scale(1.1);
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
 }
 
-.copy-btn:hover {
-  background: var(--primary-color);
-  color: white;
-}
-
-.delete-btn:hover {
-  background: var(--danger-color);
-  color: white;
-}
-
-/* 모바일 반응형 */
-@media (max-width: 768px) {
-  .items-container.grid {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  }
-  
-  .library-item.list {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  
-  .library-item.list .item-media {
-    width: 100%;
-    height: 200px;
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 </style>

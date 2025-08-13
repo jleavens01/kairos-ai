@@ -52,6 +52,7 @@
         @open-detail="openItemDetail"
         @copy-item="copyToProject"
         @delete-item="deleteItem"
+        @toggle-like="toggleLike"
       />
     </div>
 
@@ -212,6 +213,26 @@ const downloadItem = async (item) => {
   }
 };
 
+const toggleLike = async (item) => {
+  // 좋아요 토글 로직
+  const newFavoriteStatus = !item.is_favorite;
+  
+  try {
+    const table = item.type === 'image' ? 'gen_images' : 'gen_videos';
+    const { error } = await supabase
+      .from(table)
+      .update({ is_favorite: newFavoriteStatus })
+      .eq('id', item.id);
+    
+    if (!error) {
+      // 로컬 상태 업데이트
+      item.is_favorite = newFavoriteStatus;
+    }
+  } catch (error) {
+    console.error('Failed to toggle like:', error);
+  }
+};
+
 // 라이브러리 아이템 불러오기
 const loadLibraryItems = async () => {
   loading.value = true;
@@ -235,12 +256,17 @@ const loadLibraryItems = async () => {
     
     libraryItems.value.images = (images || []).map(img => ({
       ...img,
-      type: 'image'
+      type: 'image',
+      prompt: img.prompt_used || img.custom_prompt || img.prompt || '',
+      model: img.generation_model || img.model || ''
     }));
     
     libraryItems.value.videos = (videos || []).map(vid => ({
       ...vid,
-      type: 'video'
+      type: 'video',
+      prompt: vid.prompt_used || vid.custom_prompt || vid.prompt || '',
+      model: vid.generation_model || vid.model || '',
+      video_url: vid.storage_video_url || vid.result_video_url || ''
     }));
     
   } catch (error) {
@@ -253,6 +279,37 @@ const loadLibraryItems = async () => {
 // Lifecycle
 onMounted(() => {
   loadLibraryItems();
+  
+  // 디버깅 로그
+  console.log('LibraryView mounted');
+  console.log('Window width:', window.innerWidth);
+  console.log('Initial viewMode:', viewMode.value);
+  
+  setTimeout(() => {
+    const container = document.querySelector('.items-container.grid');
+    if (container) {
+      const computedStyle = window.getComputedStyle(container);
+      console.log('LibraryView - Computed column-count:', computedStyle.columnCount);
+      console.log('LibraryView - Container found with classes:', container.className);
+      
+      // CSS 규칙 직접 확인
+      const sheets = document.styleSheets;
+      for (let sheet of sheets) {
+        try {
+          const rules = sheet.cssRules || sheet.rules;
+          for (let rule of rules) {
+            if (rule.selectorText && rule.selectorText.includes('.items-container.grid')) {
+              console.log('CSS Rule found:', rule.selectorText, rule.style.columnCount);
+            }
+          }
+        } catch (e) {
+          // CORS 에러 무시
+        }
+      }
+    } else {
+      console.log('LibraryView - Grid container not found');
+    }
+  }, 500);
 });
 </script>
 

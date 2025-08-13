@@ -1,12 +1,12 @@
 <template>
-  <div :class="['explore-card', viewMode]" @click="$emit('click', item)">
+  <div class="explore-card" @click="$emit('click', item)">
     <!-- 미디어 -->
     <div class="card-media">
       <img 
         v-if="item.type === 'image' && item.storage_image_url" 
         :src="item.storage_image_url" 
         :alt="item.prompt"
-        @error="handleImageError"
+        loading="lazy"
       >
       <video 
         v-else-if="item.type === 'video' && item.video_url"
@@ -16,159 +16,145 @@
         @mouseenter="$event.target.play()"
         @mouseleave="$event.target.pause()"
       />
-      <div v-else class="placeholder-media">
+      <div v-else class="placeholder">
         <component :is="getTypeIcon(item.type)" :size="32" />
       </div>
       
+      <!-- 스타일 배지 -->
+      <div v-if="item.style" class="style-badge">
+        {{ item.style }}
+      </div>
+
       <!-- 호버 오버레이 -->
-      <div class="card-overlay">
-        <div class="overlay-actions">
-          <button @click.stop="$emit('like', item)" class="overlay-btn">
-            <Heart :size="20" :fill="item.liked ? 'currentColor' : 'none'" />
-          </button>
-          <button @click.stop="$emit('save', item)" class="overlay-btn">
-            <Bookmark :size="20" :fill="item.saved ? 'currentColor' : 'none'" />
-          </button>
+      <div class="hover-overlay">
+        <div class="overlay-info">
+          <span v-if="item.model" class="model-name">{{ formatModelName(item.model) }}</span>
+          <span class="date">{{ formatDate(item.created_at) }}</span>
         </div>
-      </div>
-      
-      <!-- 타입 배지 -->
-      <div class="type-badge">
-        <component :is="getTypeIcon(item.type)" :size="14" />
-      </div>
-    </div>
-    
-    <!-- 카드 정보 -->
-    <div class="card-info">
-      <h3 class="card-title">{{ getTruncatedPrompt(item.prompt) }}</h3>
-      
-      <div class="card-meta">
-        <div class="meta-left">
-          <span v-if="item.user_name" class="meta-user">
-            <User :size="14" />
-            {{ item.user_name }}
-          </span>
-          <span v-if="item.style" class="meta-style">{{ item.style }}</span>
-        </div>
-        
-        <div class="meta-right">
-          <span v-if="item.likes" class="meta-likes">
-            <Heart :size="14" />
-            {{ formatNumber(item.likes) }}
-          </span>
-          <span v-if="item.views" class="meta-views">
+        <div class="overlay-stats">
+          <span class="stat-item">
             <Eye :size="14" />
-            {{ formatNumber(item.views) }}
+            {{ item.views || 0 }}
+          </span>
+          <span class="stat-item">
+            <Heart :size="14" />
+            {{ item.likes || 0 }}
           </span>
         </div>
       </div>
       
-      <!-- 태그 (리스트 뷰) -->
-      <div v-if="viewMode === 'list' && item.tags" class="card-tags">
-        <span v-for="tag in item.tags.slice(0, 3)" :key="tag" class="tag">
-          #{{ tag }}
-        </span>
-      </div>
+      <!-- 좋아요 버튼 -->
+      <button 
+        @click.stop="$emit('like', item)" 
+        class="like-btn"
+        :class="{ liked: item.is_liked }"
+      >
+        <Heart :size="16" :fill="item.is_liked ? 'currentColor' : 'none'" />
+      </button>
+      
+      <!-- 저장 버튼 -->
+      <button 
+        @click.stop="$emit('save', item)" 
+        class="save-btn"
+        :class="{ saved: item.is_saved }"
+        title="라이브러리에 저장"
+      >
+        <Bookmark :size="16" :fill="item.is_saved ? 'currentColor' : 'none'" />
+      </button>
     </div>
   </div>
 </template>
 
 <script setup>
-import { Heart, Bookmark, User, Eye, Image, Video } from 'lucide-vue-next';
+import { Heart, Bookmark, Eye, Image, Video } from 'lucide-vue-next';
 
 defineProps({
-  item: Object,
-  viewMode: String
+  item: Object
 });
 
 defineEmits(['click', 'like', 'save']);
 
-const getTypeIcon = (type) => {
-  return type === 'video' ? Video : Image;
+const getTypeIcon = (type) => type === 'video' ? Video : Image;
+
+const formatModelName = (model) => {
+  if (!model) return '';
+  const modelMap = {
+    'gpt-image-1': 'GPT Image',
+    'flux-1.1-pro': 'Flux 1.1 Pro',
+    'flux-schnell': 'Flux Schnell',
+    'veo2': 'Google Veo 2',
+    'kling21': 'Kling 2.1 Pro',
+    'hailou02': 'MiniMax Hailou',
+    'runway': 'Runway Gen-3',
+    'pika': 'Pika Labs',
+    'stable-video': 'Stable Video'
+  };
+  return modelMap[model] || model;
 };
 
-const getTruncatedPrompt = (prompt) => {
-  if (!prompt) return '제목 없음';
-  const maxLength = 50;
-  return prompt.length > maxLength ? prompt.substring(0, maxLength) + '...' : prompt;
-};
-
-const formatNumber = (num) => {
-  if (!num) return '0';
-  if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
-  if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
-  return num.toString();
-};
-
-const handleImageError = (event) => {
-  console.error('Image load error:', event);
+const formatDate = (dateString) => {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  
+  if (diffDays === 0) {
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    if (diffHours === 0) {
+      const diffMinutes = Math.floor(diffMs / (1000 * 60));
+      return diffMinutes === 0 ? '방금 전' : `${diffMinutes}분 전`;
+    }
+    return `${diffHours}시간 전`;
+  }
+  if (diffDays === 1) return '어제';
+  if (diffDays < 7) return `${diffDays}일 전`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)}주 전`;
+  
+  return date.toLocaleDateString('ko-KR', { 
+    year: 'numeric', 
+    month: 'short', 
+    day: 'numeric' 
+  });
 };
 </script>
 
 <style scoped>
 .explore-card {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
+  break-inside: avoid;
+  margin-bottom: 20px;
+  display: inline-block;
+  width: 100%;
+  position: relative;
   border-radius: 10px;
   overflow: hidden;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
   cursor: pointer;
   transition: all 0.3s;
 }
 
 .explore-card:hover {
-  transform: translateY(-4px);
-  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
   border-color: var(--primary-color);
 }
 
-/* 그리드 뷰 */
-.explore-card.grid {
-  display: flex;
-  flex-direction: column;
-}
-
-.explore-card.grid .card-media {
-  width: 100%;
-  aspect-ratio: 1;
-  position: relative;
-  overflow: hidden;
-}
-
-/* 리스트 뷰 */
-.explore-card.list {
-  display: flex;
-  gap: 15px;
-  padding: 15px;
-}
-
-.explore-card.list .card-media {
-  width: 150px;
-  height: 150px;
-  flex-shrink: 0;
-  border-radius: 6px;
-  overflow: hidden;
-  position: relative;
-}
-
-.explore-card.list .card-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-}
-
 /* 미디어 */
+.card-media {
+  position: relative;
+  width: 100%;
+}
+
 .card-media img,
 .card-media video {
   width: 100%;
-  height: 100%;
-  object-fit: cover;
+  height: auto;
+  display: block;
 }
 
-.placeholder-media {
+.placeholder {
   width: 100%;
-  height: 100%;
+  min-height: 200px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -176,138 +162,104 @@ const handleImageError = (event) => {
   color: var(--text-secondary);
 }
 
-/* 오버레이 */
-.card-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(to bottom, transparent, rgba(0, 0, 0, 0.7));
-  opacity: 0;
-  transition: opacity 0.3s;
-  display: flex;
-  align-items: flex-end;
-  justify-content: flex-end;
-  padding: 10px;
-}
-
-.explore-card:hover .card-overlay {
-  opacity: 1;
-}
-
-.overlay-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.overlay-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.9);
-  border: none;
-  color: var(--text-primary);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.overlay-btn:hover {
-  transform: scale(1.1);
-  background: white;
-}
-
-/* 타입 배지 */
-.type-badge {
+/* 스타일 배지 */
+.style-badge {
   position: absolute;
   top: 10px;
   left: 10px;
   background: rgba(0, 0, 0, 0.7);
   color: white;
-  padding: 4px 8px;
+  padding: 4px 10px;
   border-radius: 6px;
   font-size: 0.75rem;
-  display: flex;
-  align-items: center;
-  backdrop-filter: blur(10px);
-}
-
-/* 카드 정보 */
-.card-info {
-  padding: 12px;
-}
-
-.card-title {
-  font-size: 0.95rem;
   font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 8px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  line-height: 1.3;
+  backdrop-filter: blur(10px);
+  text-transform: capitalize;
 }
 
-.card-meta {
+/* 호버 오버레이 */
+.hover-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.9), transparent);
+  color: white;
+  padding: 15px;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.explore-card:hover .hover-overlay {
+  opacity: 1;
+}
+
+.overlay-info {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 8px;
   font-size: 0.85rem;
-  color: var(--text-secondary);
 }
 
-.meta-left,
-.meta-right {
+.model-name {
+  font-weight: 600;
+  color: #4ade80;
+}
+
+.overlay-stats {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  gap: 15px;
+  font-size: 0.85rem;
 }
 
-.meta-user,
-.meta-likes,
-.meta-views {
+.stat-item {
   display: flex;
   align-items: center;
   gap: 4px;
 }
 
-.meta-style {
-  background: var(--bg-secondary);
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 0.8rem;
-}
-
-/* 태그 */
-.card-tags {
-  display: flex;
-  gap: 6px;
-  margin-top: 10px;
-  flex-wrap: wrap;
-}
-
-.tag {
-  background: var(--bg-secondary);
+/* 액션 버튼 */
+.like-btn,
+.save-btn {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.9);
   color: var(--text-secondary);
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 0.8rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-/* 모바일 반응형 */
-@media (max-width: 768px) {
-  .explore-card.list {
-    flex-direction: column;
-  }
-  
-  .explore-card.list .card-media {
-    width: 100%;
-    height: 200px;
-  }
+.like-btn {
+  top: 10px;
+  right: 10px;
+}
+
+.save-btn {
+  top: 10px;
+  right: 50px;
+}
+
+.like-btn:hover,
+.save-btn:hover {
+  transform: scale(1.1);
+  background: white;
+}
+
+.like-btn.liked {
+  color: #ef4444;
+  background: white;
+}
+
+.save-btn.saved {
+  color: #3b82f6;
+  background: white;
 }
 </style>

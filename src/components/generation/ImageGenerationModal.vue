@@ -467,6 +467,26 @@ const props = defineProps({
   characterName: {
     type: String,
     default: ''
+  },
+  initialModel: {
+    type: String,
+    default: null
+  },
+  initialSize: {
+    type: String,
+    default: null
+  },
+  initialCategory: {
+    type: String,
+    default: null
+  },
+  initialName: {
+    type: String,
+    default: null
+  },
+  referenceImage: {
+    type: String,
+    default: null
   }
 })
 
@@ -477,11 +497,11 @@ const projectsStore = useProjectsStore()
 
 // Form data
 const prompt = ref(props.initialPrompt)
-const selectedModel = ref('gpt-image-1')
+const selectedModel = ref(props.initialModel || 'gpt-image-1')
 const referenceImages = ref([])
-const imageSize = ref('1024x1024')
-const category = ref(props.characterName ? 'character' : 'scene')
-const characterName = ref(props.characterName)
+const imageSize = ref(props.initialSize || '1024x1024')
+const category = ref(props.initialCategory || (props.characterName ? 'character' : 'scene'))
+const characterName = ref(props.initialName || props.characterName)
 const sceneNumber = ref(null)
 const generating = ref(false)
 const isDragging = ref(false)
@@ -562,10 +582,13 @@ watch(category, (newCategory) => {
 
 // 모델 변경 시 이미지 크기 기본값 설정
 watch(selectedModel, (newModel) => {
-  if (newModel === 'gpt-image-1') {
-    imageSize.value = '1024x1024'
-  } else if (newModel.includes('flux')) {
-    imageSize.value = '1:1'
+  // 프로젝트의 마지막 설정이 있으면 그것을 유지, 없으면 기본값 설정
+  if (!project.value?.last_image_size) {
+    if (newModel === 'gpt-image-1') {
+      imageSize.value = '1024x1024'
+    } else if (newModel.includes('flux')) {
+      imageSize.value = '1:1'
+    }
   }
 })
 
@@ -1210,23 +1233,23 @@ const generateImage = async () => {
       if (validReferenceImages.length > 1) {
         // 참조 이미지가 2개 이상일 때 (스타일 + 다른 참조 이미지)
         if (category.value === 'character') {
-          finalPrompt = `Draw the character from the second image in a front-facing view using the style of the first image. Show the full figure completely. Aspect ratio: ${imageSize.value}. ${stylePrompt}`
+          finalPrompt = `${finalPrompt}, Draw the character from the second image in a front-facing view using the style of the first image. Show the full figure completely. Aspect ratio: ${imageSize.value}. ${stylePrompt}`
         } else if (category.value === 'background') {
-          finalPrompt = `Draw the background from the second image using the style of the first image. Aspect ratio: ${imageSize.value}. ${stylePrompt}`
+          finalPrompt = `${finalPrompt}, Draw the background from the second image using the style of the first image. Aspect ratio: ${imageSize.value}. ${stylePrompt}`
         } else if (category.value === 'object') {
-          finalPrompt = `Draw the props/objects from the second image using the style of the first image. Aspect ratio: ${imageSize.value}. ${stylePrompt}`
+          finalPrompt = `${finalPrompt}, Draw the props/objects from the second image using the style of the first image. Aspect ratio: ${imageSize.value}. ${stylePrompt}`
         }
       } else {
         // 스타일 이미지만 있을 때
         if (category.value === 'character') {
-          const nameDesc = characterName.value || finalPrompt
-          finalPrompt = `Draw a ${nameDesc} character in a front-facing view using the attached reference image style. Show the full figure. Aspect ratio: ${imageSize.value}. ${stylePrompt}`
+          const nameDesc = characterName.value || 'character'
+          finalPrompt = `${finalPrompt}, Draw a ${nameDesc} character in a front-facing view using the attached reference image style. Show the full figure. Aspect ratio: ${imageSize.value}. ${stylePrompt}`
         } else if (category.value === 'background') {
-          const nameDesc = characterName.value || finalPrompt
-          finalPrompt = `Draw a ${nameDesc} background using the attached reference image style. Aspect ratio: ${imageSize.value}. ${stylePrompt}`
+          const nameDesc = characterName.value || 'background'
+          finalPrompt = `${finalPrompt}, Draw a ${nameDesc} background using the attached reference image style. Aspect ratio: ${imageSize.value}. ${stylePrompt}`
         } else if (category.value === 'object') {
-          const nameDesc = characterName.value || finalPrompt
-          finalPrompt = `Draw a ${nameDesc} prop/object using the attached reference image style. Aspect ratio: ${imageSize.value}. ${stylePrompt}`
+          const nameDesc = characterName.value || 'object'
+          finalPrompt = `${finalPrompt}, Draw a ${nameDesc} prop/object using the attached reference image style. Aspect ratio: ${imageSize.value}. ${stylePrompt}`
         } else if (category.value === 'scene') {
           // 씬 카테고리이고 다른 참조 이미지가 없을 때
           if (validReferenceImages.length === 1) {
@@ -1268,6 +1291,9 @@ const generateImage = async () => {
       throw new Error(result.error || '이미지 생성에 실패했습니다.')
     }
 
+    // 프로젝트의 마지막 사용 설정 저장
+    await saveLastUsedSettings()
+    
     // 생성 시작 성공 - Realtime으로 자동 업데이트됨
     emit('success', result.data)
     alert('이미지 생성이 시작되었습니다. 잠시 후 갤러리에 표시됩니다.')
@@ -1319,13 +1345,76 @@ const toggleStyleDropdown = () => {
   isStyleDropdownOpen.value = !isStyleDropdownOpen.value
 }
 
+// 마지막 사용 설정 불러오기
+const loadLastUsedSettings = async () => {
+  if (!props.projectId) return
+  
+  try {
+    const { data, error } = await supabase
+      .from('projects')
+      .select('last_image_model, last_image_size, last_image_style_id')
+      .eq('id', props.projectId)
+      .single()
+    
+    if (error) throw error
+    
+    if (data) {
+      // 저장된 설정이 있으면 적용
+      if (data.last_image_model) {
+        selectedModel.value = data.last_image_model
+      }
+      if (data.last_image_size) {
+        imageSize.value = data.last_image_size
+      }
+      if (data.last_image_style_id) {
+        selectedStyleId.value = data.last_image_style_id
+      }
+    }
+  } catch (error) {
+    console.error('마지막 설정 불러오기 오류:', error)
+  }
+}
+
+// 마지막 사용 설정 저장
+const saveLastUsedSettings = async () => {
+  if (!props.projectId) return
+  
+  try {
+    const { error } = await supabase
+      .from('projects')
+      .update({
+        last_image_model: selectedModel.value,
+        last_image_size: imageSize.value,
+        last_image_style_id: selectedStyleId.value || null
+      })
+      .eq('id', props.projectId)
+    
+    if (error) throw error
+  } catch (error) {
+    console.error('설정 저장 오류:', error)
+  }
+}
+
 // 컴포넌트 마운트 시
-onMounted(() => {
+onMounted(async () => {
   // 스타일 로드
   loadStyles()
   
   // 프리셋 로드
   loadPresets()
+  
+  // 수정 모드가 아닌 경우에만 마지막 설정 로드
+  if (!props.initialModel) {
+    await loadLastUsedSettings()
+  }
+  
+  // 참조 이미지가 있으면 추가 (수정 모드)
+  if (props.referenceImage) {
+    referenceImages.value.push({
+      url: props.referenceImage,
+      isUrl: true
+    })
+  }
   
   // 카테고리가 이미 scene이면 씬 목록 로드
   if (category.value === 'scene') {
