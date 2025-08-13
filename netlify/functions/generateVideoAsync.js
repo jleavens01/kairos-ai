@@ -59,6 +59,19 @@ export const handler = async (event) => {
       hasReferenceImage: !!referenceImageUrl
     });
 
+    // 모델명 정규화
+    let normalizedModel = model;
+    switch (model.toLowerCase()) {
+      case 'seedance':
+      case 'seedance-pro':
+        normalizedModel = 'seedance-v1-pro';
+        break;
+      case 'seedance-lite':
+        normalizedModel = 'seedance-v1-lite';
+        break;
+      // 다른 모델들은 그대로 사용
+    }
+
     // 1. 먼저 DB에 pending 상태로 기록 생성
     // 모델별 파라미터 추출
     let dbInsertData = {
@@ -66,7 +79,7 @@ export const handler = async (event) => {
       video_type: category,
       element_name: prompt.substring(0, 100),
       generation_status: 'pending',
-      generation_model: model,
+      generation_model: normalizedModel,
       model_parameters: parameters,
       prompt_used: prompt,
       custom_prompt: prompt,

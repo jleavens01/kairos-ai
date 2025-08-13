@@ -172,7 +172,7 @@ export const handler = async (event) => {
           project_id: projectId,
           custom_prompt: prompt,
           prompt_used: prompt,
-          generation_model: 'seedance-lite',
+          generation_model: 'seedance-v1-lite',
           video_type: category,
           element_name: elementName || prompt.substring(0, 100),
           created_by: user.sub,

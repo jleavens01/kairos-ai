@@ -164,7 +164,7 @@ export const handler = async (event) => {
         .from('gen_videos')
         .update({
           prompt_used: prompt,
-          generation_model: 'seedance-pro',
+          generation_model: 'seedance-v1-pro',
           model_parameters: {
             resolution: validResolution,
             duration,
@@ -197,7 +197,7 @@ export const handler = async (event) => {
           scene_number: sceneNumber,
           scene_name: sceneName,
           prompt_used: prompt,
-          generation_model: 'seedance-pro',
+          generation_model: 'seedance-v1-pro',
           model_parameters: {
             resolution: validResolution,
             duration,
