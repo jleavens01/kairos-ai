@@ -137,12 +137,12 @@ export const handler = async (event) => {
         prompt_used: prompt,
         generation_model: 'seedance-pro',
         model_parameters: {
-          resolution,
+          resolution: validResolution,  // 실제 사용되는 해상도
           duration,
           camera_fixed: cameraFixed,
           seed
         },
-        image_reference_url: imageUrl,
+        reference_image_url: imageUrl,  // 수정: image_reference_url → reference_image_url
         source_image_id: sourceImageId,
         generation_status: 'pending',
         credits_used: creditsUsed,
