@@ -118,7 +118,15 @@ export const handler = async (event) => {
     if (!isDevelopment) {
       const baseUrl = process.env.URL || process.env.DEPLOY_URL || 'https://kairos-ai.netlify.app';
       submitOptions.webhookUrl = `${baseUrl}/.netlify/functions/fal-webhook-handler`;
-      console.log('Using webhook for production environment:', submitOptions.webhookUrl);
+      console.log('=== WEBHOOK CONFIGURATION ===');
+      console.log('Base URL:', baseUrl);
+      console.log('Webhook URL:', submitOptions.webhookUrl);
+      console.log('Environment Variables:', {
+        URL: process.env.URL,
+        DEPLOY_URL: process.env.DEPLOY_URL,
+        CONTEXT: process.env.CONTEXT
+      });
+      console.log('=== END WEBHOOK CONFIG ===');
     } else {
       console.log('Using polling for development environment');
     }
@@ -220,9 +228,18 @@ export const handler = async (event) => {
     }
 
     // FAL AI에 제출
+    console.log('Submitting to FAL AI with options:', {
+      endpoint: apiEndpoint,
+      hasWebhook: !!submitOptions.webhookUrl,
+      webhookUrl: submitOptions.webhookUrl || 'none'
+    });
+    
     const { request_id: requestId } = await fal.queue.submit(apiEndpoint, submitOptions);
 
-    console.log('FAL AI request submitted:', requestId);
+    console.log('FAL AI request submitted successfully:', {
+      requestId,
+      webhookConfigured: !!submitOptions.webhookUrl
+    });
 
     // DB에 request_id 업데이트
     const { error: updateError } = await supabaseAdmin
