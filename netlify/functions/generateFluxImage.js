@@ -143,8 +143,9 @@ export async function generateImage({
         throw new Error(`Unsupported Flux model: ${model}`);
     }
 
-    // 개발 환경 여부 확인
-    const isDevelopment = !process.env.URL || process.env.URL.includes('localhost');
+    // 개발 환경 여부 확인 (Netlify 환경 변수 체크)
+    const isDevelopment = !process.env.CONTEXT || process.env.CONTEXT === 'dev' || 
+                         !process.env.URL || process.env.URL.includes('localhost');
     
     console.log('Submitting to FAL AI:', {
       endpoint: apiEndpoint,
@@ -159,8 +160,10 @@ export async function generateImage({
     
     // 프로덕션 환경에서만 웹훅 사용
     if (!isDevelopment) {
-      submitOptions.webhookUrl = webhookUrl;
-      console.log('Using webhook for production environment');
+      // Netlify 배포 URL 사용
+      const baseUrl = process.env.URL || process.env.DEPLOY_URL || 'https://kairos-ai.netlify.app';
+      submitOptions.webhookUrl = `${baseUrl}/.netlify/functions/fal-webhook-handler`;
+      console.log('Using webhook for production environment:', submitOptions.webhookUrl);
     } else {
       console.log('Using polling for development environment');
     }
