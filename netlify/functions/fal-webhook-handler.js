@@ -29,14 +29,21 @@ export const handler = async (event) => {
 
   try {
     const webhookData = JSON.parse(event.body);
-    console.log('FAL Webhook received:', {
-      request_id: webhookData.request_id,
-      status: webhookData.status,
-      type: webhookData.type || 'unknown'
-    });
+    console.log('=== FAL WEBHOOK DATA ===');
+    console.log('Full webhook data:', JSON.stringify(webhookData, null, 2));
+    console.log('Request ID:', webhookData.request_id);
+    console.log('Status:', webhookData.status);
+    console.log('Has output:', !!webhookData.output);
+    console.log('Has result:', !!webhookData.result);
+    console.log('Has data:', !!webhookData.data);
+    console.log('=== END WEBHOOK DATA ===');
 
     // FAL AI 웹훅 데이터 구조에 따라 처리
-    const { request_id, status, output, error } = webhookData;
+    // FAL AI는 result, output, data 등 다양한 형태로 결과를 반환할 수 있음
+    const request_id = webhookData.request_id || webhookData.requestId;
+    const status = webhookData.status || webhookData.state;
+    const output = webhookData.output || webhookData.result || webhookData.data;
+    const error = webhookData.error;
 
     if (!request_id) {
       console.error('No request_id in webhook data');
@@ -48,19 +55,29 @@ export const handler = async (event) => {
 
     // 이미지 또는 비디오 판별
     const isVideo = output?.video_url || output?.video || 
-                   (Array.isArray(output?.videos) && output.videos.length > 0);
+                   (Array.isArray(output?.videos) && output.videos.length > 0) ||
+                   webhookData.video_url || webhookData.video;
     
     if (status === 'COMPLETED' || status === 'completed') {
       if (isVideo) {
-        // 비디오 처리
-        const videoUrl = output.video_url || output.video || 
-                        (output.videos && output.videos[0]?.url);
+        // 비디오 처리 - 다양한 경로에서 URL 찾기
+        const videoUrl = output?.video_url || 
+                        output?.video || 
+                        (output?.videos && output.videos[0]?.url) ||
+                        webhookData.video_url ||
+                        webhookData.video ||
+                        webhookData.url;
+        
+        console.log('Extracted video URL:', videoUrl);
         
         if (!videoUrl) {
+          console.error('Could not find video URL in webhook data');
           throw new Error('No video URL in webhook output');
         }
 
-        const { error: dbError } = await supabase
+        console.log(`Updating gen_videos for request_id: ${request_id}`);
+        
+        const { data: updateData, error: dbError } = await supabase
           .from('gen_videos')
           .update({
             generation_status: 'completed',
@@ -68,14 +85,20 @@ export const handler = async (event) => {
             storage_video_url: videoUrl,
             updated_at: new Date().toISOString()
           })
-          .eq('request_id', request_id);
+          .eq('request_id', request_id)
+          .select();
 
         if (dbError) {
           console.error('DB update error (video):', dbError);
           throw dbError;
         }
 
-        console.log(`Video ${request_id} marked as completed`);
+        if (!updateData || updateData.length === 0) {
+          console.error(`No records found with request_id: ${request_id}`);
+          throw new Error(`No video record found with request_id: ${request_id}`);
+        }
+
+        console.log(`Video ${request_id} marked as completed:`, updateData);
       } else {
         // 이미지 처리
         const imageUrl = output?.images?.[0]?.url || output?.image_url || output?.url;
