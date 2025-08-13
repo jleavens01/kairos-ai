@@ -145,8 +145,8 @@ export const handler = async (event) => {
         reference_image_url: imageUrl,  // 수정: image_reference_url → reference_image_url
         source_image_id: sourceImageId,
         generation_status: 'pending',
-        credits_used: creditsUsed,
-        user_id: user.sub
+        credits_used: creditsUsed
+        // user_id 제거 - gen_videos 테이블에 없음
       })
       .select()
       .single();
