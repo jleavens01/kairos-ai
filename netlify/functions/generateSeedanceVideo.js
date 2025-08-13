@@ -76,14 +76,17 @@ export const handler = async (event) => {
     // FAL AI 엔드포인트 - SeedDance Pro
     const apiEndpoint = 'fal-ai/bytedance/seedance/v1/pro/image-to-video';
     
+    // SeedDance Pro는 360p를 지원하지 않음, 480p로 변경
+    const validResolution = resolution === '360p' ? '480p' : resolution;
+    
     const requestBody = {
       prompt,
       image_url: imageUrl,
-      resolution,
-      duration: duration.toString(), // FAL expects string
-      camera_fixed: cameraFixed
+      resolution: validResolution, // "480p", "720p", "1080p" 중 하나
+      duration: duration.toString(), // "3"~"12" 문자열
+      camera_fixed: cameraFixed // boolean
     };
-
+    
     if (seed !== undefined) {
       requestBody.seed = seed;
     }
@@ -102,34 +105,29 @@ export const handler = async (event) => {
       console.log('Using polling for development environment');
     }
     
-    const { request_id: requestId } = await fal.queue.submit(apiEndpoint, submitOptions);
-
-    console.log('FAL AI request submitted:', requestId);
-
     // 크레딧 계산 (대략적인 가격 기준)
     const calculateCredits = () => {
       // 기본: 480p 3초 = 20 크레딧 ($0.20)
       let credits = 20;
       
-      // 해상도에 따른 가중치
+      // 해상도에 따른 가중치 (validResolution 사용)
       const resolutionMultipliers = {
-        '360p': 0.8,
         '480p': 1.0,
         '720p': 1.5,
         '1080p': 2.0
       };
       
-      // 지속시간에 따른 가중치 (5초 기준)
+      // 지속시간에 따른 가중치 (3초 기준)
       const durationMultiplier = duration / 3;
       
-      credits = Math.ceil(credits * (resolutionMultipliers[resolution] || 1.0) * durationMultiplier);
+      credits = Math.ceil(credits * (resolutionMultipliers[validResolution] || 1.0) * durationMultiplier);
       
       return credits;
     };
 
     const creditsUsed = calculateCredits();
 
-    // DB에 생성 기록 저장
+    // 먼저 DB에 초기 레코드 생성 (request_id 없이)
     const { data: videoRecord, error: dbError } = await supabaseAdmin
       .from('gen_videos')
       .insert({
@@ -146,8 +144,7 @@ export const handler = async (event) => {
         },
         image_reference_url: imageUrl,
         source_image_id: sourceImageId,
-        generation_status: 'processing',
-        request_id: requestId,
+        generation_status: 'pending',
         credits_used: creditsUsed,
         user_id: user.sub
       })
@@ -155,8 +152,34 @@ export const handler = async (event) => {
       .single();
 
     if (dbError) {
-      console.error('Database insert error:', dbError);
-      throw new Error("Failed to create video record.");
+      console.error('Database insert error:', {
+        error: dbError,
+        data: {
+          project_id: projectId,
+          user_id: user.sub,
+          scene_number: sceneNumber,
+          scene_name: sceneName
+        }
+      });
+      throw new Error(`Failed to create video record: ${dbError.message || dbError}`);
+    }
+
+    // FAL AI에 제출
+    const { request_id: requestId } = await fal.queue.submit(apiEndpoint, submitOptions);
+
+    console.log('FAL AI request submitted:', requestId);
+
+    // DB에 request_id 업데이트
+    const { error: updateError } = await supabaseAdmin
+      .from('gen_videos')
+      .update({
+        request_id: requestId,
+        generation_status: 'processing'
+      })
+      .eq('id', videoRecord.id);
+
+    if (updateError) {
+      console.error('Failed to update request_id:', updateError);
     }
 
     // 개발 환경에서는 폴링, 프로덕션에서는 즉시 응답
