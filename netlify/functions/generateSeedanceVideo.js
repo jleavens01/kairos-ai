@@ -1,6 +1,12 @@
-// FAL AI - ByteDance SeedDance 비디오 생성 함수
+// SeedDance Pro 비디오 생성 함수 (웹훅/폴링 하이브리드)
 import { createClient } from '@supabase/supabase-js';
 import jwt from 'jsonwebtoken';
+import { fal } from '@fal-ai/client';
+
+// FAL AI 클라이언트 설정
+fal.config({
+  credentials: process.env.FAL_API_KEY
+});
 
 export const handler = async (event) => {
   const headers = {
@@ -18,44 +24,36 @@ export const handler = async (event) => {
   try {
     // 사용자 인증
     const authHeader = event.headers.authorization;
-    if (!authHeader) throw { statusCode: 401, message: 'Authorization header is missing.' };
+    if (!authHeader) throw new Error("Authorization header is missing.");
     
     const token = authHeader.split(' ')[1];
-    if (!token) throw { statusCode: 401, message: 'Token is missing.' };
+    if (!token) throw new Error("Token is missing.");
     
     // JWT 검증
     try {
       user = jwt.verify(token, process.env.SUPABASE_JWT_SECRET);
-      if (!user || !user.sub) throw { statusCode: 401, message: 'Invalid token payload.' };
+      if (!user || !user.sub) throw new Error("Invalid token payload.");
     } catch (jwtError) {
       console.error('JWT verification error:', jwtError);
-      throw { statusCode: 401, message: 'Invalid token.' };
+      throw new Error("Invalid token.");
     }
 
-    // 요청 파싱
-    const body = JSON.parse(event.body || '{}');
-    const { 
+    // 요청 데이터 파싱
+    const {
       projectId,
-      videoId,  // 라우터에서 전달되는 비디오 ID
-      prompt,
-      imageUrl, // 시작 이미지 URL
-      parameters = {},
-      modelParams = {},
-      category = 'scene',
-      elementName,
-      sceneId,
-      styleId
-    } = body;
-    
-    // 파라미터 추출 (라우터에서 전달된 것 우선)
-    const params = { ...parameters, ...modelParams };
-    const resolution = params.resolution || "1080p";
-    const duration = params.duration || 5;
-    const cameraFixed = params.cameraFixed || false;
-    const seed = params.seed || undefined;
+      sceneNumber,
+      sceneName,
+      prompt = '',
+      imageUrl,
+      resolution = '360p',
+      duration = 3,
+      cameraFixed = false,
+      seed,
+      sourceImageId
+    } = JSON.parse(event.body || '{}');
 
-    if (!projectId || !prompt || !imageUrl) {
-      throw new Error('projectId, prompt, and imageUrl are required.');
+    if (!projectId || !imageUrl) {
+      throw new Error("Missing required parameters.");
     }
 
     // Supabase 관리자 클라이언트
@@ -64,10 +62,6 @@ export const handler = async (event) => {
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    // FAL AI API 호출
-    const apiKey = process.env.FAL_API_KEY;
-    if (!apiKey) throw new Error("Server configuration error: FAL API key is missing.");
-
     console.log('Calling FAL AI SeedDance API with:', { 
       prompt: prompt.substring(0, 100), 
       resolution, 
@@ -75,8 +69,12 @@ export const handler = async (event) => {
       cameraFixed 
     });
 
+    // 개발 환경 여부 확인 (Netlify 환경 변수 체크)
+    const isDevelopment = !process.env.CONTEXT || process.env.CONTEXT === 'dev' || 
+                         !process.env.URL || process.env.URL.includes('localhost');
+    
     // FAL AI 엔드포인트 - SeedDance Pro
-    const submitUrl = 'https://queue.fal.run/fal-ai/bytedance/seedance/v1/pro/image-to-video';
+    const apiEndpoint = 'fal-ai/bytedance/seedance/v1/pro/image-to-video';
     
     const requestBody = {
       prompt,
@@ -90,26 +88,23 @@ export const handler = async (event) => {
       requestBody.seed = seed;
     }
 
-    const submitResponse = await fetch(submitUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Key ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(requestBody)
-    });
-
-    if (!submitResponse.ok) {
-      const errorText = await submitResponse.text();
-      console.error('FAL AI submit error:', errorText);
-      throw new Error(`FAL AI API Error: ${errorText}`);
+    // FAL AI 큐에 제출
+    const submitOptions = {
+      input: requestBody
+    };
+    
+    // 프로덕션 환경에서만 웹훅 사용
+    if (!isDevelopment) {
+      const baseUrl = process.env.URL || process.env.DEPLOY_URL || 'https://kairos-ai.netlify.app';
+      submitOptions.webhookUrl = `${baseUrl}/.netlify/functions/fal-webhook-handler`;
+      console.log('Using webhook for production environment:', submitOptions.webhookUrl);
+    } else {
+      console.log('Using polling for development environment');
     }
+    
+    const { request_id: requestId } = await fal.queue.submit(apiEndpoint, submitOptions);
 
-    const submitData = await submitResponse.json();
-    const requestId = submitData.request_id;
-    const statusUrl = submitData.status_url || `https://queue.fal.run/fal-ai/bytedance/seedance/v1/pro/image-to-video/requests/${requestId}/status`;
-
-    console.log('FAL AI request submitted:', requestId, 'Status URL:', statusUrl);
+    console.log('FAL AI request submitted:', requestId);
 
     // 크레딧 계산 (대략적인 가격 기준)
     const calculateCredits = () => {
@@ -117,109 +112,149 @@ export const handler = async (event) => {
       let credits = 20;
       
       // 해상도에 따른 가중치
-      if (resolution === '720p') credits = 40; // $0.40
-      if (resolution === '1080p') credits = 60; // $0.60
+      const resolutionMultipliers = {
+        '360p': 0.8,
+        '480p': 1.0,
+        '720p': 1.5,
+        '1080p': 2.0
+      };
       
-      // 길이에 따른 추가 (3초 기준, 추가 1초당 +10%)
-      if (duration > 3) {
-        credits = Math.round(credits * (1 + (duration - 3) * 0.1));
-      }
+      // 지속시간에 따른 가중치 (5초 기준)
+      const durationMultiplier = duration / 3;
+      
+      credits = Math.ceil(credits * (resolutionMultipliers[resolution] || 1.0) * durationMultiplier);
       
       return credits;
     };
 
-    // 데이터베이스 업데이트 (라우터에서 이미 생성된 레코드 업데이트)
-    const updateData = {
-      generation_status: 'processing',
-      reference_image_url: imageUrl,
-      resolution: resolution, // 480p, 720p, 1080p 그대로 저장
-      duration_seconds: parseInt(duration), // 숫자로 변환
-      camera_movement: cameraFixed ? 'fixed' : 'dynamic', // camera_movement 필드 활용
-      model_version: 'seedance-v1-pro', // 모델 버전 명시
-      request_id: requestId,
-      api_request: requestBody, // API 요청 전체 저장
-      credits_used: calculateCredits(), // 동적 크레딧 계산
-      metadata: {
-        status_url: statusUrl,
-        fal_request_id: requestId,
-        model: 'seedance',
-        camera_fixed: cameraFixed,
-        seed: seed,
-        seed_image_url: imageUrl
-      },
-      updated_at: new Date().toISOString()
-    };
-    
-    // videoId가 있으면 업데이트, 없으면 새로 생성
-    let videoRecord;
-    if (videoId) {
-      const { data, error: dbError } = await supabaseAdmin
-        .from('gen_videos')
-        .update(updateData)
-        .eq('id', videoId)
-        .select()
-        .single();
-      
-      if (dbError) {
-        console.error('Database update error:', dbError);
-        throw new Error('Failed to update video record.');
-      }
-      videoRecord = data;
-    } else {
-      // 하위 호환성을 위해 새로 생성도 지원
-      const { data, error: dbError } = await supabaseAdmin
-        .from('gen_videos')
-        .insert({
-          project_id: projectId,
-          custom_prompt: prompt,
-          prompt_used: prompt,
-          generation_model: 'seedance',
-          video_type: category,
-          element_name: elementName || prompt.substring(0, 100),
-          created_by: user.sub,
-          linked_scene_id: sceneId || null,
-          style_id: styleId || null,
-          ...updateData
-        })
-        .select()
-        .single();
-      
-      if (dbError) {
-        console.error('Database insert error:', dbError);
-        throw new Error('Failed to create video record.');
-      }
-      videoRecord = data;
+    const creditsUsed = calculateCredits();
+
+    // DB에 생성 기록 저장
+    const { data: videoRecord, error: dbError } = await supabaseAdmin
+      .from('gen_videos')
+      .insert({
+        project_id: projectId,
+        scene_number: sceneNumber,
+        scene_name: sceneName,
+        prompt_used: prompt,
+        generation_model: 'seedance-pro',
+        model_parameters: {
+          resolution,
+          duration,
+          camera_fixed: cameraFixed,
+          seed
+        },
+        image_reference_url: imageUrl,
+        source_image_id: sourceImageId,
+        generation_status: 'processing',
+        request_id: requestId,
+        credits_used: creditsUsed,
+        user_id: user.sub
+      })
+      .select()
+      .single();
+
+    if (dbError) {
+      console.error('Database insert error:', dbError);
+      throw new Error("Failed to create video record.");
     }
 
-    console.log('SeedDance video generation initiated:', videoRecord.id);
-
-    // 성공 응답
-    return {
-      statusCode: 200,
-      headers,
-      body: JSON.stringify({
-        success: true,
-        data: {
-          id: videoRecord.id,
-          status: 'processing',
-          requestId: requestId,
-          message: 'Video generation started. It will be processed in the background.'
+    // 개발 환경에서는 폴링, 프로덕션에서는 즉시 응답
+    if (isDevelopment) {
+      // 개발 환경: 폴링하여 결과 기다리기
+      const maxPollingTime = 120000; // 120초
+      const pollingInterval = 3000; // 3초마다 체크
+      const startTime = Date.now();
+      
+      while (Date.now() - startTime < maxPollingTime) {
+        await new Promise(resolve => setTimeout(resolve, pollingInterval));
+        
+        try {
+          const status = await fal.queue.status(apiEndpoint, { requestId });
+          console.log(`Polling status for ${requestId}:`, status.status);
+          
+          if (status.status === 'COMPLETED') {
+            const result = await fal.queue.result(apiEndpoint, { requestId });
+            const videoUrl = result.video_url || result.video || 
+                           (result.videos && result.videos[0]?.url);
+            
+            if (videoUrl) {
+              // DB 업데이트
+              await supabaseAdmin
+                .from('gen_videos')
+                .update({
+                  generation_status: 'completed',
+                  result_video_url: videoUrl,
+                  storage_video_url: videoUrl,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', videoRecord.id);
+              
+              return {
+                statusCode: 200,
+                headers: {
+                  ...headers,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  success: true,
+                  data: {
+                    ...videoRecord,
+                    request_id: requestId,
+                    result_video_url: videoUrl,
+                    status: 'completed'
+                  }
+                })
+              };
+            }
+          } else if (status.status === 'FAILED') {
+            throw new Error('Video generation failed');
+          }
+        } catch (pollError) {
+          console.error('Polling error:', pollError);
         }
-      })
-    };
+      }
+      
+      // 타임아웃
+      throw new Error('Video generation timed out');
+      
+    } else {
+      // 프로덕션: 웹훅이 처리하므로 즉시 응답
+      return {
+        statusCode: 200,
+        headers: {
+          ...headers,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          success: true,
+          data: {
+            ...videoRecord,
+            request_id: requestId,
+            status: 'processing',
+            message: '비디오 생성이 시작되었습니다. 완료되면 자동으로 갤러리에 표시됩니다.'
+          }
+        })
+      };
+    }
 
   } catch (error) {
-    console.error('Error in generateSeedanceVideo function:', error.message || error);
+    console.error('SeedDance video generation error:', error);
     
-    const statusCode = error.statusCode || 500;
-    const errorMessage = error.message || 'Internal server error.';
+    const statusCode = error.message.includes("Authorization") || error.message.includes("token") 
+      ? 401 
+      : error.message.includes("Missing required") 
+      ? 400 
+      : 500;
     
     return {
       statusCode,
-      headers,
+      headers: {
+        ...headers,
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify({ 
-        success: false,
-        error: errorMessage 
+        error: error.message || "Internal server error" 
       })
     };
   }
