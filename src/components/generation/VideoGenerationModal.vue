@@ -501,6 +501,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { supabase } from '@/utils/supabase'
 import { Video, X, Layers, Upload, BookOpen, ImagePlus, Settings } from 'lucide-vue-next'
 import PresetManageModal from './PresetManageModal.vue'
+import { useAuthStore } from '@/stores/auth'
 
 const props = defineProps({
   show: {
@@ -518,6 +519,9 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['close', 'generated'])
+
+// Auth store
+const authStore = useAuthStore()
 
 // 상태 관리
 const prompt = ref('')
@@ -941,17 +945,24 @@ const generateVideo = async () => {
     const firstRef = referenceImages.value[0]
     
     if (firstRef.file) {
-      // 파일 업로드
+      // 파일 업로드 - RLS 정책에 맞춰 userId를 첫 번째 폴더로 사용
+      const userId = authStore.user?.id
+      if (!userId) {
+        throw new Error('사용자 인증이 필요합니다.')
+      }
+      
       const fileName = `ref_${Date.now()}_${firstRef.file.name}`
+      const filePath = `${userId}/${props.projectId}/${fileName}`
+      
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('ref-images')
-        .upload(`${props.projectId}/${fileName}`, firstRef.file)
+        .upload(filePath, firstRef.file)
 
       if (uploadError) throw uploadError
 
       const { data: { publicUrl } } = supabase.storage
         .from('ref-images')
-        .getPublicUrl(`${props.projectId}/${fileName}`)
+        .getPublicUrl(filePath)
       
       referenceImageUrl = publicUrl
     } else {
