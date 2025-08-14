@@ -944,14 +944,14 @@ const generateVideo = async () => {
       // 파일 업로드
       const fileName = `ref_${Date.now()}_${firstRef.file.name}`
       const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('projects')
-        .upload(`${props.projectId}/references/${fileName}`, firstRef.file)
+        .from('ref-images')
+        .upload(`${props.projectId}/${fileName}`, firstRef.file)
 
       if (uploadError) throw uploadError
 
       const { data: { publicUrl } } = supabase.storage
-        .from('projects')
-        .getPublicUrl(`${props.projectId}/references/${fileName}`)
+        .from('ref-images')
+        .getPublicUrl(`${props.projectId}/${fileName}`)
       
       referenceImageUrl = publicUrl
     } else {

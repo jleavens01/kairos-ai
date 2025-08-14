@@ -4,15 +4,16 @@
     <div v-if="!hasScenes" class="empty-production">
       <div class="empty-icon">📄</div>
       <h4>원고를 입력하여 스토리보드를 생성하세요</h4>
-      <p>AI가 원고를 분석하여 씬을 나누고, 캐릭터와 배경을 추출합니다.</p>
+      <p>1단계: AI가 원고를 분석하여 씬을 나눕니다.<br>2단계: 선택된 씬에서 캐릭터를 추출합니다.</p>
       <button @click="handleOpenScriptInput" class="btn-primary-large">
         원고 입력 시작
       </button>
     </div>
     
-    <!-- 스토리보드 테이블 -->
-    <ProductionTable 
-      v-else 
+    <!-- 스토리보드 영역 -->
+    <div v-else class="production-content">
+      <!-- 스토리보드 테이블 -->
+      <ProductionTable 
         :scenes="scenes"
         :selected-scenes="selectedScenes"
         :project-id="projectId"
@@ -21,7 +22,9 @@
         @add-scene="handleAddScene"
         @delete-scene="handleDeleteScene"
         @update-scene="handleUpdateScene"
+        @character-extraction="handleOpenCharacterExtraction"
       />
+    </div>
 
     <!-- 원고 입력 모달 -->
     <ScriptInputModal
@@ -31,6 +34,17 @@
       @close="showScriptModal = false"
       @success="handleScriptAnalyzed"
     />
+    
+    <!-- 캐릭터 추출 모달 -->
+    <CharacterExtractionModal
+      v-if="showCharacterModal"
+      :show="showCharacterModal"
+      :project-id="projectId"
+      :scenes="scenes"
+      :selected-scene-ids="selectedScenes"
+      @close="showCharacterModal = false"
+      @success="handleCharactersExtracted"
+    />
   </div>
 </template>
 
@@ -39,6 +53,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useProductionStore } from '@/stores/production'
 import ScriptInputModal from './ScriptInputModal.vue'
 import ProductionTable from './ProductionTable.vue'
+import CharacterExtractionModal from './CharacterExtractionModal.vue'
 
 const props = defineProps({
   projectId: {
@@ -53,6 +68,7 @@ const productionStore = useProductionStore()
 
 // State
 const showScriptModal = ref(false)
+const showCharacterModal = ref(false)
 const selectedScenes = ref([])
 
 // Computed - store의 데이터를 직접 사용
@@ -64,8 +80,27 @@ const handleOpenScriptInput = () => {
   showScriptModal.value = true
 }
 
+const handleOpenCharacterExtraction = () => {
+  showCharacterModal.value = true
+}
+
 const handleScriptAnalyzed = async (data) => {
   showScriptModal.value = false
+  emit('update')
+  
+  // 스토어 업데이트
+  await loadProductionData()
+  
+  // 씬 나누기 완료 후 캐릭터 추출 모달 자동 표시
+  if (data?.scenes?.length > 0) {
+    setTimeout(() => {
+      showCharacterModal.value = true
+    }, 500)
+  }
+}
+
+const handleCharactersExtracted = async (data) => {
+  showCharacterModal.value = false
   emit('update')
   
   // 스토어 업데이트
@@ -131,6 +166,64 @@ defineExpose({
   height: 100%;
   display: flex;
   flex-direction: column;
+}
+
+.production-content {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.production-actions {
+  display: flex;
+  gap: 10px;
+  padding: 0 20px;
+}
+
+.btn-secondary {
+  padding: 10px 20px;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-secondary:hover {
+  background-color: var(--bg-primary);
+  border-color: var(--primary-color);
+}
+
+.btn-primary {
+  padding: 10px 20px;
+  background: var(--primary-gradient);
+  color: white;
+  border: none;
+  border-radius: 5px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(74, 222, 128, 0.3);
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .empty-production {

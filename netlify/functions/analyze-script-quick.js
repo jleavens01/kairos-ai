@@ -66,7 +66,13 @@ export const handler = async (event) => {
     const analysisResult = parseAIResponse(responseText);
     
     // 캐릭터 분석
+    console.log('Analyzing characters from scenes...');
     const characterAnalysis = analyzeCharacters(analysisResult.scenes);
+    console.log('Character analysis result:', {
+      mainCharactersCount: characterAnalysis.mainCharacters.length,
+      allCharactersCount: characterAnalysis.allCharacters.length,
+      mainCharacters: characterAnalysis.mainCharacters.slice(0, 5) // 상위 5개만 로그
+    });
     
     // 기존 production_sheets 조회
     const { data: existingSheets } = await supabase

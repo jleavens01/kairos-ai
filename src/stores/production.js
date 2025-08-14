@@ -288,6 +288,175 @@ export const useProductionStore = defineStore('production', {
       }
     },
 
+    // 1단계: 씬 나누기만 수행 (캐릭터 추출 없음)
+    async splitScenes(projectId, scriptText) {
+      if (!projectId || !scriptText) {
+        console.error('프로젝트 ID와 스크립트가 필요합니다.')
+        return { success: false, error: '필수 데이터가 없습니다.' }
+      }
+
+      this.loading = true
+      this.error = null
+      this.currentJobProgress = 0
+      this.currentJobStatus = '씬 나누기 작업 중...'
+
+      try {
+        // JWT 토큰 가져오기
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) {
+          throw new Error('인증이 필요합니다.')
+        }
+
+        const response = await fetch('/.netlify/functions/split-scenes', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`
+          },
+          body: JSON.stringify({
+            projectId,
+            scriptText
+          })
+        })
+
+        const result = await response.json()
+        
+        if (!result.success) {
+          throw new Error(result.error || '씬 나누기 실패')
+        }
+
+        console.log('씬 나누기 완료:', result.data)
+        
+        // 프로덕션 시트 다시 로드
+        await this.fetchProductionSheets(projectId)
+        
+        return {
+          success: true,
+          data: result.data
+        }
+
+      } catch (error) {
+        console.error('씬 나누기 실패:', error)
+        this.error = error.message
+        return { success: false, error: error.message }
+      } finally {
+        this.loading = false
+        this.currentJobProgress = 0
+        this.currentJobStatus = null
+      }
+    },
+
+    // 2단계: 선택된 씬들의 캐릭터 추출
+    async extractCharacters(projectId, sceneIds, existingCharacters = []) {
+      if (!projectId || !sceneIds || sceneIds.length === 0) {
+        console.error('프로젝트 ID와 씬 ID가 필요합니다.')
+        return { success: false, error: '필수 데이터가 없습니다.' }
+      }
+
+      this.loading = true
+      this.error = null
+      this.currentJobProgress = 0
+      this.currentJobStatus = '캐릭터 추출 작업 중...'
+
+      try {
+        // JWT 토큰 가져오기
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) {
+          throw new Error('인증이 필요합니다.')
+        }
+
+        const response = await fetch('/.netlify/functions/extract-characters', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`
+          },
+          body: JSON.stringify({
+            projectId,
+            sceneIds,
+            existingCharacters
+          })
+        })
+
+        const result = await response.json()
+        
+        if (!result.success) {
+          throw new Error(result.error || '캐릭터 추출 실패')
+        }
+
+        console.log('캐릭터 추출 완료:', result.data)
+        
+        // 프로덕션 시트 다시 로드
+        await this.fetchProductionSheets(projectId)
+        
+        return {
+          success: true,
+          data: result.data
+        }
+
+      } catch (error) {
+        console.error('캐릭터 추출 실패:', error)
+        this.error = error.message
+        return { success: false, error: error.message }
+      } finally {
+        this.loading = false
+        this.currentJobProgress = 0
+        this.currentJobStatus = null
+      }
+    },
+
+    // 프로젝트의 캐릭터 리스트 가져오기 (production_sheets에서 수집)
+    async getProjectCharacters(projectId) {
+      if (!projectId) {
+        console.error('프로젝트 ID가 필요합니다.')
+        return []
+      }
+
+      try {
+        // production_sheets가 이미 로드되어 있으면 그것을 사용
+        let sheets = this.productionSheets
+        
+        // 로드되어 있지 않으면 DB에서 가져오기
+        if (!sheets || sheets.length === 0) {
+          const { data, error } = await supabase
+            .from('production_sheets')
+            .select('characters')
+            .eq('project_id', projectId)
+          
+          if (error) throw error
+          sheets = data || []
+        }
+        
+        // 모든 씬에서 캐릭터 수집
+        const characterMap = new Map()
+        
+        sheets.forEach(sheet => {
+          if (sheet.characters && Array.isArray(sheet.characters)) {
+            sheet.characters.forEach(character => {
+              if (character && character !== '내레이터') {
+                if (!characterMap.has(character)) {
+                  characterMap.set(character, {
+                    name: character,
+                    count: 0
+                  })
+                }
+                characterMap.get(character).count++
+              }
+            })
+          }
+        })
+        
+        // 등장 횟수 순으로 정렬
+        const characters = Array.from(characterMap.values())
+          .sort((a, b) => b.count - a.count)
+        
+        return characters
+      } catch (error) {
+        console.error('캐릭터 리스트 조회 실패:', error)
+        return []
+      }
+    },
+
     // 스토어 초기화
     clearProductionData() {
       this.productionSheets = []

@@ -2,7 +2,7 @@
   <div v-if="show" class="modal-overlay" @click="handleClose">
     <div class="modal-content" @click.stop>
       <div class="modal-header">
-        <h2>📝 원고 입력 및 씬 나누기</h2>
+        <h2>📝 원고 입력 및 씬 나누기 (1단계)</h2>
         <button class="close-button" @click="handleClose">×</button>
       </div>
       
@@ -49,7 +49,7 @@
           class="btn-analyze"
           :disabled="loading || !scriptText.trim() || scriptText.length > 10000"
         >
-          {{ loading ? '분석 중...' : '씬 나누기 시작' }}
+          {{ loading ? '처리 중...' : '씬 나누기 시작 (캐릭터 추출 없음)' }}
         </button>
       </div>
     </div>
@@ -108,47 +108,28 @@ const handleAnalyze = async () => {
   loading.value = true
   error.value = ''
   progress.value = 0
-  statusMessage.value = 'AI 분석 작업을 시작하고 있습니다...'
-  
-  // 폴링 중 진행률 업데이트를 위한 interval
-  const progressInterval = setInterval(() => {
-    // store의 진행 상태를 가져와서 업데이트
-    if (productionStore.currentJobProgress) {
-      progress.value = productionStore.currentJobProgress
-    }
-    if (productionStore.currentJobStatus) {
-      statusMessage.value = productionStore.currentJobStatus
-      
-      // 상태에 따른 메시지 개선
-      if (productionStore.currentJobStatus === 'ai_processing') {
-        statusMessage.value = 'AI가 스크립트를 분석하고 있습니다...'
-      } else if (productionStore.currentJobStatus === 'saving_to_db') {
-        statusMessage.value = '분석 결과를 저장하고 있습니다...'
-      }
-    }
-  }, 500)
+  statusMessage.value = '씬 나누기 작업을 시작하고 있습니다...'
   
   try {
-    const result = await productionStore.analyzeScript(
+    // 1단계: 씬 나누기만 수행
+    const result = await productionStore.splitScenes(
       props.projectId,
       scriptText.value
     )
     
-    clearInterval(progressInterval)
     progress.value = 100
     
     if (result.success) {
-      statusMessage.value = '분석이 완료되었습니다!'
+      statusMessage.value = '씬 나누기가 완료되었습니다!'
       setTimeout(() => {
         emit('success', result.data)
       }, 500)
     } else {
-      throw new Error(result.error || '분석 중 오류가 발생했습니다.')
+      throw new Error(result.error || '씬 나누기 중 오류가 발생했습니다.')
     }
   } catch (err) {
-    clearInterval(progressInterval)
-    console.error('스크립트 분석 실패:', err)
-    error.value = err.message || '스크립트 분석에 실패했습니다. 다시 시도해주세요.'
+    console.error('씬 나누기 실패:', err)
+    error.value = err.message || '씬 나누기에 실패했습니다. 다시 시도해주세요.'
   } finally {
     loading.value = false
     progress.value = 0

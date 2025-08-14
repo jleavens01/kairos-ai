@@ -6,6 +6,9 @@
         <span class="selection-count">{{ selectedScenes.length }}개 씬 선택됨</span>
       </div>
       <div class="selection-buttons">
+        <button @click="handleCharacterExtraction" class="btn-character">
+          👥 캐릭터 추출
+        </button>
         <button @click="generateBatchTTS" class="btn-tts">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
@@ -260,7 +263,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['update:selected', 'edit-scene', 'add-scene', 'delete-scene', 'update-scene'])
+const emit = defineEmits(['update:selected', 'edit-scene', 'add-scene', 'delete-scene', 'update-scene', 'character-extraction'])
 
 const productionStore = useProductionStore()
 const projectsStore = useProjectsStore()
@@ -771,6 +774,14 @@ const saveTTSDuration = async (sceneId, duration, version) => {
 }
 
 // 일괄 TTS 생성 함수
+const handleCharacterExtraction = () => {
+  if (props.selectedScenes.length === 0) {
+    alert('캐릭터를 추출할 씬을 선택해주세요.')
+    return
+  }
+  emit('character-extraction')
+}
+
 const generateBatchTTS = async () => {
   if (props.selectedScenes.length === 0) {
     alert('TTS를 생성할 씬을 선택해주세요.')
@@ -1420,6 +1431,7 @@ defineExpose({ deleteSelectedScenes })
   gap: 8px;
 }
 
+.btn-character,
 .btn-tts,
 .btn-download-tts {
   display: flex;
@@ -1470,6 +1482,7 @@ defineExpose({ deleteSelectedScenes })
   transition: all 0.2s;
 }
 
+.btn-character:hover,
 .btn-tts:hover,
 .btn-download-tts:hover {
   background-color: var(--primary-dark);
