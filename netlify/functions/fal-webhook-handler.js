@@ -39,10 +39,10 @@ export const handler = async (event) => {
     console.log('=== END WEBHOOK DATA ===');
 
     // FAL AI 웹훅 데이터 구조에 따라 처리
-    // FAL AI는 result, output, data 등 다양한 형태로 결과를 반환할 수 있음
-    const request_id = webhookData.request_id || webhookData.requestId;
+    // FAL AI는 result, output, data, payload 등 다양한 형태로 결과를 반환할 수 있음
+    const request_id = webhookData.request_id || webhookData.requestId || webhookData.gateway_request_id;
     const status = webhookData.status || webhookData.state;
-    const output = webhookData.output || webhookData.result || webhookData.data;
+    const output = webhookData.output || webhookData.result || webhookData.data || webhookData.payload;
     const error = webhookData.error;
 
     if (!request_id) {
@@ -58,10 +58,11 @@ export const handler = async (event) => {
                    (Array.isArray(output?.videos) && output.videos.length > 0) ||
                    webhookData.video_url || webhookData.video;
     
-    if (status === 'COMPLETED' || status === 'completed') {
+    if (status === 'COMPLETED' || status === 'completed' || status === 'OK') {
       if (isVideo) {
         // 비디오 처리 - 다양한 경로에서 URL 찾기
-        const videoUrl = output?.video_url || 
+        const videoUrl = output?.video?.url ||  // payload.video.url 형식 처리
+                        output?.video_url || 
                         output?.video || 
                         (output?.videos && output.videos[0]?.url) ||
                         webhookData.video_url ||
