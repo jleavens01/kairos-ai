@@ -1,6 +1,12 @@
-// MiniMax Hailou 02 Standard/Pro 모델을 사용한 비디오 생성
+// MiniMax Hailou 02 Standard/Pro 모델을 사용한 비디오 생성 (웹훅/폴링 하이브리드)
 import { createClient } from '@supabase/supabase-js';
 import jwt from 'jsonwebtoken';
+import { fal } from '@fal-ai/client';
+
+// FAL AI 클라이언트 설정
+fal.config({
+  credentials: process.env.FAL_API_KEY
+});
 
 const VIDEO_GENERATION_COST_STANDARD = 1200; // Hailou 02 Standard 비용
 const VIDEO_GENERATION_COST_PRO = 1800; // Hailou 02 Pro 비용
@@ -89,22 +95,34 @@ export const handler = async (event) => {
       modelParams
     });
 
+    // 개발 환경 여부 확인 (Netlify 환경 변수 체크)
+    const isDevelopment = process.env.CONTEXT === 'dev' || 
+                         process.env.NETLIFY_DEV === 'true' ||
+                         (process.env.URL && process.env.URL.includes('localhost'));
+    
+    console.log('Environment check (Hailou):', {
+      CONTEXT: process.env.CONTEXT,
+      NETLIFY_DEV: process.env.NETLIFY_DEV,
+      URL: process.env.URL,
+      isDevelopment
+    });
+
     // Pro와 Standard 분기 처리
     let apiEndpoint;
-    let falRequest;
+    let falRequestBody;
     
     if (isPro) {
       // Hailou 02 Pro - 단순한 파라미터
-      apiEndpoint = 'https://queue.fal.run/fal-ai/minimax/hailuo-02/pro/image-to-video';
-      falRequest = {
+      apiEndpoint = 'fal-ai/minimax/hailuo-02/pro/image-to-video';
+      falRequestBody = {
         prompt: prompt,
         image_url: imageUrl,
         prompt_optimizer: modelParams.prompt_optimizer !== undefined ? modelParams.prompt_optimizer : true
       };
     } else {
       // Hailou 02 Standard - 더 많은 파라미터
-      apiEndpoint = 'https://queue.fal.run/fal-ai/minimax/hailuo-02/standard/image-to-video';
-      falRequest = {
+      apiEndpoint = 'fal-ai/minimax/hailuo-02/standard/image-to-video';
+      falRequestBody = {
         prompt: prompt,
         image_url: imageUrl,
         duration: modelParams.duration || 6,  // 6 또는 10초
@@ -113,80 +131,70 @@ export const handler = async (event) => {
       };
     }
     
-    console.log('FAL AI 요청:', {
+    console.log('FAL AI 요청 (Hailou):', {
       endpoint: apiEndpoint,
-      request: falRequest
+      request: falRequestBody
     });
 
-    // FAL AI API 호출
-    const falResponse = await fetch(apiEndpoint, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Key ${process.env.FAL_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(falRequest)
+    // FAL AI 큐에 제출
+    const submitOptions = {
+      input: falRequestBody
+    };
+    
+    // 프로덕션 환경에서만 웹훅 사용
+    if (!isDevelopment) {
+      const baseUrl = process.env.URL || process.env.DEPLOY_URL || 'https://kairos-ai.netlify.app';
+      submitOptions.webhookUrl = `${baseUrl}/.netlify/functions/fal-webhook-handler`;
+      console.log('=== WEBHOOK CONFIGURATION (Hailou) ===');
+      console.log('Base URL:', baseUrl);
+      console.log('Webhook URL:', submitOptions.webhookUrl);
+      console.log('=== END WEBHOOK CONFIG ===');
+    } else {
+      console.log('Using polling for development environment (Hailou)');
+    }
+    
+    // FAL AI에 제출
+    const { request_id: requestId } = await fal.queue.submit(apiEndpoint, submitOptions);
+    console.log('FAL AI request submitted successfully (Hailou):', {
+      requestId,
+      webhookConfigured: !!submitOptions.webhookUrl
     });
 
-    if (!falResponse.ok) {
-      const errorText = await falResponse.text();
-      console.error('FAL API Error:', errorText);
-      
-      // 크레딧 환불
-      await supabaseAdmin
-        .from('profiles')
-        .update({ credits: userProfile.credits })
-        .eq('user_id', user.sub);
-      
-      throw new Error(`FAL AI API request failed: ${errorText}`);
+    // gen_videos 테이블 업데이트 - request_id 저장
+    const updateData = {
+      generation_status: 'processing',
+      request_id: requestId,
+      credits_used: VIDEO_GENERATION_COST,
+      prompt_optimizer: modelParams.prompt_optimizer,
+      model_version: isPro ? 'hailou-02-pro' : 'hailou-02-standard',
+      metadata: {
+        ...requestBody.parameters,
+        model: model,
+        modelParams: modelParams,
+        isPro: isPro,
+        startedAt: new Date().toISOString(),
+        userId: user.sub,
+        creditsCost: VIDEO_GENERATION_COST,
+        webhookConfigured: !!submitOptions.webhookUrl
+      }
+    };
+
+    // Standard 모델인 경우 추가 파라미터
+    if (!isPro) {
+      updateData.duration_seconds = modelParams.duration || 6;
+      updateData.resolution = modelParams.resolution || '768P';
+    } else {
+      updateData.duration_seconds = 5; // Pro는 5초 고정
     }
 
-    const falResult = await falResponse.json();
-    console.log('FAL API Response:', falResult);
-
-    // request_id 저장 및 상태 업데이트
-    if (falResult.request_id) {
-      let statusUrl = falResult.status_url || falResult.response_url;
-      
-      if (!statusUrl) {
-        statusUrl = `https://queue.fal.run/fal-ai/requests/${falResult.request_id}/status`;
-      }
-      
-      console.log('Status URL:', statusUrl);
-      
-      // gen_videos 테이블 업데이트 - 파라미터 저장
-      const updateData = {
-        generation_status: 'processing',
-        request_id: falResult.request_id,
-        credits_used: VIDEO_GENERATION_COST,
-        prompt_optimizer: modelParams.prompt_optimizer,
-        model_version: isPro ? 'hailou-02-pro' : 'hailou-02-standard',
-        api_response: falResult,
-        metadata: {
-          ...requestBody.parameters,
-          model: model,
-          status_url: statusUrl,
-          fal_response: falResult,
-          modelParams: modelParams,
-          isPro: isPro,
-          startedAt: new Date().toISOString(),
-          userId: user.sub,
-          creditsCost: VIDEO_GENERATION_COST
-        }
-      };
-
-      // Standard 모델인 경우 추가 파라미터
-      if (!isPro) {
-        updateData.duration_seconds = modelParams.duration || 6;
-        updateData.resolution = modelParams.resolution || '768P';
-      } else {
-        updateData.duration_seconds = 5; // Pro는 5초 고정
-      }
-
-      await supabaseAdmin
-        .from('gen_videos')
-        .update(updateData)
-        .eq('id', videoId);
+    const { error: updateError } = await supabaseAdmin
+      .from('gen_videos')
+      .update(updateData)
+      .eq('id', videoId);
+    
+    if (updateError) {
+      console.error('Failed to update video record:', updateError);
+      throw updateError;
     }
 
     // 응답 반환
@@ -195,7 +203,7 @@ export const handler = async (event) => {
       headers,
       body: JSON.stringify({
         id: videoId,
-        request_id: falResult.request_id,
+        request_id: requestId,
         status: 'processing',
         message: `Hailou 02 ${isPro ? 'Pro' : 'Standard'} 비디오 생성이 시작되었습니다. 약 2-3분 소요됩니다.`,
         model: model,

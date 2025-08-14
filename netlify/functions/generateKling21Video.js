@@ -1,6 +1,12 @@
-// Kling AI 2.1 Pro 모델을 사용한 비디오 생성
+// Kling AI 2.1 Pro 모델을 사용한 비디오 생성 (웹훅/폴링 하이브리드)
 import { createClient } from '@supabase/supabase-js';
 import jwt from 'jsonwebtoken';
+import { fal } from '@fal-ai/client';
+
+// FAL AI 클라이언트 설정
+fal.config({
+  credentials: process.env.FAL_API_KEY
+});
 
 const VIDEO_GENERATION_COST = 2000; // Kling 2.1 비디오 생성 비용
 
@@ -89,11 +95,23 @@ export const handler = async (event) => {
       cfg_scale: modelParams.cfg_scale !== undefined ? modelParams.cfg_scale : (parameters.cfg_scale !== undefined ? parameters.cfg_scale : 0.5)
     };
 
-    // FAL AI API 엔드포인트
-    const apiEndpoint = 'https://queue.fal.run/fal-ai/kling-video/v2.1/pro/image-to-video';
+    // 개발 환경 여부 확인 (Netlify 환경 변수 체크)
+    const isDevelopment = process.env.CONTEXT === 'dev' || 
+                         process.env.NETLIFY_DEV === 'true' ||
+                         (process.env.URL && process.env.URL.includes('localhost'));
+    
+    console.log('Environment check:', {
+      CONTEXT: process.env.CONTEXT,
+      NETLIFY_DEV: process.env.NETLIFY_DEV,
+      URL: process.env.URL,
+      isDevelopment
+    });
+
+    // FAL AI API 엔드포인트 (큐 방식)
+    const apiEndpoint = 'fal-ai/kling-video/v2.1/pro/image-to-video';
     
     // FAL AI 요청 본문
-    const falRequest = {
+    const falRequestBody = {
       prompt: prompt,
       image_url: imageUrl,
       duration: klingParams.duration.toString(),
@@ -101,68 +119,58 @@ export const handler = async (event) => {
       cfg_scale: klingParams.cfg_scale
     };
 
-    console.log('FAL API Request for Kling 2.1:', JSON.stringify(falRequest, null, 2));
+    console.log('FAL API Request for Kling 2.1:', JSON.stringify(falRequestBody, null, 2));
 
-    // FAL AI API 호출
-    const falResponse = await fetch(apiEndpoint, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Key ${process.env.FAL_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(falRequest)
+    // FAL AI 큐에 제출
+    const submitOptions = {
+      input: falRequestBody
+    };
+    
+    // 프로덕션 환경에서만 웹훅 사용
+    if (!isDevelopment) {
+      const baseUrl = process.env.URL || process.env.DEPLOY_URL || 'https://kairos-ai.netlify.app';
+      submitOptions.webhookUrl = `${baseUrl}/.netlify/functions/fal-webhook-handler`;
+      console.log('=== WEBHOOK CONFIGURATION (Kling) ===');
+      console.log('Base URL:', baseUrl);
+      console.log('Webhook URL:', submitOptions.webhookUrl);
+      console.log('=== END WEBHOOK CONFIG ===');
+    } else {
+      console.log('Using polling for development environment (Kling)');
+    }
+    
+    // FAL AI에 제출
+    const { request_id: requestId } = await fal.queue.submit(apiEndpoint, submitOptions);
+    console.log('FAL AI request submitted successfully (Kling):', {
+      requestId,
+      webhookConfigured: !!submitOptions.webhookUrl
     });
 
-    if (!falResponse.ok) {
-      const errorText = await falResponse.text();
-      console.error('FAL API Error:', errorText);
+    // gen_videos 테이블 업데이트 - request_id 저장
+    const { error: updateError } = await supabaseAdmin
+      .from('gen_videos')
+      .update({
+        generation_status: 'processing',
+        request_id: requestId,
+        credits_used: VIDEO_GENERATION_COST,
+        duration_seconds: klingParams.duration || 5,
+        negative_prompt: klingParams.negative_prompt,
+        model_version: 'kling-2.1-pro',
+        metadata: {
+          ...requestBody.parameters,
+          model: 'kling-2.1-pro',
+          klingParams: klingParams,
+          cfg_scale: klingParams.cfg_scale,
+          startedAt: new Date().toISOString(),
+          userId: user.sub,
+          creditsCost: VIDEO_GENERATION_COST,
+          webhookConfigured: !!submitOptions.webhookUrl
+        }
+      })
+      .eq('id', videoId);
       
-      // 크레딧 환불
-      await supabaseAdmin
-        .from('profiles')
-        .update({ credits: userProfile.credits })
-        .eq('user_id', user.sub);
-      
-      throw new Error(`FAL AI API request failed: ${errorText}`);
-    }
-
-    const falResult = await falResponse.json();
-    console.log('FAL API Response:', falResult);
-
-    // request_id 저장 및 상태 업데이트
-    if (falResult.request_id) {
-      let statusUrl = falResult.status_url || falResult.response_url;
-      
-      if (!statusUrl) {
-        statusUrl = `https://queue.fal.run/fal-ai/requests/${falResult.request_id}/status`;
-      }
-      
-      console.log('Status URL:', statusUrl);
-      
-      // gen_videos 테이블 업데이트 - 파라미터 저장
-      await supabaseAdmin
-        .from('gen_videos')
-        .update({
-          generation_status: 'processing',
-          request_id: falResult.request_id,
-          credits_used: VIDEO_GENERATION_COST,
-          duration_seconds: klingParams.duration || 5,
-          negative_prompt: klingParams.negative_prompt,
-          model_version: 'kling-2.1-pro',
-          api_response: falResult,
-          metadata: {
-            ...requestBody.parameters,
-            model: 'kling-2.1-pro',
-            status_url: statusUrl,
-            fal_response: falResult,
-            klingParams: klingParams,
-            cfg_scale: klingParams.cfg_scale,
-            startedAt: new Date().toISOString(),
-            userId: user.sub,
-            creditsCost: VIDEO_GENERATION_COST
-          }
-        })
-        .eq('id', videoId);
+    if (updateError) {
+      console.error('Failed to update video record:', updateError);
+      throw updateError;
     }
 
     // 응답 반환
@@ -171,10 +179,11 @@ export const handler = async (event) => {
       headers,
       body: JSON.stringify({
         id: videoId,
-        request_id: falResult.request_id,
+        request_id: requestId,
         status: 'processing',
         message: 'Kling 2.1 비디오 생성이 시작되었습니다. 약 2-5분 소요됩니다.',
-        model: 'kling-2.1-pro'
+        model: 'kling-2.1-pro',
+        webhookEnabled: !!submitOptions.webhookUrl
       })
     };
 
