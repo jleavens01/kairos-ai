@@ -81,7 +81,26 @@
                     <span>업로드 중...</span>
                   </div>
                 </div>
-                <button @click="removeReferenceImage(index)" class="btn-remove-image">✕</button>
+                <div class="reference-actions">
+                  <button 
+                    @click="openDrawCanvas(item, index)"
+                    class="btn-edit-image"
+                    title="그리기 편집"
+                    :disabled="item.uploading"
+                  >
+                    ✏️
+                  </button>
+                  <button 
+                    @click="removeReferenceImage(index)" 
+                    class="btn-remove-image"
+                    title="제거"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div v-if="item.hasAnnotations" class="annotation-badge" title="주석 추가됨">
+                  🎨
+                </div>
               </div>
             </div>
           </div>
@@ -494,13 +513,24 @@
     @close="showPresetModal = false"
     @saved="onPresetsSaved"
   />
+  
+  <!-- DrawCanvas 모달 -->
+  <div v-if="showDrawCanvas" class="draw-canvas-modal">
+    <DrawCanvas
+      v-if="currentEditImage"
+      :imageUrl="currentEditImage.url || currentEditImage.preview"
+      @save="handleDrawCanvasSave"
+      @close="closeDrawCanvas"
+    />
+  </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { supabase } from '@/utils/supabase'
-import { Video, X, Layers, Upload, BookOpen, ImagePlus, Settings } from 'lucide-vue-next'
+import { Video, X, Layers, Upload, BookOpen, ImagePlus, Settings, Edit2, Brush } from 'lucide-vue-next'
 import PresetManageModal from './PresetManageModal.vue'
+import DrawCanvas from './DrawCanvas.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const props = defineProps({
@@ -538,6 +568,11 @@ const loadingLibrary = ref(false)
 const urlInput = ref('')
 const storyboardImages = ref([])
 const loadingStoryboard = ref(false)
+
+// DrawCanvas 관련 상태
+const showDrawCanvas = ref(false)
+const currentEditImage = ref(null)
+const currentEditIndex = ref(-1)
 
 // 번역 관련 상태
 const enableTranslation = ref(true) // 기본값 on
@@ -703,6 +738,34 @@ const removeReferenceImage = (index) => {
   referenceImages.value.splice(index, 1)
 }
 
+// DrawCanvas 관련 메서드
+const openDrawCanvas = (image, index) => {
+  currentEditImage.value = image
+  currentEditIndex.value = index
+  showDrawCanvas.value = true
+}
+
+const closeDrawCanvas = () => {
+  showDrawCanvas.value = false
+  currentEditImage.value = null
+  currentEditIndex.value = -1
+}
+
+const handleDrawCanvasSave = (data) => {
+  // 편집된 이미지로 교체
+  if (currentEditIndex.value >= 0) {
+    referenceImages.value[currentEditIndex.value] = {
+      ...referenceImages.value[currentEditIndex.value],
+      file: data.file,
+      url: data.url,
+      preview: data.url,
+      hasAnnotations: true,
+      annotations: data.annotations
+    }
+  }
+  closeDrawCanvas()
+}
+
 const loadLibraryImages = async () => {
   loadingLibrary.value = true
   try {
@@ -796,6 +859,12 @@ const getPresetsPrompt = () => {
 
 const getFinalPrompt = () => {
   let finalPrompt = enableTranslation.value && translatedPrompt.value ? translatedPrompt.value : prompt.value
+  
+  // 주석이 있는 이미지인 경우 지시사항 추가
+  const firstRef = referenceImages.value[0]
+  if (firstRef?.hasAnnotations && firstRef?.annotations) {
+    finalPrompt = `${firstRef.annotations.instruction}${finalPrompt}`
+  }
   
   // 프리셋이 있으면 프롬프트에 추가
   const presetPrompt = getPresetsPrompt()
@@ -1745,5 +1814,87 @@ const generateVideo = async () => {
   background: var(--primary-color);
   border-color: var(--primary-color);
   color: white;
+}
+
+/* DrawCanvas 통합 스타일 */
+.draw-canvas-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.draw-canvas-modal > div {
+  width: 100%;
+  max-width: 1200px;
+  height: 100%;
+  max-height: 90vh;
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.reference-actions {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+}
+
+.btn-edit-image {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-edit-image:hover {
+  background: var(--primary-dark);
+  transform: translateY(-1px);
+}
+
+.annotation-badge {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  z-index: 10;
+}
+
+/* 모바일 반응형 */
+@media (max-width: 768px) {
+  .draw-canvas-modal {
+    padding: 1rem;
+  }
+  
+  .draw-canvas-modal > div {
+    max-height: 95vh;
+  }
+  
+  .btn-edit-image {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.4rem;
+  }
 }
 </style>

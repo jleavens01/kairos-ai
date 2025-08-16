@@ -1,19 +1,12 @@
 <template>
   <div v-if="show" class="modal-overlay" @click.self="close">
-    <div class="modal-container" :class="{ 'expanded': showSidePanel }">
-      <div class="modal-main-content">
-        <div class="modal-header">
-          <h3>이미지 생성</h3>
-          <div class="header-actions">
-            <button @click="toggleSidePanel" class="btn-toggle-panel" :class="{ active: showSidePanel }" title="사이드 패널 토글">
-              <PanelRightOpen v-if="!showSidePanel" :size="20" />
-              <PanelRightClose v-else :size="20" />
-            </button>
-            <button @click="close" class="btn-close"><X :size="20" /></button>
-          </div>
-        </div>
+    <div class="modal-container">
+      <div class="modal-header">
+        <h3><Palette :size="20" class="modal-icon" /> AI 이미지 생성</h3>
+        <button @click="close" class="btn-close"><X :size="20" /></button>
+      </div>
 
-        <div class="modal-body">
+      <div class="modal-body">
         <!-- AI 모델 / 이미지 크기 (한 줄) -->
         <div class="form-group inline-group">
           <div class="inline-item">
@@ -81,8 +74,9 @@
               </div>
             </div>
           </div>
-          <div v-if="selectedStyle" class="style-preview-compact">
+          <div v-if="selectedStyle" class="style-preview">
             <img :src="selectedStyle.base_image_url" :alt="selectedStyle.name" />
+            <p class="style-description">{{ selectedStyle.scene_style_description || selectedStyle.description }}</p>
           </div>
         </div>
 
@@ -97,21 +91,21 @@
               :class="{ active: referenceTab === 'upload' }"
               class="tab-btn"
             >
-              <Upload :size="16" /> 업로드
+              📤 업로드
             </button>
             <button 
               @click="referenceTab = 'library'"
               :class="{ active: referenceTab === 'library' }"
               class="tab-btn"
             >
-              <Library :size="16" /> 라이브러리
+              📚 라이브러리
             </button>
             <button 
               @click="referenceTab = 'url'"
               :class="{ active: referenceTab === 'url' }"
               class="tab-btn"
             >
-              <Link :size="16" /> URL
+              🔗 URL
             </button>
             </div>
           </div>
@@ -159,7 +153,7 @@
                 style="display: none"
               />
               <div class="drop-zone-content">
-                <FolderOpen :size="24" class="drop-icon-small" />
+                <span class="drop-icon-small">📁</span>
                 <span>클릭 또는 드래그하여 업로드</span>
               </div>
             </div>
@@ -421,50 +415,32 @@
               class="form-input"
             />
           </div>
-        </div> <!-- advanced-params end -->
-
-        <div class="modal-footer">
-          <button @click="close" class="btn-secondary">취소</button>
-          <button 
-            @click="generateImage" 
-            class="btn-primary"
-            :disabled="!canGenerate || generating"
-          >
-            <span v-if="generating">생성 중...</span>
-            <span v-else>이미지 생성</span>
-          </button>
-        </div> <!-- modal-footer end -->
-      </div> <!-- modal-body end -->
-        
-        <!-- 프리셋 관리 모달 -->
-        <PresetManageModal
-          v-if="showPresetModal"
-          :show="showPresetModal"
-          :project-id="projectId"
-          media-type="image"
-          @close="showPresetModal = false"
-          @saved="handlePresetSaved"
-        />
-      </div> <!-- modal-main-content end -->
-      
-      <!-- 사이드 패널 -->
-      <div v-if="showSidePanel" class="modal-side-panel">
-        <ImageGenerationSidePanel
-          :category="category"
-          :project-id="projectId"
-          :selected-scene="selectedScene"
-          :all-scenes="allScenes"
-          @close="showSidePanel = false"
-          @apply-suggestion="applySuggestion"
-          @select-character="selectCharacter"
-          @select-scene="selectSceneFromPanel"
-          @select-background="selectBackground"
-          @select-object="selectObject"
-          @view-image="viewImage"
-        />
+        </div>
       </div>
-    </div> <!-- modal-container end -->
-  </div> <!-- modal-overlay end -->
+
+      <div class="modal-footer">
+        <button @click="close" class="btn-secondary">취소</button>
+        <button 
+          @click="generateImage" 
+          class="btn-primary"
+          :disabled="!canGenerate || generating"
+        >
+          <span v-if="generating">생성 중...</span>
+          <span v-else>이미지 생성</span>
+        </button>
+      </div>
+    </div>
+    
+    <!-- 프리셋 관리 모달 -->
+    <PresetManageModal
+      v-if="showPresetModal"
+      :show="showPresetModal"
+      :project-id="projectId"
+      media-type="image"
+      @close="showPresetModal = false"
+      @saved="handlePresetSaved"
+    />
+  </div>
 </template>
 
 <script setup>
@@ -472,9 +448,8 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { supabase } from '@/utils/supabase'
 import { useProductionStore } from '@/stores/production'
 import { useProjectsStore } from '@/stores/projects'
-import { X, Plus, PanelRightOpen, PanelRightClose, Upload, Library, Link, FolderOpen } from 'lucide-vue-next'
+import { Palette, X, Plus } from 'lucide-vue-next'
 import PresetManageModal from './PresetManageModal.vue'
-import ImageGenerationSidePanel from './ImageGenerationSidePanel.vue'
 
 const props = defineProps({
   show: {
@@ -525,7 +500,7 @@ const prompt = ref(props.initialPrompt)
 const selectedModel = ref(props.initialModel || 'gpt-image-1')
 const referenceImages = ref([])
 const imageSize = ref(props.initialSize || '1024x1024')
-const category = ref(props.initialCategory || (props.characterName ? 'character' : 'character'))
+const category = ref(props.initialCategory || (props.characterName ? 'character' : 'scene'))
 const characterName = ref(props.initialName || props.characterName)
 const sceneNumber = ref(null)
 const generating = ref(false)
@@ -565,10 +540,6 @@ const isStyleDropdownOpen = ref(false)
 // Flux parameters
 const guidanceScale = ref(3.5)
 const safetyTolerance = ref(2)
-
-// Side panel state
-const showSidePanel = ref(false)
-const allScenes = ref([])
 const seed = ref(null)
 
 // Preset data
@@ -652,63 +623,6 @@ const getMaxImages = () => {
 // Methods
 const close = () => {
   emit('close')
-}
-
-// Side panel methods
-const toggleSidePanel = () => {
-  showSidePanel.value = !showSidePanel.value
-}
-
-const applySuggestion = (suggestion) => {
-  // 제안을 프롬프트에 추가
-  if (prompt.value) {
-    prompt.value += ', ' + suggestion
-  } else {
-    prompt.value = suggestion
-  }
-}
-
-const selectCharacter = (character) => {
-  characterName.value = character.name
-  // 선택한 캐릭터를 프롬프트에도 추가
-  if (prompt.value && !prompt.value.includes(character.name)) {
-    prompt.value = character.name + ', ' + prompt.value
-  } else if (!prompt.value) {
-    prompt.value = character.name
-  }
-}
-
-const selectSceneFromPanel = (scene) => {
-  selectedScene.value = scene
-  selectedSceneId.value = scene.id
-  sceneNumber.value = scene.scene_number
-}
-
-const selectBackground = (bg) => {
-  // 배경 이미지를 참조 이미지로 추가 또는 프롬프트에 반영
-  if (referenceImages.value.length < getMaxImages()) {
-    referenceImages.value.push({
-      url: bg.image_url,
-      preview: null,
-      uploading: false
-    })
-  }
-}
-
-const selectObject = (obj) => {
-  // 오브젝트를 참조 이미지로 추가
-  if (referenceImages.value.length < getMaxImages()) {
-    referenceImages.value.push({
-      url: obj.image_url,
-      preview: null,
-      uploading: false
-    })
-  }
-}
-
-const viewImage = (image) => {
-  // 이미지 상세보기 (필요시 구현)
-  window.open(image.image_url, '_blank')
 }
 
 const removeReferenceImage = (index) => {
@@ -903,9 +817,6 @@ const loadScenes = async () => {
     
     scenes.value = productionStore.productionSheets
       .sort((a, b) => a.scene_number - b.scene_number)
-    
-    // allScenes도 업데이트
-    allScenes.value = scenes.value
   } catch (error) {
     console.error('씬 목록 로드 실패:', error)
   } finally {
@@ -1532,55 +1443,8 @@ onMounted(async () => {
   width: 90%;
   max-width: 600px;
   max-height: 90vh;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  display: flex;
-  transition: max-width 0.3s ease;
-}
-
-.modal-container.expanded {
-  max-width: 1100px; /* 최대 1100px까지 확장 */
-}
-
-.modal-main-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-width: 600px; /* 메인 콘텐츠 최소 너비 */
   overflow-y: auto;
-}
-
-@media (max-width: 1200px) {
-  .modal-main-content {
-    min-width: 500px;
-  }
-}
-
-.modal-side-panel {
-  min-width: 300px; /* 최소 너비 */
-  width: 35%; /* 모달 너비의 35% */
-  max-width: 500px; /* 최대 너비 */
-  border-left: 1px solid var(--border-color);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-/* 화면 크기에 따른 반응형 조정 */
-@media (max-width: 1400px) {
-  .modal-container.expanded {
-    max-width: 95vw;
-  }
-  
-  .modal-side-panel {
-    width: 30%;
-    min-width: 280px;
-  }
-}
-
-@media (max-width: 1200px) {
-  .modal-side-panel {
-    width: 300px; /* 작은 화면에서는 고정 너비 */
-  }
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
 }
 
 .modal-header {
@@ -1589,35 +1453,6 @@ onMounted(async () => {
   align-items: center;
   padding: 20px;
   border-bottom: 1px solid var(--border-color);
-}
-
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.btn-toggle-panel {
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  padding: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  transition: all 0.2s;
-}
-
-.btn-toggle-panel:hover {
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-}
-
-.btn-toggle-panel.active {
-  background: var(--bg-secondary);
-  color: var(--primary-color);
 }
 
 .modal-header h3 {
@@ -2179,9 +2014,8 @@ onMounted(async () => {
 }
 
 .drop-icon-small {
-  color: var(--text-secondary);
+  font-size: 1.5rem;
   opacity: 0.7;
-  margin-bottom: 8px;
 }
 
 /* 프리셋 스타일 */
@@ -2447,21 +2281,6 @@ onMounted(async () => {
   color: var(--text-secondary);
   line-height: 1.4;
   margin: 0;
-}
-
-/* 컴팩트 스타일 프리뷰 */
-.style-preview-compact {
-  margin-left: 12px;
-  display: inline-block;
-}
-
-.style-preview-compact img {
-  width: 60px;
-  height: 60px;
-  object-fit: cover;
-  border-radius: 6px;
-  border: 2px solid var(--border-color);
-  vertical-align: middle;
 }
 
 .library-item.selected {

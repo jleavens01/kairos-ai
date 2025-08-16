@@ -19,6 +19,7 @@
     "jsonwebtoken": "^9.0.2",
     "jszip": "^3.10.1",
     "lucide-vue-next": "^0.539.0",
+    "openai": "^5.12.2",
     "pinia": "^3.0.3",
     "radix-vue": "^1.9.17",
     "tailwind-merge": "^3.3.1",

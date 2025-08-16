@@ -19,8 +19,7 @@ export async function generateImage({
   styleId = null,
   styleName = null,
   user,
-  supabaseAdmin,
-  webhookUrl
+  supabaseAdmin
 }) {
   try {
     console.log('Flux Image generation request:', {

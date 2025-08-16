@@ -1,5 +1,24 @@
 <template>
   <div class="ai-generation-gallery">
+    <!-- 캐릭터 생성 제안 섹션 (가로 스크롤) -->
+    <div v-if="characters.length > 0 && (!filterCategory || filterCategory === 'character')" class="suggestions-section">
+      <h4 class="suggestions-title">캐릭터 생성 제안 ({{ characters.length }})</h4>
+      <div class="suggestions-scroll-container">
+        <div class="suggestions-list">
+          <div 
+            v-for="character in characters"
+            :key="`suggestion-${character}`"
+            class="suggestion-card-small"
+            @click="openGenerationModal(character)"
+          >
+            <User :size="24" class="suggestion-icon-small" />
+            <h6>{{ character }}</h6>
+            <button class="btn-generate-small">생성</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 통합 갤러리 섹션 -->
     <div class="gallery-section">
       <!-- 필터는 상위 컴포넌트로 이동 -->
@@ -9,43 +28,27 @@
         <p>이미지를 불러오는 중...</p>
       </div>
 
-      <div v-if="combinedGalleryItems.length === 0 && processingImages.length === 0" class="empty-state">
+      <div v-if="galleryImages.length === 0 && processingImages.length === 0" class="empty-state">
         <Image :size="48" class="empty-icon" />
         <p>아직 생성된 이미지가 없습니다.</p>
         <p class="hint">새 이미지 생성 버튼을 눌러 시작하세요.</p>
       </div>
 
       <div v-else class="image-grid">
-        <!-- 생성 제안 카드와 생성된 이미지 통합 표시 -->
+        <!-- 이미지만 표시 (제안 카드 제외) -->
         <div 
-          v-for="item in combinedGalleryItems" 
-          :key="item.id || item.character"
+          v-for="item in galleryImages" 
+          :key="item.id"
           class="gallery-item"
           :class="{ 
-            'suggestion-card': item.type === 'suggestion',
             'image-card': item.type === 'image',
             'processing-card': item.type === 'processing',
             'selected': item.type === 'image' && selectedImage?.id === item.id 
           }"
-          @click="item.type === 'image' ? openDetailModal(item) : item.type === 'suggestion' ? openGenerationModal(item.character) : null"
+          @click="item.type === 'image' ? openDetailModal(item) : null"
         >
-          <!-- 생성 제안 카드 -->
-          <template v-if="item.type === 'suggestion'">
-            <div class="suggestion-content">
-              <User :size="40" class="suggestion-icon" />
-              <h5>{{ item.character }}</h5>
-              <p class="suggestion-hint">캐릭터 이미지 생성</p>
-              <button 
-                @click.stop="openGenerationModal(item.character)" 
-                class="btn-generate"
-              >
-                생성하기
-              </button>
-            </div>
-          </template>
-          
           <!-- 처리 중인 이미지 카드 -->
-          <template v-else-if="item.type === 'processing'">
+          <template v-if="item.type === 'processing'">
             <div class="image-wrapper processing-wrapper">
               <div class="processing-animation">
                 <div class="spinner"></div>
@@ -269,7 +272,30 @@ const filteredImages = computed(() => {
   return filtered
 })
 
-// 생성 제안 카드와 생성된 이미지를 통합한 갤러리 아이템
+// 이미지 갤러리용 아이템 (제안 카드 제외)
+const galleryImages = computed(() => {
+  const items = []
+  
+  // 처리 중인 이미지 추가
+  processingImages.value.forEach(image => {
+    items.push({
+      ...image,
+      type: 'processing'
+    })
+  })
+  
+  // 생성된 이미지 추가
+  filteredImages.value.forEach(image => {
+    items.push({
+      ...image,
+      type: 'image'
+    })
+  })
+  
+  return items
+})
+
+// 생성 제안 카드와 생성된 이미지를 통합한 갤러리 아이템 (하위 호환성 유지)
 const combinedGalleryItems = computed(() => {
   const items = []
   
@@ -880,6 +906,110 @@ defineExpose({
   padding-top: 10px;
   height: 100%;
   overflow-y: auto;
+}
+
+/* 캐릭터 제안 섹션 */
+.suggestions-section {
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.suggestions-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.suggestions-scroll-container {
+  position: relative;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 4px; /* 스크롤바 공간 */
+}
+
+.suggestions-list {
+  display: flex;
+  gap: 12px;
+  padding: 2px; /* 그림자를 위한 여백 */
+}
+
+.suggestion-card-small {
+  flex-shrink: 0;
+  width: 120px; /* 기존 카드의 절반 너비 */
+  height: 150px; /* 기존 카드의 절반 높이 */
+  border: 2px dashed var(--border-color);
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  padding: 12px;
+}
+
+.suggestion-card-small:hover {
+  border-color: var(--primary-color);
+  background: var(--bg-tertiary);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.suggestion-icon-small {
+  margin-bottom: 8px;
+  opacity: 0.7;
+  color: var(--text-secondary);
+}
+
+.suggestion-card-small h6 {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+  color: var(--text-primary);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.btn-generate-small {
+  padding: 4px 12px;
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-generate-small:hover {
+  background: var(--primary-dark);
+  transform: scale(1.05);
+}
+
+/* 스크롤바 스타일링 */
+.suggestions-scroll-container::-webkit-scrollbar {
+  height: 6px;
+}
+
+.suggestions-scroll-container::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+  border-radius: 3px;
+}
+
+.suggestions-scroll-container::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
+
+.suggestions-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
 }
 
 .suggestion-icon {

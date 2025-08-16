@@ -17,8 +17,7 @@ export async function generateImage({
   sceneId = null,
   styleId = null,
   user,
-  supabaseAdmin,
-  webhookUrl
+  supabaseAdmin
 }) {
   try {
     console.log('GPT Image generation request:', {
@@ -87,8 +86,7 @@ export async function generateImage({
     }
 
     console.log('Submitting to FAL AI:', {
-      endpoint: apiEndpoint,
-      webhookUrl: webhookUrl
+      endpoint: apiEndpoint
     });
 
     // 개발 환경 여부 확인 (Netlify 환경 변수 체크)

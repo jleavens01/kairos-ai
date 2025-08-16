@@ -111,6 +111,14 @@
             />
           </div>
 
+          <!-- 자료 탭 -->
+          <div v-if="activeTab === 'reference'" class="reference-section">
+            <ReferenceView 
+              ref="referenceViewRef"
+              :project-id="projectId"
+            />
+          </div>
+
           <!-- 이미지 탭 -->
           <div v-if="activeTab === 'generate'" class="generate-section">
             <AIGenerationGallery 
@@ -168,6 +176,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useProjectsStore } from '@/stores/projects'
 import ProductionSheet from '@/components/production/ProductionSheet.vue'
+import ReferenceView from '@/views/ReferenceView.vue'
 import AIGenerationGallery from '@/components/generation/AIGenerationGallery.vue'
 import MediaView from '@/components/project/MediaView.vue'
 import { Archive } from 'lucide-vue-next'
@@ -184,6 +193,7 @@ const error = ref('')
 const activeTab = ref('production')
 const tabs = [
   { id: 'production', label: '스토리보드' },
+  { id: 'reference', label: '자료' },
   { id: 'generate', label: '이미지' },
   { id: 'media', label: '비디오' },
   { id: 'settings', label: '설정' }
@@ -197,6 +207,7 @@ const showVideoKeptOnly = ref(false)
 
 // 컴포넌트 refs
 const productionSheetRef = ref(null)
+const referenceViewRef = ref(null)
 const imageGalleryRef = ref(null)
 const mediaViewRef = ref(null)
 
@@ -490,6 +501,14 @@ const toggleVideoKeptView = () => {
   height: 100%;
   display: flex;
   flex-direction: column;
+}
+
+/* 자료 섹션 */
+.reference-section {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 /* 이미지 생성 섹션 */

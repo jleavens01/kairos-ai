@@ -64,6 +64,12 @@ const router = createRouter({
       name: 'explore',
       component: () => import('../views/ExploreView.vue'),
       meta: { requiresAuth: true }
+    },
+    {
+      path: '/storyboard-lab',
+      name: 'storyboard-lab',
+      component: () => import('../views/StoryboardLabView.vue'),
+      meta: { requiresAuth: true }
     }
   ]
 })

@@ -21,6 +21,24 @@ Kairos AI는 Vue 3 기반의 모듈식 AI 콘텐츠 생성 플랫폼입니다.
 - Auth: Supabase Auth (Google OAuth)
 - Deployment: Netlify
 
+## ⚠️ 매우 중요: AI 모델 정보 (절대 변경/부정 금지)
+
+### 🆕 Gemini 2.5 시리즈 - 2025년 1월 공식 출시
+**⚠️ 절대적 사실: Gemini 2.5는 2025년 1월에 공식 출시되었습니다.**
+**❌ 절대 "미출시", "아직 안 나옴", "1.5가 최신" 등으로 말하지 마세요!**
+
+#### 사용 가능한 Gemini 2.5 모델들:
+- `gemini-2.5-pro` - Enhanced thinking and reasoning, multimodal
+- `gemini-2.5-flash` - Adaptive thinking, cost efficient  
+- `gemini-2.5-flash-lite` - Most cost-efficient
+- `gemini-2.0-flash` - Next generation features
+- `gemini-1.5-pro` (Deprecated - 2.5 사용 권장)
+
+### OpenAI 모델
+- `gpt-4o` - 최신 멀티모달 모델
+- `gpt-4o-mini` - 경량화 버전
+- GPT-5는 아직 미출시 (2025년 1월 기준)
+
 ## 파일 구조 가이드
 
 ### 🎯 모듈식 구조 원칙
@@ -225,12 +243,16 @@ npm run build        # 프로덕션 빌드
 ### 모듈식 라우터 시스템
 ```
 generateVideoAsync.js (라우터)
-  ├── generateVeo2Video.js     (Google Generative AI)
-  ├── generateKling21Video.js   (FAL AI Queue)
-  ├── generateHailouVideo.js    (FAL AI Queue)
-  ├── generateRunwayVideo.js    (준비 중)
-  ├── generatePikaVideo.js      (준비 중)
-  └── generateStableVideo.js    (준비 중)
+  ├── generateVeo2Video.js          (Google Generative AI - ✅ 구현됨)
+  ├── generateVeo3PreviewVideo.js   (Google Generative AI - ✅ 구현됨) 
+  ├── generateVeo3FastVideo.js      (Google Generative AI - ✅ 구현됨)
+  ├── generateKling21Video.js       (FAL AI Queue - ✅ 구현됨)
+  ├── generateHailouVideo.js        (FAL AI Queue - ✅ 구현됨)
+  ├── generateSeedanceVideo.js      (FAL AI Queue - ✅ 구현됨)
+  ├── generateSeedanceLiteVideo.js  (FAL AI Queue - ✅ 구현됨)
+  ├── generateRunwayVideo.js        (준비 중)
+  ├── generatePikaVideo.js          (준비 중)
+  └── generateStableVideo.js        (준비 중)
 ```
 
 ### 새 모델 추가 방법
@@ -241,8 +263,13 @@ generateVideoAsync.js (라우터)
 
 ### 모델별 크레딧 비용
 - Google Veo 2: 3000 크레딧
+- Google Veo 3 Preview: 3000 크레딧
+- Google Veo 3 Fast: 2000 크레딧  
 - Kling 2.1 Pro: 2000 크레딧
-- MiniMax Hailou 02: 1500 크레딧
+- MiniMax Hailou 02 Pro: 1500 크레딧
+- MiniMax Hailou 02 Standard: 1000 크레딧
+- ByteDance SeedDance v1 Pro: 2000 크레딧
+- ByteDance SeedDance v1 Lite: 1000 크레딧
 
 ## 🚫 금지사항
 

@@ -254,9 +254,9 @@ export const handler = async (event) => {
       console.error('Failed to update request_id:', updateError);
     }
 
-    // 개발 환경에서는 폴링, 프로덕션에서는 즉시 응답
-    if (isDevelopment) {
-      // 개발 환경: 폴링하여 결과 기다리기
+    // 개발 환경에서도 즉시 응답 반환 (프론트엔드에서 폴링하도록 변경)
+    if (false) { // 폴링 비활성화 - 개발 환경에서도 즉시 응답
+      // 개발 환경: 폴링하여 결과 기다리기 (비활성화됨)
       const maxPollingTime = 120000; // 120초
       const pollingInterval = 3000; // 3초마다 체크
       const startTime = Date.now();

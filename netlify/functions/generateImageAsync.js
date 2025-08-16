@@ -53,8 +53,7 @@ export const handler = async (event) => {
           result = await generateGPTImage({
             ...requestData,
             user,
-            supabaseAdmin,
-            webhookUrl: `${process.env.URL}/.netlify/functions/fal-webhook-handler`
+            supabaseAdmin
           });
           break;
           
@@ -65,8 +64,7 @@ export const handler = async (event) => {
           result = await generateFluxImage({
             ...requestData,
             user,
-            supabaseAdmin,
-            webhookUrl: `${process.env.URL}/.netlify/functions/fal-webhook-handler`
+            supabaseAdmin
           });
           break;
           

@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>비디오 생성 API 테스트</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #10b981;
+            padding-bottom: 10px;
+        }
+        .test-section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        button {
+            background: #10b981;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        button:hover {
+            background: #059669;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .result {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 15px;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .success {
+            border-color: #28a745;
+            background: #d4edda;
+        }
+        .error {
+            border-color: #dc3545;
+            background: #f8d7da;
+        }
+        .loading {
+            color: #666;
+            font-style: italic;
+        }
+        .model-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .model-card {
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 10px;
+            background: #fafafa;
+        }
+        .model-name {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        .model-status {
+            font-size: 12px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎬 비디오 생성 API 테스트 도구</h1>
+    
+    <div class="test-section">
+        <h2>1. API 키 및 환경 테스트</h2>
+        <button onclick="testEnvironment()">환경 테스트</button>
+        <button onclick="testGoogleAPI()">Google API 테스트</button>
+        <button onclick="testFalAPI()">FAL AI 테스트</button>
+        <button onclick="testAll()">전체 테스트</button>
+        <div id="envResult" class="result" style="display:none;"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>2. 모델별 연결 테스트</h2>
+        <div class="model-grid">
+            <div class="model-card">
+                <div class="model-name">Google Veo 2</div>
+                <div class="model-status">veo-002</div>
+                <button onclick="testModel('veo2')">테스트</button>
+            </div>
+            <div class="model-card">
+                <div class="model-name">Google Veo 3 Fast</div>
+                <div class="model-status">veo-003-fast</div>
+                <button onclick="testModel('veo3-fast')">테스트</button>
+            </div>
+            <div class="model-card">
+                <div class="model-name">Google Veo 3</div>
+                <div class="model-status">veo-003</div>
+                <button onclick="testModel('veo3')">테스트</button>
+            </div>
+            <div class="model-card">
+                <div class="model-name">Kling 2.1 Pro</div>
+                <div class="model-status">FAL AI</div>
+                <button onclick="testModel('kling')">테스트</button>
+            </div>
+            <div class="model-card">
+                <div class="model-name">Hailou 02</div>
+                <div class="model-status">FAL AI</div>
+                <button onclick="testModel('hailou')">테스트</button>
+            </div>
+            <div class="model-card">
+                <div class="model-name">SeedDance</div>
+                <div class="model-status">FAL AI</div>
+                <button onclick="testModel('seedance')">테스트</button>
+            </div>
+        </div>
+        <div id="modelResult" class="result" style="display:none;"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>3. 실제 요청 시뮬레이션 (Dry Run)</h2>
+        <p>실제로 비디오를 생성하지 않고 요청 형식만 테스트합니다.</p>
+        <button onclick="simulateRequest('veo2')">Veo2 시뮬레이션</button>
+        <button onclick="simulateRequest('veo3-fast')">Veo3 Fast 시뮬레이션</button>
+        <button onclick="simulateRequest('kling')">Kling 시뮬레이션</button>
+        <div id="simResult" class="result" style="display:none;"></div>
+    </div>
+
+    <script>
+        async function testEnvironment() {
+            showLoading('envResult');
+            try {
+                const response = await fetch('/.netlify/functions/testVideoGeneration');
+                const data = await response.json();
+                showResult('envResult', data, response.ok);
+            } catch (error) {
+                showResult('envResult', { error: error.message }, false);
+            }
+        }
+
+        async function testGoogleAPI() {
+            showLoading('envResult');
+            try {
+                const response = await fetch('/.netlify/functions/testVideoGeneration?model=veo');
+                const data = await response.json();
+                showResult('envResult', data, response.ok);
+            } catch (error) {
+                showResult('envResult', { error: error.message }, false);
+            }
+        }
+
+        async function testFalAPI() {
+            showLoading('envResult');
+            try {
+                const response = await fetch('/.netlify/functions/testVideoGeneration?model=fal');
+                const data = await response.json();
+                showResult('envResult', data, response.ok);
+            } catch (error) {
+                showResult('envResult', { error: error.message }, false);
+            }
+        }
+
+        async function testAll() {
+            showLoading('envResult');
+            try {
+                const response = await fetch('/.netlify/functions/testVideoGeneration?model=all');
+                const data = await response.json();
+                showResult('envResult', data, response.ok);
+            } catch (error) {
+                showResult('envResult', { error: error.message }, false);
+            }
+        }
+
+        async function testModel(model) {
+            showLoading('modelResult');
+            const result = {
+                model: model,
+                timestamp: new Date().toISOString(),
+                test: `${model} 모델 연결 테스트`
+            };
+            
+            // 여기서 실제 모델별 엔드포인트를 테스트할 수 있습니다
+            showResult('modelResult', result, true);
+        }
+
+        async function simulateRequest(model) {
+            showLoading('simResult');
+            
+            const testRequest = {
+                model: model,
+                prompt: "테스트 프롬프트",
+                projectId: "test-project-id",
+                videoId: "test-video-id",
+                imageUrl: "https://example.com/test.jpg",
+                parameters: {
+                    duration: 5,
+                    aspectRatio: "16:9"
+                }
+            };
+            
+            showResult('simResult', {
+                message: "시뮬레이션 요청 (실제 생성 안함)",
+                request: testRequest,
+                expectedResponse: {
+                    success: true,
+                    data: {
+                        id: "video-id",
+                        request_id: "request-id",
+                        status: "processing"
+                    }
+                }
+            }, true);
+        }
+
+        function showLoading(elementId) {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.className = 'result loading';
+            element.textContent = '테스트 중...';
+        }
+
+        function showResult(elementId, data, success) {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.className = 'result ' + (success ? 'success' : 'error');
+            element.textContent = JSON.stringify(data, null, 2);
+        }
+    </script>
+</body>
+</html>

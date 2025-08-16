@@ -53,6 +53,11 @@
           <Compass :size="20" />
           <span class="nav-text">Explore</span>
         </router-link>
+
+        <router-link to="/storyboard-lab" class="nav-item" @click="closeMobileNav">
+          <FlaskConical :size="20" />
+          <span class="nav-text">스토리보드 실험실</span>
+        </router-link>
         
         <router-link to="/billing" class="nav-item" @click="closeMobileNav">
           <CreditCard :size="20" />
@@ -121,7 +126,7 @@ import { useProjectsStore } from '@/stores/projects';
 import { useRouter, useRoute } from 'vue-router';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import ThemeToggle from '@/components/ui/ThemeToggle.vue';
-import { Home, LogIn, FolderOpen, BookOpen, Compass, CreditCard, User, LogOut, MoreVertical } from 'lucide-vue-next';
+import { Home, LogIn, FolderOpen, BookOpen, Compass, CreditCard, User, LogOut, MoreVertical, FlaskConical } from 'lucide-vue-next';
 
 const props = defineProps({
   isMobileNavOpen: {
