@@ -37,7 +37,7 @@ export const useReferenceStore = defineStore('reference', {
 
   actions: {
     // 통합 검색 - 모든 소스에서 검색
-    async searchUnified(query, sources = [], page = 1) {
+    async searchUnified(query, sources = [], mediaType = 'image', page = 1) {
       this.searchLoading = true
       this.searchError = null
       this.currentSearchQuery = query
@@ -83,9 +83,9 @@ export const useReferenceStore = defineStore('reference', {
           }
         }
         
-        // 이미지 소스들 검색 (Pixabay, Unsplash, Pexels, Flickr, Commons)
+        // 이미지 소스들 검색 (Pixabay, Unsplash, Pexels, Flickr, Commons, Google)
         const imageSources = sources.filter(s => 
-          ['pixabay', 'unsplash', 'pexels', 'flickr', 'commons'].includes(s)
+          ['pixabay', 'unsplash', 'pexels', 'flickr', 'commons', 'google'].includes(s)
         )
         
         if (imageSources.length > 0) {
@@ -93,7 +93,7 @@ export const useReferenceStore = defineStore('reference', {
             const response = await fetch('/.netlify/functions/searchImages', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ query, sources: imageSources, page, per_page: 20 })
+              body: JSON.stringify({ query, sources: imageSources, mediaType, page, per_page: 20 })
             })
             
             const result = await response.json()
@@ -221,8 +221,20 @@ export const useReferenceStore = defineStore('reference', {
         
         if (error) throw error
         
-        this.materials = data || []
-        return { success: true, data }
+        // 잘못된 Vimeo 썸네일 URL 수정
+        const fixedMaterials = (data || []).map(material => {
+          if (material.thumbnail_url && material.thumbnail_url.includes('undefined')) {
+            // 비디오 자료의 경우 storage_url을 썸네일로 사용
+            return {
+              ...material,
+              thumbnail_url: material.storage_url || material.thumbnail_url
+            }
+          }
+          return material
+        })
+        
+        this.materials = fixedMaterials
+        return { success: true, data: fixedMaterials }
       } catch (error) {
         console.error('Error fetching reference materials:', error)
         this.error = error.message

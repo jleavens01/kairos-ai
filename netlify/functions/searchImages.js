@@ -1,5 +1,5 @@
-// 통합 이미지 검색 서비스
-// Pixabay와 Unsplash API를 모두 활용한 이미지 검색
+// 통합 이미지/비디오 검색 서비스
+// Pixabay, Unsplash, Pexels 등의 API를 활용한 미디어 검색
 
 export const handler = async (event, context) => {
   if (event.httpMethod !== 'POST') {
@@ -10,7 +10,7 @@ export const handler = async (event, context) => {
   }
 
   try {
-    const { query, page = 1, per_page = 20, sources = ['pixabay', 'unsplash'] } = JSON.parse(event.body);
+    const { query, page = 1, per_page = 20, sources = ['pixabay', 'unsplash'], mediaType = 'image' } = JSON.parse(event.body);
     // sources is an array of enabled sources
 
     if (!query || query.trim() === '') {
@@ -25,6 +25,8 @@ export const handler = async (event, context) => {
     const UNSPLASH_ACCESS_KEY = process.env.UNSPLASH_ACCESS_KEY;
     const PEXELS_API_KEY = process.env.PEXELS_API_KEY;
     const FLICKR_API_KEY = process.env.FLICKR_API_KEY;
+    const GOOGLE_CUSTOM_SEARCH_API_KEY = process.env.GOOGLE_CUSTOM_SEARCH_API_KEY;
+    const GOOGLE_SEARCH_ENGINE_ID = process.env.GOOGLE_SEARCH_ENGINE_ID;
     // Wikimedia Commons는 API 키 불필요
     
     console.log('Environment check:');
@@ -37,20 +39,121 @@ export const handler = async (event, context) => {
     let totalHits = 0;
     const errors = [];
 
-    // Pixabay API 호출
-    if (sources.includes('pixabay') && PIXABAY_API_KEY) {
-      try {
-    const params = {
-      key: PIXABAY_API_KEY,
-      q: query.trim(), // URLSearchParams will handle encoding
-      image_type: 'photo',
-      orientation: 'all',
-      safesearch: 'true',
-      page: page.toString(),
-      per_page: Math.min(per_page, 200).toString()
-    };
+    // 비디오 검색인 경우
+    if (mediaType === 'video') {
+      // Pixabay 비디오 검색
+      if (sources.includes('pixabay') && PIXABAY_API_KEY) {
+        try {
+          const params = {
+            key: PIXABAY_API_KEY,
+            q: query.trim(),
+            video_type: 'all', // film, animation 등
+            safesearch: 'true',
+            page: page.toString(),
+            per_page: Math.min(Math.max(per_page, 3), 200).toString() // Pixabay는 최소 3개 필요
+          };
+          
+          const searchUrl = `https://pixabay.com/api/videos/?` + new URLSearchParams(params);
+          console.log('Pixabay video search URL:', searchUrl.replace(PIXABAY_API_KEY, 'XXX'));
+          
+          const response = await fetch(searchUrl);
+          console.log('Pixabay video API response status:', response.status);
+          
+          if (response.ok) {
+            const data = await response.json();
+            console.log('Pixabay video response:', {
+              total: data.total,
+              totalHits: data.totalHits,
+              hits: data.hits?.length || 0
+            });
+            if (data.hits && data.hits.length > 0) {
+              console.log('First video object:', JSON.stringify(data.hits[0], null, 2).substring(0, 500));
+            }
+            const pixabayVideos = data.hits.map(video => ({
+              id: `pixabay_${video.id}`,
+              type: 'video',
+              source: 'pixabay',
+              url: video.videos.medium.url || video.videos.small.url,
+              thumbnail: video.videos.tiny.url, // 작은 비디오를 썸네일로 사용
+              preview_url: video.videos.tiny.url,
+              width: video.videos.medium.width || 640,
+              height: video.videos.medium.height || 360,
+              duration: video.duration,
+              user: video.user,
+              tags: video.tags,
+              likes: video.likes,
+              downloads: video.downloads,
+              views: video.views,
+              pageURL: video.pageURL
+            }));
+            
+            allResults = allResults.concat(pixabayVideos);
+            totalHits += data.totalHits;
+          } else {
+            console.error('Pixabay video API error:', response.status, response.statusText);
+            const errorText = await response.text();
+            console.error('Error response:', errorText);
+          }
+        } catch (error) {
+          console.error('Pixabay video search error:', error);
+          errors.push({ source: 'pixabay', error: error.message });
+        }
+      }
+      
+      // Pexels 비디오 검색
+      if (sources.includes('pexels') && PEXELS_API_KEY) {
+        try {
+          const pexelsUrl = `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&page=${page}&per_page=${per_page}`;
+          
+          const response = await fetch(pexelsUrl, {
+            headers: {
+              'Authorization': PEXELS_API_KEY
+            }
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            const pexelsVideos = data.videos.map(video => ({
+              id: `pexels_${video.id}`,
+              type: 'video',
+              source: 'pexels',
+              url: video.video_files[0]?.link || video.url,
+              thumbnail: video.image,
+              preview_url: video.video_files.find(f => f.quality === 'sd')?.link || video.video_files[0]?.link,
+              width: video.width,
+              height: video.height,
+              duration: video.duration,
+              user: video.user.name,
+              user_url: video.user.url,
+              pageURL: video.url
+            }));
+            
+            allResults = allResults.concat(pexelsVideos);
+            totalHits += data.total_results || data.videos.length;
+          }
+        } catch (error) {
+          console.error('Pexels video search error:', error);
+          errors.push({ source: 'pexels', error: error.message });
+        }
+      }
+    }
     
-    const searchUrl = `https://pixabay.com/api/?` + new URLSearchParams(params);
+    // 이미지 검색 (비디오가 아닌 경우)
+    if (mediaType === 'image') {
+      // Pixabay 이미지 검색
+      if (sources.includes('pixabay') && PIXABAY_API_KEY) {
+        try {
+          const params = {
+            key: PIXABAY_API_KEY,
+            q: query.trim(),
+            image_type: 'photo',
+            orientation: 'all',
+            safesearch: 'true',
+            page: page.toString(),
+            per_page: Math.min(Math.max(per_page, 3), 200).toString() // Pixabay는 최소 3개 필요
+          };
+          
+          const searchUrl = `https://pixabay.com/api/?` + new URLSearchParams(params);
 
     console.log('API Request Details:');
     console.log('- Base URL: https://pixabay.com/api/');
@@ -265,6 +368,90 @@ export const handler = async (event, context) => {
       }
     }
     
+    // Google 이미지 검색
+    if (sources.includes('google') && GOOGLE_CUSTOM_SEARCH_API_KEY && GOOGLE_SEARCH_ENGINE_ID) {
+      try {
+        // Google API는 한 번에 최대 10개만 반환
+        const googleResults = [];
+        const requestsNeeded = 1; // 1번 요청으로 10개만
+        
+        for (let i = 0; i < requestsNeeded; i++) {
+          const startIndex = ((page - 1) * 10) + (i * 10) + 1;
+          
+          // Google API는 최대 100개까지만 검색 가능 (start는 91이 최대)
+          if (startIndex > 91) break;
+          
+          const googleParams = new URLSearchParams({
+            key: GOOGLE_CUSTOM_SEARCH_API_KEY,
+            cx: GOOGLE_SEARCH_ENGINE_ID,
+            q: query.trim(),
+            searchType: 'image',
+            num: '10', // 항상 10개씩 요청
+            start: startIndex.toString(),
+            safe: 'active',
+            imgSize: 'large',
+            fileType: 'jpg|png|jpeg'
+          });
+        
+          const googleUrl = `https://www.googleapis.com/customsearch/v1?${googleParams}`;
+          
+          console.log(`Google API request ${i + 1}/${requestsNeeded}, start: ${startIndex}`);
+          
+          const googleResponse = await fetch(googleUrl);
+          
+          if (googleResponse.ok) {
+            const googleData = await googleResponse.json();
+            console.log(`Google batch ${i + 1} results:`, googleData.items?.length || 0);
+            
+            const batchResults = googleData.items?.map(item => {
+              // Google 검색 결과 포맷팅
+              return {
+                id: `google_${item.cacheId || item.link}_${i}`,
+                title: item.title || 'Google Image',
+                description: item.snippet || '',
+                image: item.link,
+                thumbnail: item.image?.thumbnailLink || item.link,
+                original: item.link,
+                url: item.image?.contextLink || item.displayLink,
+                width: item.image?.width,
+                height: item.image?.height,
+                size: item.image?.byteSize,
+                user: item.displayLink,
+                source: 'google',
+                sourceLabel: 'Google',
+                license: 'Check source for license',
+                mime: item.mime,
+                fileFormat: item.fileFormat
+              };
+            }) || [];
+            
+            googleResults.push(...batchResults);
+            
+            // 첫 번째 요청에서만 totalResults 저장
+            if (i === 0) {
+              totalHits += parseInt(googleData.searchInformation?.totalResults || 0);
+            }
+          } else {
+            const errorText = await googleResponse.text();
+            console.error(`Google API error (batch ${i + 1}):`, googleResponse.status, errorText);
+            // 첫 번째 요청이 실패하면 중단, 아니면 계속
+            if (i === 0) {
+              errors.push(`Google: ${googleResponse.status} error`);
+              break;
+            }
+          }
+        }
+        
+        // 수집된 모든 Google 결과를 allResults에 추가
+        allResults = allResults.concat(googleResults);
+        console.log('Total Google results collected:', googleResults.length);
+        
+      } catch (googleError) {
+        console.error('Google search error:', googleError.message);
+        errors.push(`Google: ${googleError.message}`);
+      }
+    }
+    
     // Wikimedia Commons API 호출 (API 키 불필요)
     if (sources.includes('commons')) {
       try {
@@ -325,6 +512,7 @@ export const handler = async (event, context) => {
         errors.push(`Commons: ${commonsError.message}`);
       }
     }
+    } // 이미지 검색 블록 끝
     
     // 결과를 섞어서 다양성 확보
     const mixedResults = [];
@@ -364,6 +552,7 @@ export const handler = async (event, context) => {
             unsplash: !!UNSPLASH_ACCESS_KEY,
             pexels: !!PEXELS_API_KEY,
             flickr: !!FLICKR_API_KEY,
+            google: !!(GOOGLE_CUSTOM_SEARCH_API_KEY && GOOGLE_SEARCH_ENGINE_ID),
             commons: true
           },
           enabledSources: sources,
@@ -371,7 +560,6 @@ export const handler = async (event, context) => {
         }
       })
     };
-
   } catch (error) {
     console.error('Image search error:', error);
     console.error('Error details:', error.message);

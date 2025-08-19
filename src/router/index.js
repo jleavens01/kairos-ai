@@ -42,6 +42,18 @@ const router = createRouter({
       component: () => import('../views/UITestView.vue')
     },
     {
+      path: '/aerial',
+      name: 'aerial',
+      component: () => import('../views/AerialTestView.vue'),
+      meta: { requiresAuth: false }
+    },
+    {
+      path: '/ai-content',
+      name: 'ai-content',
+      component: () => import('../components/ai-content-production/AIContentDashboard.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
       path: '/profile',
       name: 'profile',
       component: () => import('../views/ProfileView.vue'),
@@ -69,6 +81,18 @@ const router = createRouter({
       path: '/storyboard-lab',
       name: 'storyboard-lab',
       component: () => import('../views/StoryboardLabView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/production',
+      name: 'production',
+      component: () => import('../views/ProductionView.vue'),
+      meta: { requiresAuth: true }
+    },
+    {
+      path: '/semoji-data',
+      name: 'semojiData',
+      component: () => import('../components/production/SemojiDataManager.vue'),
       meta: { requiresAuth: true }
     }
   ]

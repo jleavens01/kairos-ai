@@ -24,7 +24,7 @@
             <button 
               v-for="tab in tabs" 
               :key="tab.id"
-              @click="activeTab = tab.id"
+              @click="changeTab(tab.id)"
               :class="['tab-button', { active: activeTab === tab.id }]"
             >
               {{ tab.label }}
@@ -190,7 +190,14 @@ const projectId = computed(() => route.params.id)
 const loading = ref(true)
 const error = ref('')
 
-const activeTab = ref('production')
+// URL 쿼리에서 탭 상태 가져오기 (기본값: production)
+const getInitialTab = () => {
+  const tabFromQuery = route.query.tab
+  const validTabs = ['production', 'reference', 'generate', 'media', 'settings']
+  return validTabs.includes(tabFromQuery) ? tabFromQuery : 'production'
+}
+
+const activeTab = ref(getInitialTab())
 const tabs = [
   { id: 'production', label: '스토리보드' },
   { id: 'reference', label: '자료' },
@@ -198,6 +205,15 @@ const tabs = [
   { id: 'media', label: '비디오' },
   { id: 'settings', label: '설정' }
 ]
+
+// 탭 변경 함수
+const changeTab = (tabId) => {
+  activeTab.value = tabId
+  router.replace({
+    path: route.path,
+    query: { ...route.query, tab: tabId }
+  })
+}
 
 // 필터 상태
 const imageFilterCategory = ref('')
@@ -234,10 +250,20 @@ const loadProject = async (projectId) => {
 // route 변경 감지
 watch(() => route.params.id, async (newId, oldId) => {
   if (newId && newId !== oldId) {
-    // 탭을 첫 번째 탭으로 초기화
-    activeTab.value = 'production'
+    // URL에서 탭 정보 가져오기 (다른 프로젝트로 이동해도 같은 탭 유지)
+    const tabFromQuery = route.query.tab
+    const validTabs = ['production', 'reference', 'generate', 'media', 'settings']
+    activeTab.value = validTabs.includes(tabFromQuery) ? tabFromQuery : 'production'
     // 새 프로젝트 로드
     await loadProject(newId)
+  }
+})
+
+// 쿼리 파라미터의 탭 변경 감지 (브라우저 뒤로가기/앞으로가기 지원)
+watch(() => route.query.tab, (newTab) => {
+  const validTabs = ['production', 'reference', 'generate', 'media', 'settings']
+  if (validTabs.includes(newTab) && newTab !== activeTab.value) {
+    activeTab.value = newTab
   }
 })
 

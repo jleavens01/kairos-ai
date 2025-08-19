@@ -34,8 +34,19 @@
 
       <!-- 콘텐츠 -->
       <div class="modal-body">
-        <!-- 이미지 섹션 (오버레이 정보 포함) -->
-        <div v-if="material?.image || material?.thumbnail || material?.storage_url" class="image-section">
+        <!-- 이미지/비디오 섹션 (오버레이 정보 포함) -->
+        <div v-if="material?.type === 'video' && (material?.url || material?.preview_url)" class="video-section">
+          <video 
+            :src="material.url || material.preview_url"
+            :poster="material.thumbnail"
+            class="detail-video"
+            controls
+            preload="metadata"
+          >
+            비디오를 재생할 수 없습니다.
+          </video>
+        </div>
+        <div v-else-if="material?.image || material?.thumbnail || material?.storage_url" class="image-section">
           <img 
             :src="material.image || material.thumbnail || material.storage_url"
             :alt="material.title"
@@ -414,7 +425,7 @@ watch(() => props.material?.notes, (newNotes) => {
   height: 100%;
 }
 
-.image-section {
+.image-section, .video-section {
   position: relative;
   width: 100%;
   background: var(--bg-secondary);
@@ -426,12 +437,16 @@ watch(() => props.material?.notes, (newNotes) => {
   overflow: hidden;
 }
 
-.detail-image {
+.detail-image, .detail-video {
   width: 100%;
   height: auto;
   max-height: 80vh;
   object-fit: contain;
   display: block;
+}
+
+.detail-video {
+  background: black;
 }
 
 /* 하단 정보 오버레이 */

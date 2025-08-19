@@ -9,6 +9,9 @@
         <button @click="handleCharacterExtraction" class="btn-character">
           👥 캐릭터 추출
         </button>
+        <button @click="$emit('open-news-collector')" class="btn-ai-news">
+          📰 AI 뉴스 수집
+        </button>
         <button @click="generateBatchTTS" class="btn-tts">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
@@ -274,6 +277,7 @@ const editedValue = ref('')
 const hoveredItemId = ref(null)
 const isSaving = ref(false)
 const globalMediaType = ref('image') // 전체 미디어 타입 (image/video)
+const pollingInterval = ref(null) // 자동 새로고침용 interval
 
 
 // TTS 관련 상태
@@ -1340,12 +1344,37 @@ const checkExistingTTS = async () => {
   }
 }
 
-// 컴포넌트 마운트 시 TTS 확인
+// 자동 새로고침 함수
+const startPolling = () => {
+  // 기존 polling 정리
+  if (pollingInterval.value) {
+    clearInterval(pollingInterval.value)
+  }
+  
+  // 10초마다 실시간 데이터 확인 (silent 모드로)
+  pollingInterval.value = setInterval(async () => {
+    // 현재 편집 중이 아닐 때만 새로고침
+    if (!editingCell.value && !isSaving.value) {
+      await productionStore.fetchProductionSheets(props.projectId, true) // silent: true
+      console.log('자동 새로고침: 프로덕션 데이터 업데이트됨')
+    }
+  }, 10000) // 10초마다
+}
+
+const stopPolling = () => {
+  if (pollingInterval.value) {
+    clearInterval(pollingInterval.value)
+    pollingInterval.value = null
+  }
+}
+
+// 컴포넌트 마운트 시 TTS 확인 및 폴링 시작
 onMounted(() => {
   checkExistingTTS()
+  startPolling() // 자동 새로고침 시작
 })
 
-// 컴포넌트 언마운트 시 오디오 정리
+// 컴포넌트 언마운트 시 오디오 정리 및 폴링 중지
 onUnmounted(() => {
   Object.values(audioElements.value).forEach(audio => {
     if (audio) {
@@ -1353,6 +1382,7 @@ onUnmounted(() => {
       audio.src = ''
     }
   })
+  stopPolling() // 자동 새로고침 중지
 })
 
 

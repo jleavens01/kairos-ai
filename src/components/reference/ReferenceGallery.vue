@@ -1,21 +1,56 @@
 <template>
   <div class="reference-gallery">
+    <!-- 컬럼 컨트롤 -->
+    <div v-if="materials.length > 0 && showColumnControl" class="gallery-controls">
+      <ColumnControl 
+        v-model="columnCount"
+        :min-columns="2"
+        :max-columns="8"
+        @change="updateColumnCount"
+      />
+    </div>
+    
     <div v-if="materials.length === 0" class="empty-gallery">
       <FileText :size="48" class="empty-icon" />
       <p>표시할 자료가 없습니다.</p>
     </div>
     
-    <div v-else class="gallery-masonry">
+    <div v-else class="gallery-masonry" :style="{ columnCount: columnCount }">
       <div 
         v-for="material in materials" 
         :key="material.id || material.title"
         class="gallery-item"
         @click="$emit('view', material)"
       >
-        <!-- 이미지 영역 -->
+        <!-- 이미지/비디오 영역 -->
         <div class="item-image">
+          <!-- 비디오인 경우 -->
+          <template v-if="material.type === 'video'">
+            <!-- Pexels 비디오는 이미지 썸네일 사용 -->
+            <img 
+              v-if="material.source === 'pexels' && material.thumbnail && material.thumbnail.includes('.jpg')"
+              :src="material.thumbnail"
+              :alt="material.title || 'Video thumbnail'"
+              class="video-thumbnail"
+              loading="lazy"
+              @error="handleImageError"
+            />
+            <!-- 다른 비디오는 video 태그로 미리보기 -->
+            <video 
+              v-else-if="material.thumbnail || material.preview_url"
+              :src="material.preview_url || material.thumbnail"
+              class="video-preview"
+              muted
+              loop
+              preload="metadata"
+              @mouseenter="handleVideoHover"
+              @mouseleave="handleVideoLeave"
+              @error="handleImageError"
+            />
+          </template>
+          <!-- 이미지인 경우 img 태그 -->
           <img 
-            v-if="material.image || material.thumbnail || material.storage_url"
+            v-else-if="material.image || material.thumbnail || material.storage_url"
             :src="material.thumbnail || material.image || material.storage_url"
             :alt="material.title"
             loading="lazy"
@@ -23,6 +58,14 @@
           />
           <div v-else class="placeholder-image">
             <FileText :size="32" />
+          </div>
+          
+          <!-- 비디오 인디케이터 -->
+          <div v-if="material.type === 'video'" class="video-indicator">
+            <Play :size="32" />
+            <span v-if="material.duration" class="video-duration">
+              {{ formatDuration(material.duration) }}
+            </span>
           </div>
           
           <!-- 호버 오버레이 -->
@@ -93,7 +136,9 @@
 </template>
 
 <script setup>
-import { FileText, Download, Star, Eye, Trash2, Check } from 'lucide-vue-next'
+import { ref } from 'vue'
+import { FileText, Download, Star, Eye, Trash2, Check, Play } from 'lucide-vue-next'
+import ColumnControl from '@/components/common/ColumnControl.vue'
 
 const emit = defineEmits(['save', 'favorite', 'delete', 'view'])
 const props = defineProps({
@@ -104,8 +149,21 @@ const props = defineProps({
   showSaveButton: {
     type: Boolean,
     default: false
+  },
+  showColumnControl: {
+    type: Boolean,
+    default: true
   }
 })
+
+// 컬럼 수 상태 (localStorage에 저장)
+const savedColumns = localStorage.getItem('referenceGalleryColumns')
+const columnCount = ref(savedColumns ? parseInt(savedColumns) : 4)
+
+const updateColumnCount = (count) => {
+  columnCount.value = count
+  localStorage.setItem('referenceGalleryColumns', count.toString())
+}
 
 // 메서드
 const handleImageError = (event) => {
@@ -140,6 +198,7 @@ const getSourceLabel = (source) => {
   const labels = {
     'wikipedia': 'Wikipedia',
     'external_image': '이미지',
+    'google': 'Google',
     'pixabay': 'Pixabay',
     'unsplash': 'Unsplash',
     'pexels': 'Pexels',
@@ -189,6 +248,33 @@ const getImageDimensions = (material) => {
   }
   return null
 }
+
+// 비디오 시간 포맷팅
+const formatDuration = (seconds) => {
+  if (!seconds) return ''
+  const mins = Math.floor(seconds / 60)
+  const secs = Math.floor(seconds % 60)
+  return `${mins}:${secs.toString().padStart(2, '0')}`
+}
+
+// 비디오 호버 핸들러 - 안전한 재생
+const handleVideoHover = (event) => {
+  const video = event.target
+  if (video && video.paused) {
+    video.play().catch(err => {
+      // 재생 실패 시 조용히 무시
+      console.log('Video play failed:', err.message)
+    })
+  }
+}
+
+// 비디오 마우스 떠남 핸들러 - 안전한 일시정지
+const handleVideoLeave = (event) => {
+  const video = event.target
+  if (video && !video.paused) {
+    video.pause()
+  }
+}
 </script>
 
 <style scoped>
@@ -211,28 +297,36 @@ const getImageDimensions = (material) => {
   color: var(--text-tertiary);
 }
 
-/* Masonry layout using CSS columns */
-.gallery-masonry {
-  column-count: 4;
-  column-gap: 1rem;
-  padding: 0.5rem 0;
+/* Gallery controls */
+.gallery-controls {
+  margin-bottom: 1rem;
+  display: flex;
+  justify-content: flex-end;
 }
 
+/* Masonry layout using CSS columns */
+.gallery-masonry {
+  column-gap: 1rem;
+  padding: 0.5rem 0;
+  transition: column-count 0.3s ease;
+}
+
+/* 반응형 미디어 쿼리는 컬럼 컨트롤이 없을 때만 적용 */
 @media (max-width: 1400px) {
-  .gallery-masonry {
+  .gallery-masonry:not([style*="column-count"]) {
     column-count: 3;
   }
 }
 
 @media (max-width: 900px) {
-  .gallery-masonry {
+  .gallery-masonry:not([style*="column-count"]) {
     column-count: 2;
   }
 }
 
 @media (max-width: 600px) {
   .gallery-masonry {
-    column-count: 1;
+    column-count: 1 !important; /* 모바일에서는 항상 1열 */
   }
 }
 
@@ -268,7 +362,9 @@ const getImageDimensions = (material) => {
   background: var(--bg-secondary);
 }
 
-.item-image img {
+.item-image img,
+.item-image .video-preview,
+.item-image .video-thumbnail {
   width: 100%;
   height: auto;
   display: block;
@@ -277,7 +373,17 @@ const getImageDimensions = (material) => {
   object-position: center;
 }
 
-.gallery-item:hover .item-image img {
+.video-preview {
+  background: black;
+}
+
+.video-thumbnail {
+  background: var(--bg-secondary);
+}
+
+.gallery-item:hover .item-image img,
+.gallery-item:hover .item-image .video-preview,
+.gallery-item:hover .item-image .video-thumbnail {
   transform: scale(1.05);
 }
 
@@ -457,5 +563,35 @@ const getImageDimensions = (material) => {
   .item-image {
     max-height: 250px;
   }
+}
+
+/* 비디오 인디케이터 */
+.video-indicator {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  color: white;
+  pointer-events: none;
+}
+
+.video-indicator svg {
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 50%;
+  padding: 8px;
+  width: 48px;
+  height: 48px;
+}
+
+.video-duration {
+  background: rgba(0, 0, 0, 0.7);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 500;
 }
 </style>

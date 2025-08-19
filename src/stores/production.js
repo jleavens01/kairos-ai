@@ -8,7 +8,20 @@ export const useProductionStore = defineStore('production', {
     loading: false,
     error: null,
     currentJobProgress: 0,
-    currentJobStatus: null
+    currentJobStatus: null,
+    // AI 콘텐츠 제작 시스템
+    contentItems: [],
+    agentTasks: [],
+    workflowStatus: {
+      stage: 'idle', // idle, collecting, researching, writing, generating
+      activeAgents: [],
+      completedTasks: 0,
+      totalTasks: 0
+    },
+    // 미디어 업데이트 관련
+    pendingMediaUpdates: [], // 모달 열려있을 때 대기중인 업데이트
+    isModalOpen: false, // 모달 상태 추적
+    realtimeChannel: null // Realtime 채널 참조
   }),
 
   getters: {
@@ -29,13 +42,16 @@ export const useProductionStore = defineStore('production', {
 
   actions: {
     // 프로젝트의 스토리보드 데이터 가져오기
-    async fetchProductionSheets(projectId) {
+    async fetchProductionSheets(projectId, silent = false) {
       if (!projectId) {
         console.error('프로젝트 ID가 필요합니다.')
         return []
       }
 
-      this.loading = true
+      // silent 모드가 아닐 때만 loading 상태 변경
+      if (!silent) {
+        this.loading = true
+      }
       this.error = null
 
       try {
@@ -63,7 +79,9 @@ export const useProductionStore = defineStore('production', {
         this.error = error.message
         return []
       } finally {
-        this.loading = false
+        if (!silent) {
+          this.loading = false
+        }
       }
     },
 
@@ -462,6 +480,264 @@ export const useProductionStore = defineStore('production', {
       this.productionSheets = []
       this.currentScript = ''
       this.error = null
+    },
+
+    // AI 콘텐츠 제작 시스템 액션들
+    
+    // 콘텐츠 아이템 설정
+    setContentItems(items) {
+      this.contentItems = items
+    },
+    
+    // 연구 작업 시작
+    async startResearch(itemId) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) {
+          throw new Error('인증이 필요합니다.')
+        }
+
+        const response = await fetch('/.netlify/functions/startResearch', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`
+          },
+          body: JSON.stringify({ itemId })
+        })
+
+        const result = await response.json()
+        
+        if (!result.success) {
+          throw new Error(result.error || '연구 시작 실패')
+        }
+
+        // 워크플로우 상태 업데이트
+        this.workflowStatus.stage = 'researching'
+        
+        return result
+      } catch (error) {
+        console.error('연구 시작 실패:', error)
+        throw error
+      }
+    },
+    
+    // 에이전트 작업 상태 조회
+    async fetchAgentTasks() {
+      try {
+        const { data, error } = await supabase
+          .from('agent_tasks')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(50)
+        
+        if (error) throw error
+        
+        this.agentTasks = data || []
+        
+        // 진행 상태 계산
+        const activeTasks = data.filter(t => t.status === 'in_progress')
+        const completedTasks = data.filter(t => t.status === 'completed')
+        
+        this.workflowStatus.activeAgents = [...new Set(activeTasks.map(t => t.agent_type))]
+        this.workflowStatus.completedTasks = completedTasks.length
+        this.workflowStatus.totalTasks = data.length
+        
+        return data
+      } catch (error) {
+        console.error('에이전트 작업 조회 실패:', error)
+        return []
+      }
+    },
+    
+    // 워크플로우 상태 업데이트
+    updateWorkflowStatus(status) {
+      this.workflowStatus = { ...this.workflowStatus, ...status }
+    },
+    
+    // 뉴스 수집 트리거
+    async triggerNewsCollection(params = {}) {
+      try {
+        const response = await fetch('/.netlify/functions/collectNews', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mode: 'manual',
+            ...params
+          })
+        })
+
+        const result = await response.json()
+        
+        if (!result.success) {
+          throw new Error(result.error || '뉴스 수집 실패')
+        }
+
+        // 수집된 아이템 저장
+        if (result.data && result.data.items) {
+          this.setContentItems(result.data.items)
+        }
+        
+        this.workflowStatus.stage = 'collecting'
+        
+        return result
+      } catch (error) {
+        console.error('뉴스 수집 실패:', error)
+        throw error
+      }
+    },
+    
+    // collectNews 액션 (NewsCollector 컴포넌트에서 사용)
+    async collectNews(params = {}) {
+      return await this.triggerNewsCollection(params)
+    },
+    
+    // 트렌드 분석 (NewsCollector 컴포넌트에서 사용)
+    async analyzeTrends(params = {}) {
+      try {
+        const response = await fetch('/.netlify/functions/analyzeBrandTrends', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mode: 'manual',
+            ...params
+          })
+        })
+
+        const result = await response.json()
+        
+        if (!result.success) {
+          throw new Error(result.error || '트렌드 분석 실패')
+        }
+
+        // 수집된 아이템 저장
+        if (result.data && result.data.items) {
+          this.setContentItems(result.data.items)
+        }
+        
+        this.workflowStatus.stage = 'analyzing'
+        
+        return result
+      } catch (error) {
+        console.error('트렌드 분석 실패:', error)
+        throw error
+      }
+    },
+    
+    // 최근 수집된 콘텐츠 아이템 가져오기
+    async fetchRecentContentItems(sourceType = 'all') {
+      try {
+        let query = supabase
+          .from('content_items')
+          .select('*')
+        
+        // source_type 필터링
+        if (sourceType === 'all') {
+          // 트렌드를 우선적으로, 없으면 뉴스
+          query = query.in('source_type', ['trend', 'news'])
+        } else if (sourceType) {
+          query = query.eq('source_type', sourceType)
+        }
+        
+        const { data, error } = await query
+          .order('created_at', { ascending: false })
+          .limit(20)
+        
+        if (error) throw error
+        
+        this.contentItems = data || []
+        return data
+      } catch (error) {
+        console.error('콘텐츠 아이템 조회 실패:', error)
+        return []
+      }
+    },
+
+    // 모달 상태 설정
+    setModalOpen(isOpen) {
+      this.isModalOpen = isOpen
+      
+      // 모달이 닫히고 대기중인 업데이트가 있으면 처리
+      if (!isOpen && this.pendingMediaUpdates.length > 0) {
+        setTimeout(() => {
+          this.processPendingUpdates()
+        }, 500) // 모달 닫힌 후 잠시 대기
+      }
+    },
+
+    // 대기중인 업데이트 처리
+    processPendingUpdates() {
+      if (this.pendingMediaUpdates.length === 0) return
+      
+      console.log(`Processing ${this.pendingMediaUpdates.length} pending updates`)
+      
+      // 각 업데이트를 이벤트로 발생시킴
+      this.pendingMediaUpdates.forEach(update => {
+        window.dispatchEvent(new CustomEvent('media-update', { 
+          detail: update 
+        }))
+      })
+      
+      // 대기 목록 초기화
+      this.pendingMediaUpdates = []
+    },
+
+    // 미디어 업데이트 수신 (웹훅/Realtime)
+    handleMediaUpdate(update) {
+      // 프로덕션 환경에서만 작동
+      if (import.meta.env.MODE !== 'production') {
+        console.log('Media update received (dev mode, ignored):', update)
+        return
+      }
+      
+      // 모달이 열려있으면 대기 목록에 추가
+      if (this.isModalOpen) {
+        console.log('Modal is open, queuing update:', update)
+        this.pendingMediaUpdates.push(update)
+      } else {
+        // 즉시 업데이트 이벤트 발생
+        console.log('Processing media update immediately:', update)
+        window.dispatchEvent(new CustomEvent('media-update', { 
+          detail: update 
+        }))
+      }
+    },
+
+    // Realtime 구독 설정
+    setupRealtimeSubscription(projectId) {
+      // 기존 채널이 있으면 제거
+      if (this.realtimeChannel) {
+        supabase.removeChannel(this.realtimeChannel)
+      }
+      
+      // 프로덕션 환경에서만 Realtime 구독
+      if (import.meta.env.MODE !== 'production') {
+        console.log('Skipping realtime subscription in dev mode')
+        return
+      }
+      
+      // 미디어 업데이트 브로드캐스트 구독
+      this.realtimeChannel = supabase
+        .channel('media-updates')
+        .on('broadcast', { event: '*' }, (payload) => {
+          console.log('Realtime broadcast received:', payload)
+          
+          // 프로젝트 ID가 일치하는 경우만 처리
+          if (payload.payload?.project_id === projectId) {
+            this.handleMediaUpdate(payload.payload)
+          }
+        })
+        .subscribe((status) => {
+          console.log('Realtime subscription status:', status)
+        })
+    },
+
+    // Realtime 구독 해제
+    cleanupRealtimeSubscription() {
+      if (this.realtimeChannel) {
+        supabase.removeChannel(this.realtimeChannel)
+        this.realtimeChannel = null
+      }
     }
   }
 })

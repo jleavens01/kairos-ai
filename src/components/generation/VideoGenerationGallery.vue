@@ -2,6 +2,16 @@
   <div class="video-generation-gallery">
     <!-- 갤러리 섹션 -->
     <div class="gallery-section">
+      <!-- 컬럼 컨트롤 -->
+      <div v-if="filteredVideos.length > 0 || processingVideos.length > 0" class="gallery-controls">
+        <ColumnControl 
+          v-model="columnCount"
+          :min-columns="2"
+          :max-columns="6"
+          @change="updateColumnCount"
+        />
+      </div>
+      
       <!-- 필터는 상위 컴포넌트로 이동 -->
 
       <div v-if="loading" class="loading-state">
@@ -16,7 +26,7 @@
       </div>
 
       <!-- Masonry 레이아웃 갤러리 -->
-      <div v-else class="video-grid">
+      <div v-else class="video-grid" :style="{ columnCount: columnCount }">
         <!-- 처리 중인 비디오 -->
         <div 
           v-for="video in processingVideos" 
@@ -182,6 +192,7 @@ import VideoGenerationModal from './VideoGenerationModal.vue'
 import VideoDetailModal from './VideoDetailModal.vue'
 import { Plus, Link, Download, Trash2, Loader, Clock, AlertCircle, Video, Star, Archive } from 'lucide-vue-next'
 import SceneConnectionModal from './SceneConnectionModal.vue'
+import ColumnControl from '@/components/common/ColumnControl.vue'
 
 const props = defineProps({
   projectId: {
@@ -207,6 +218,28 @@ const videoToConnect = ref(null)
 // const realtimeChannel = ref(null) - Realtime 제거
 const videoRefs = ref({})
 let pollingInterval = null
+
+// 모달 상태를 store와 동기화
+watch(showGenerationModal, (isOpen) => {
+  productionStore.setModalOpen(isOpen)
+})
+
+watch(showDetailModal, (isOpen) => {
+  productionStore.setModalOpen(isOpen)
+})
+
+watch(showSceneModal, (isOpen) => {
+  productionStore.setModalOpen(isOpen)
+})
+
+// 컬럼 수 상태 (localStorage에 저장)
+const savedColumns = localStorage.getItem('videoGenerationGalleryColumns')
+const columnCount = ref(savedColumns ? parseInt(savedColumns) : 3)
+
+const updateColumnCount = (count) => {
+  columnCount.value = count
+  localStorage.setItem('videoGenerationGalleryColumns', count.toString())
+}
 
 // Computed
 const processingVideos = computed(() => {
@@ -557,6 +590,12 @@ const stopPolling = () => {
 }
 
 const callPollingWorker = async () => {
+  // 개발 환경에서만 폴링 실행
+  if (import.meta.env.MODE !== 'development') {
+    console.log('Not in development mode, skipping polling')
+    return
+  }
+  
   try {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) {
@@ -564,14 +603,21 @@ const callPollingWorker = async () => {
       return
     }
     
+    // AbortController로 타임아웃 설정 (3초)
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 3000)
+    
     const response = await fetch('/.netlify/functions/processVideoQueue', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${session.access_token}`
       },
-      body: JSON.stringify({})
+      body: JSON.stringify({}),
+      signal: controller.signal
     })
+    
+    clearTimeout(timeoutId)
     
     if (response.ok) {
       const result = await response.json()
@@ -587,7 +633,11 @@ const callPollingWorker = async () => {
       }
     }
   } catch (error) {
-    console.error('Polling error:', error)
+    if (error.name === 'AbortError') {
+      console.log('Polling request timed out (expected in dev)')
+    } else {
+      console.error('Polling error:', error)
+    }
   }
 }
 
@@ -636,19 +686,48 @@ const cleanupRealtimeSubscription = () => {
   }
 } */
 
+// 웹훅 업데이트 처리
+const handleMediaUpdate = (event) => {
+  const update = event.detail
+  console.log('Video gallery received media update:', update)
+  
+  // 비디오 완료 업데이트인 경우
+  if (update.event === 'video-completed' && update.project_id === props.projectId) {
+    // 갤러리 새로고침
+    fetchVideos()
+  }
+}
+
 // Lifecycle
 onMounted(async () => {
   await fetchVideos()
   // setupRealtimeSubscription() - Realtime 제거, 폴링 사용
   
-  if (processingVideos.value.length > 0) {
-    startPolling()
+  // 개발 환경에서는 폴링 사용
+  if (import.meta.env.MODE === 'development') {
+    if (processingVideos.value.length > 0) {
+      startPolling()
+    }
+  } else {
+    // 프로덕션 환경에서는 Realtime 구독
+    productionStore.setupRealtimeSubscription(props.projectId)
   }
+  
+  // 미디어 업데이트 이벤트 리스너 등록
+  window.addEventListener('media-update', handleMediaUpdate)
 })
 
 onUnmounted(() => {
   // cleanupRealtimeSubscription() - Realtime 제거
   stopPolling()
+  
+  // 프로덕션 환경에서 Realtime 구독 해제
+  if (import.meta.env.MODE === 'production') {
+    productionStore.cleanupRealtimeSubscription()
+  }
+  
+  // 이벤트 리스너 제거
+  window.removeEventListener('media-update', handleMediaUpdate)
 })
 
 // projectId 변경 감지
@@ -693,6 +772,13 @@ defineExpose({
   margin-top: 0;
 }
 
+/* Gallery controls */
+.gallery-controls {
+  margin-bottom: 1rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
 .section-header {
   display: flex;
   justify-content: space-between;
@@ -722,29 +808,27 @@ defineExpose({
 
 /* Masonry 레이아웃 */
 .video-grid {
-  column-count: 2; /* 모바일: 2열 */
   column-gap: 20px;
   padding: 0;
+  transition: column-count 0.3s ease;
 }
 
-/* 태블릿 */
-@media (min-width: 768px) {
-  .video-grid {
-    column-count: 3; /* 3열 */
+/* 반응형 미디어 쿼리는 컬럼 컨트롤이 없을 때만 적용 */
+@media (max-width: 1440px) {
+  .video-grid:not([style*="column-count"]) {
+    column-count: 3;
   }
 }
 
-/* 데스크탑 */
-@media (min-width: 1024px) {
-  .video-grid {
-    column-count: 3; /* 3열 */
+@media (max-width: 900px) {
+  .video-grid:not([style*="column-count"]) {
+    column-count: 2;
   }
 }
 
-/* 대형 데스크탑 */
-@media (min-width: 1440px) {
+@media (max-width: 600px) {
   .video-grid {
-    column-count: 4; /* 4열 */
+    column-count: 1 !important; /* 모바일에서는 항상 1열 */
   }
 }
 

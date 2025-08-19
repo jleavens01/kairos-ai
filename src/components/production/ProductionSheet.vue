@@ -23,6 +23,7 @@
         @delete-scene="handleDeleteScene"
         @update-scene="handleUpdateScene"
         @character-extraction="handleOpenCharacterExtraction"
+        @open-news-collector="handleOpenNewsCollector"
       />
     </div>
 
@@ -45,6 +46,21 @@
       @close="showCharacterModal = false"
       @success="handleCharactersExtracted"
     />
+    
+    <!-- AI 뉴스 수집 모달 -->
+    <div v-if="showNewsModal" class="modal-overlay" @click.self="showNewsModal = false">
+      <div class="modal-container news-collector-modal">
+        <div class="modal-header">
+          <h2>AI 콘텐츠 제작 시스템</h2>
+          <button @click="showNewsModal = false" class="close-btn">
+            ✕
+          </button>
+        </div>
+        <div class="modal-body">
+          <NewsCollector />
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -54,6 +70,7 @@ import { useProductionStore } from '@/stores/production'
 import ScriptInputModal from './ScriptInputModal.vue'
 import ProductionTable from './ProductionTable.vue'
 import CharacterExtractionModal from './CharacterExtractionModal.vue'
+import NewsCollector from './NewsCollector.vue'
 
 const props = defineProps({
   projectId: {
@@ -69,6 +86,7 @@ const productionStore = useProductionStore()
 // State
 const showScriptModal = ref(false)
 const showCharacterModal = ref(false)
+const showNewsModal = ref(false)
 const selectedScenes = ref([])
 
 // Computed - store의 데이터를 직접 사용
@@ -82,6 +100,10 @@ const handleOpenScriptInput = () => {
 
 const handleOpenCharacterExtraction = () => {
   showCharacterModal.value = true
+}
+
+const handleOpenNewsCollector = () => {
+  showNewsModal.value = true
 }
 
 const handleScriptAnalyzed = async (data) => {
@@ -276,5 +298,95 @@ defineExpose({
   .btn-primary-large {
     width: 100%;
   }
+}
+
+/* 모달 스타일 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.modal-container {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  max-height: 90vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.news-collector-modal {
+  width: 90vw;
+  max-width: 1400px;
+}
+
+.modal-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 20px;
+  color: var(--text-primary);
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.close-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0;
+}
+
+.btn-ai-news {
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-ai-news:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
 }
 </style>

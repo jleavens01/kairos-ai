@@ -3,11 +3,38 @@
     <!-- 검색 입력 -->
     <div class="search-input-group">
       <div class="search-input-wrapper">
+        <!-- 미디어 타입 선택 드롭다운 -->
+        <div class="media-type-selector">
+          <button @click="toggleMediaDropdown" class="media-type-button" type="button">
+            <component :is="searchType === 'video' ? Video : Image" :size="16" />
+            <span>{{ searchType === 'video' ? '비디오' : '이미지' }}</span>
+            <ChevronDown :size="14" class="dropdown-arrow" />
+          </button>
+          <div v-if="showMediaDropdown" class="media-dropdown">
+            <button 
+              @click="selectMediaType('image')" 
+              :class="['dropdown-item', { active: searchType === 'image' }]"
+              type="button"
+            >
+              <Image :size="14" />
+              이미지
+            </button>
+            <button 
+              @click="selectMediaType('video')" 
+              :class="['dropdown-item', { active: searchType === 'video' }]"
+              type="button"
+            >
+              <Video :size="14" />
+              비디오
+            </button>
+          </div>
+        </div>
+        
         <Search :size="20" class="search-icon" />
         <input
           v-model="searchQuery"
           type="text"
-          placeholder="검색어를 입력하세요 (예: 조지 워싱턴, 엘리자베스 2세)"
+          :placeholder="searchType === 'video' ? '비디오 검색어를 입력하세요' : '이미지 검색어를 입력하세요'"
           class="search-input"
           @keyup.enter="handleSearch"
           :disabled="loading"
@@ -100,7 +127,7 @@
 
 <script setup>
 import { ref, watch, computed, onMounted } from 'vue'
-import { Search, X, Loader, AlertCircle, Languages, Info as InfoIcon } from 'lucide-vue-next'
+import { Search, X, Loader, AlertCircle, Languages, Info as InfoIcon, Image, Video, ChevronDown } from 'lucide-vue-next'
 
 const emit = defineEmits(['search', 'clear'])
 const props = defineProps({
@@ -113,32 +140,48 @@ const props = defineProps({
 // 반응형 데이터
 const searchQuery = ref('')
 const errorMessage = ref('')
-const selectedSources = ref(['wikipedia', 'commons']) // 기본 선택
+const selectedSources = ref(['wikipedia', 'commons', 'pexels']) // 기본 선택 (Google 제외, Pexels 추가)
 const autoTranslate = ref(false) // 자동 번역 토글
 const translatedQuery = ref('') // 번역된 검색어
+const searchType = ref('image') // 'image' 또는 'video'
+const showMediaDropdown = ref(false)
 const apiKeys = ref({
   pixabay: false,
   unsplash: false,
   pexels: false,
   flickr: false,
+  google: false,
   europeana: false,
   dpla: false
 })
 
 // 모든 검색 소스 정의
-const availableSources = computed(() => [
-  // 백과사전 및 문화자료
-  { id: 'wikipedia', label: 'Wikipedia', category: 'encyclopedia', requiresKey: false, hasKey: true },
-  { id: 'commons', label: 'Commons', category: 'cultural', requiresKey: false, hasKey: true },
-  { id: 'met', label: 'Met Museum', category: 'cultural', requiresKey: false, hasKey: true },
-  { id: 'europeana', label: 'Europeana', category: 'cultural', requiresKey: true, hasKey: apiKeys.value.europeana },
-  { id: 'dpla', label: 'DPLA', category: 'cultural', requiresKey: true, hasKey: apiKeys.value.dpla },
-  // 이미지 검색 서비스
-  { id: 'pixabay', label: 'Pixabay', category: 'stock', requiresKey: false, hasKey: true }, // API 키 있음
-  { id: 'unsplash', label: 'Unsplash', category: 'stock', requiresKey: false, hasKey: true }, // API 키 있음
-  { id: 'pexels', label: 'Pexels', category: 'stock', requiresKey: true, hasKey: apiKeys.value.pexels },
-  { id: 'flickr', label: 'Flickr', category: 'stock', requiresKey: true, hasKey: apiKeys.value.flickr }
-])
+const availableSources = computed(() => {
+  // 비디오 검색인 경우 비디오를 지원하는 소스만 표시
+  if (searchType.value === 'video') {
+    return [
+      { id: 'pexels', label: 'Pexels', category: 'stock', requiresKey: false, hasKey: true, supportsVideo: true }, // API 키 있음
+      { id: 'pixabay', label: 'Pixabay', category: 'stock', requiresKey: false, hasKey: true, supportsVideo: true }, // API 키 있음
+      // 추후 비디오 지원 소스 추가 가능
+    ]
+  }
+  
+  // 이미지 검색 (기본)
+  return [
+    // 백과사전 및 문화자료
+    { id: 'google', label: 'Google', category: 'search', requiresKey: false, hasKey: true }, // Google을 앞으로, 자물쇠 제거
+    { id: 'wikipedia', label: 'Wikipedia', category: 'encyclopedia', requiresKey: false, hasKey: true },
+    { id: 'commons', label: 'Commons', category: 'cultural', requiresKey: false, hasKey: true },
+    { id: 'met', label: 'Met Museum', category: 'cultural', requiresKey: false, hasKey: true },
+    { id: 'europeana', label: 'Europeana', category: 'cultural', requiresKey: true, hasKey: apiKeys.value.europeana },
+    { id: 'dpla', label: 'DPLA', category: 'cultural', requiresKey: false, hasKey: true }, // API 키 있음
+    // 이미지 검색 서비스
+    { id: 'pixabay', label: 'Pixabay', category: 'stock', requiresKey: false, hasKey: true }, // API 키 있음
+    { id: 'unsplash', label: 'Unsplash', category: 'stock', requiresKey: false, hasKey: true }, // API 키 있음
+    { id: 'pexels', label: 'Pexels', category: 'stock', requiresKey: false, hasKey: true }, // API 키 있음
+    { id: 'flickr', label: 'Flickr', category: 'stock', requiresKey: true, hasKey: apiKeys.value.flickr }
+  ]
+})
 
 const allSourcesSelected = computed(() => {
   // 모든 소스가 선택되었는지 확인 (API 키 여부와 무관)
@@ -147,6 +190,24 @@ const allSourcesSelected = computed(() => {
 })
 
 // 메서드
+const toggleMediaDropdown = () => {
+  showMediaDropdown.value = !showMediaDropdown.value
+}
+
+const selectMediaType = (type) => {
+  searchType.value = type
+  showMediaDropdown.value = false
+  
+  // 미디어 타입 변경 시 선택된 소스 초기화
+  if (type === 'video') {
+    // 비디오 검색 시 비디오를 지원하는 소스만 선택
+    selectedSources.value = ['pexels', 'pixabay']
+  } else {
+    // 이미지 검색 시 기본 소스 선택 (Google 제외)
+    selectedSources.value = ['wikipedia', 'commons', 'met', 'pixabay', 'unsplash', 'dpla', 'pexels']
+  }
+}
+
 const handleSearch = async () => {
   const query = searchQuery.value.trim()
   
@@ -205,7 +266,8 @@ const handleSearch = async () => {
   emit('search', {
     query: finalQuery,
     originalQuery: query,
-    sources: selectedSources.value // 선택된 소스
+    sources: selectedSources.value, // 선택된 소스
+    mediaType: searchType.value // 'image' 또는 'video'
   })
 }
 
@@ -242,6 +304,7 @@ const getSourceTooltip = (source) => {
     'met': 'Metropolitan Museum of Art',
     'dpla': 'Digital Public Library of America',
     'wikipedia': 'Wikipedia - 온라인 백과사전',
+    'google': 'Google 이미지 검색',
     'europeana': 'Europeana - 유럽 문화유산',
     'pixabay': 'Pixabay - 무료 스톡 이미지',
     'unsplash': 'Unsplash - 고품질 무료 사진',
@@ -315,18 +378,98 @@ watch(searchQuery, () => {
   align-items: center;
 }
 
+/* 미디어 타입 선택기 */
+.media-type-selector {
+  position: absolute;
+  left: 0;
+  z-index: 2;
+}
+
+.media-type-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-secondary);
+  border: 2px solid var(--border-color);
+  border-radius: 8px 0 0 8px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  height: 100%;
+  min-width: 110px;
+}
+
+.media-type-button:hover {
+  background: var(--bg-tertiary);
+}
+
+.dropdown-arrow {
+  margin-left: auto;
+  transition: transform 0.2s;
+}
+
+.media-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 0.25rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: var(--shadow-md);
+  z-index: 10;
+  min-width: 110px;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.2s;
+  text-align: left;
+}
+
+.dropdown-item:hover {
+  background: var(--bg-secondary);
+}
+
+.dropdown-item.active {
+  background: var(--primary-light);
+  color: var(--primary-color);
+}
+
+.dropdown-item:first-child {
+  border-radius: 8px 8px 0 0;
+}
+
+.dropdown-item:last-child {
+  border-radius: 0 0 8px 8px;
+}
+
 .search-icon {
   position: absolute;
-  left: 1rem;
+  left: 130px; /* 미디어 선택기 너비만큼 오프셋 */
   color: var(--text-tertiary);
   z-index: 1;
 }
 
 .search-input {
   width: 100%;
-  padding: 0.875rem 1rem 0.875rem 3rem;
+  padding: 0.875rem 3rem 0.875rem 160px; /* 왼쪽 패딩 증가 */
   border: 2px solid var(--border-color);
   border-radius: 8px;
+  border-left: none;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
   font-size: 1rem;
   background: var(--bg-primary);
   color: var(--text-primary);

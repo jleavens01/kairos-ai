@@ -70,17 +70,44 @@ export async function generateImage({
       throw new Error('Failed to create image record.');
     }
 
+    // imageSize를 aspect_ratio 형식으로 변환하는 함수
+    const convertToAspectRatio = (size) => {
+      // 이미 비율 형식이면 그대로 반환
+      if (size.includes(':')) {
+        return size;
+      }
+      
+      // 크기 형식을 비율로 변환
+      const sizeMap = {
+        '1024x1024': '1:1',
+        '512x512': '1:1',
+        '768x768': '1:1',
+        '1024x768': '4:3',
+        '768x1024': '3:4',
+        '1024x576': '16:9',
+        '576x1024': '9:16',
+        '1920x1080': '16:9',
+        '1080x1920': '9:16',
+        '1024x682': '3:2',
+        '682x1024': '2:3',
+        '2048x858': '21:9',
+        '858x2048': '9:21'
+      };
+      
+      return sizeMap[size] || '1:1'; // 기본값은 1:1
+    };
+
     // 2. 모델별 API 엔드포인트 및 파라미터 설정
     let apiEndpoint;
     let requestBody;
 
     switch(model) {
       case 'flux-schnell':
-        // Flux Schnell (빠른 생성)
+        // Flux Schnell (빠른 생성) - image_size 파라미터 사용
         apiEndpoint = "fal-ai/flux/schnell";
         requestBody = {
           prompt: finalPrompt,
-          image_size: imageSize,
+          image_size: imageSize, // Schnell은 크기 형식 사용
           num_inference_steps: parameters.steps || 4,
           seed: parameters.seed || Math.floor(Math.random() * 1000000),
           num_images: 1
@@ -88,11 +115,11 @@ export async function generateImage({
         break;
 
       case 'flux-pro':
-        // Flux Pro (고품질)
+        // Flux Pro (고품질) - aspect_ratio 파라미터 사용
         apiEndpoint = "fal-ai/flux-pro";
         requestBody = {
           prompt: finalPrompt,
-          aspect_ratio: imageSize,
+          aspect_ratio: convertToAspectRatio(imageSize), // 비율 형식으로 변환
           num_inference_steps: parameters.steps || 28,
           guidance_scale: parameters.guidance_scale || 3.5,
           safety_tolerance: parameters.safety_tolerance || 2,
@@ -103,7 +130,7 @@ export async function generateImage({
         break;
 
       case 'flux-kontext':
-        // Flux Kontext (단일 참조 이미지)
+        // Flux Kontext (단일 참조 이미지) - aspect_ratio 파라미터 사용
         if (!referenceImages.length) {
           throw new Error('Flux Kontext requires at least one reference image.');
         }
@@ -112,7 +139,7 @@ export async function generateImage({
         requestBody = {
           prompt: finalPrompt,
           image_url: referenceImages[0],
-          aspect_ratio: imageSize,
+          aspect_ratio: convertToAspectRatio(imageSize), // 비율 형식으로 변환
           guidance_scale: parameters.guidance_scale || 3.5,
           output_format: 'jpeg',
           num_images: 1,
@@ -121,7 +148,7 @@ export async function generateImage({
         break;
 
       case 'flux-kontext-multi':
-        // Flux Kontext Multi (다중 참조 이미지)
+        // Flux Kontext Multi (다중 참조 이미지) - aspect_ratio 파라미터 사용
         if (!referenceImages.length) {
           throw new Error('Flux Kontext Multi requires reference images.');
         }
@@ -130,7 +157,7 @@ export async function generateImage({
         requestBody = {
           prompt: finalPrompt,
           image_urls: referenceImages,
-          aspect_ratio: imageSize,
+          aspect_ratio: convertToAspectRatio(imageSize), // 비율 형식으로 변환
           guidance_scale: parameters.guidance_scale || 3.5,
           output_format: 'jpeg',
           num_images: 1,

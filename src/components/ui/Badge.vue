@@ -12,7 +12,7 @@ const props = defineProps({
   variant: {
     type: String,
     default: 'default',
-    validator: (value) => ['default', 'secondary', 'destructive', 'outline'].includes(value)
+    validator: (value) => ['default', 'secondary', 'destructive', 'outline', 'success', 'warning'].includes(value)
   },
   class: {
     type: String,
@@ -27,7 +27,9 @@ const badgeClasses = computed(() => {
     default: 'border-transparent bg-primary text-primary-foreground',
     secondary: 'border-transparent bg-secondary text-secondary-foreground',
     destructive: 'border-transparent bg-destructive text-destructive-foreground',
-    outline: 'text-foreground'
+    outline: 'text-foreground',
+    success: 'border-transparent bg-green-500 text-white',
+    warning: 'border-transparent bg-yellow-500 text-white'
   }
   
   return cn(

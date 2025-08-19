@@ -120,10 +120,10 @@ const searchResultsWithSaveStatus = computed(() => {
 
 // 메서드
 const handleSearch = async (searchData) => {
-  const { query, sources } = searchData
+  const { query, sources, mediaType } = searchData
   
-  // 통합 검색 - 선택된 모든 소스에서 검색
-  await referenceStore.searchUnified(query, sources)
+  // 통합 검색 - 선택된 모든 소스에서 검색 (미디어 타입 포함)
+  await referenceStore.searchUnified(query, sources, mediaType)
 }
 
 const handleClearSearch = () => {

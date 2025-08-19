@@ -21,7 +21,15 @@
 
     <!-- 통합 갤러리 섹션 -->
     <div class="gallery-section">
-      <!-- 필터는 상위 컴포넌트로 이동 -->
+      <!-- 컬럼 컨트롤 -->
+      <div v-if="galleryImages.length > 0" class="gallery-controls">
+        <ColumnControl 
+          v-model="columnCount"
+          :min-columns="2"
+          :max-columns="8"
+          @change="updateColumnCount"
+        />
+      </div>
 
       <div v-if="loading" class="loading-state">
         <div class="spinner"></div>
@@ -34,7 +42,7 @@
         <p class="hint">새 이미지 생성 버튼을 눌러 시작하세요.</p>
       </div>
 
-      <div v-else class="image-grid">
+      <div v-else class="image-grid" :style="{ columnCount: columnCount }">
         <!-- 이미지만 표시 (제안 카드 제외) -->
         <div 
           v-for="item in galleryImages" 
@@ -202,6 +210,7 @@ import SceneConnectionModal from './SceneConnectionModal.vue'
 import { Link, Tag, Download, Trash2, Loader, Plus, User, Image, Star, Archive } from 'lucide-vue-next'
 import TagEditModal from './TagEditModal.vue'
 import ImageDetailModal from './ImageDetailModal.vue'
+import ColumnControl from '@/components/common/ColumnControl.vue'
 
 const props = defineProps({
   projectId: {
@@ -229,6 +238,32 @@ const imageToEdit = ref(null)
 const imageToView = ref(null)
 const editImageData = ref(null) // 이미지 수정을 위한 데이터
 // const realtimeChannel = ref(null) - Realtime 제거
+
+// 모달 상태를 store와 동기화
+watch(showGenerationModal, (isOpen) => {
+  productionStore.setModalOpen(isOpen)
+})
+
+watch(showDetailModal, (isOpen) => {
+  productionStore.setModalOpen(isOpen)
+})
+
+watch(showSceneModal, (isOpen) => {
+  productionStore.setModalOpen(isOpen)
+})
+
+watch(showTagModal, (isOpen) => {
+  productionStore.setModalOpen(isOpen)
+})
+
+// 컬럼 수 상태 (localStorage에 저장)
+const savedColumns = localStorage.getItem('aiGenerationGalleryColumns')
+const columnCount = ref(savedColumns ? parseInt(savedColumns) : 4)
+
+const updateColumnCount = (count) => {
+  columnCount.value = count
+  localStorage.setItem('aiGenerationGalleryColumns', count.toString())
+}
 
 // Computed
 // 스토리보드에서 추출한 유니크한 캐릭터 목록
@@ -456,6 +491,12 @@ const stopPollingWorker = () => {
 
 // 폴링 워커 호출
 const callPollingWorker = async () => {
+  // 개발 환경에서만 폴링 실행
+  if (import.meta.env.MODE !== 'development') {
+    console.log('Not in development mode, skipping polling')
+    return
+  }
+  
   try {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) {
@@ -465,6 +506,10 @@ const callPollingWorker = async () => {
     
     console.log('Calling polling worker...')
     
+    // AbortController로 타임아웃 설정 (3초)
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 3000)
+    
     // imagePollingWorker가 404일 경우 processImageQueue 사용 (서버 재시작 필요)
     const response = await fetch('/.netlify/functions/processImageQueue', {
       method: 'POST',
@@ -472,8 +517,11 @@ const callPollingWorker = async () => {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${session.access_token}`
       },
-      body: JSON.stringify({})
+      body: JSON.stringify({}),
+      signal: controller.signal
     })
+    
+    clearTimeout(timeoutId)
     
     if (!response.ok) {
       console.error('Polling worker failed:', response.status)
@@ -494,7 +542,11 @@ const callPollingWorker = async () => {
       stopPollingWorker()
     }
   } catch (error) {
-    console.error('Polling worker error:', error)
+    if (error.name === 'AbortError') {
+      console.log('Polling request timed out (expected in dev)')
+    } else {
+      console.error('Polling worker error:', error)
+    }
   }
 }
 
@@ -807,6 +859,18 @@ const handleEditImage = (editData) => {
   showGenerationModal.value = true
 }
 
+// 웹훅 업데이트 처리
+const handleMediaUpdate = (event) => {
+  const update = event.detail
+  console.log('Image gallery received media update:', update)
+  
+  // 이미지 완료 업데이트인 경우
+  if (update.event === 'image-completed' && update.project_id === props.projectId) {
+    // 갤러리 새로고침
+    fetchImages()
+  }
+}
+
 // Lifecycle
 onMounted(async () => {
   await fetchImages()
@@ -815,20 +879,34 @@ onMounted(async () => {
     await productionStore.fetchProductionSheets(props.projectId)
   }
   
-  // Supabase Realtime으로 이미지 업데이트 감지 (웹훅 방식)
-  setupRealtimeSubscription()
-  
-  // 폴링 백업 (필요시 사용)
-  if (processingImages.value.length > 0) {
-    console.log(`Found ${processingImages.value.length} processing images, starting polling...`)
-    startPollingWorker()
+  // 개발 환경에서는 폴링 사용
+  if (import.meta.env.MODE === 'development') {
+    if (processingImages.value.length > 0) {
+      console.log(`Found ${processingImages.value.length} processing images, starting polling...`)
+      startPollingWorker()
+    }
+  } else {
+    // 프로덕션 환경에서는 Realtime 구독
+    productionStore.setupRealtimeSubscription(props.projectId)
+    setupRealtimeSubscription()
   }
+  
+  // 미디어 업데이트 이벤트 리스너 등록
+  window.addEventListener('media-update', handleMediaUpdate)
 })
 
 // 컴포넌트 언마운트 시 Realtime 구독 해제 및 폴링 중지
 onUnmounted(() => {
   cleanupRealtimeSubscription()
   stopPollingWorker()
+  
+  // 프로덕션 환경에서 Realtime 구독 해제
+  if (import.meta.env.MODE === 'production') {
+    productionStore.cleanupRealtimeSubscription()
+  }
+  
+  // 이벤트 리스너 제거
+  window.removeEventListener('media-update', handleMediaUpdate)
 })
 
 // Supabase Realtime 설정 (웹훅 결과 수신용)
@@ -1052,6 +1130,13 @@ defineExpose({
   margin-top: 0;
 }
 
+/* Gallery controls */
+.gallery-controls {
+  margin-bottom: 1rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
 .section-header {
   display: flex;
   justify-content: space-between;
@@ -1077,29 +1162,27 @@ defineExpose({
 /* 통합 갤러리 - Masonry 레이아웃 */
 .image-grid {
   /* CSS 멀티 컬럼 레이아웃 사용 */
-  column-count: 2; /* 모바일: 2열 */
   column-gap: 20px;
   padding: 0;
+  transition: column-count 0.3s ease;
 }
 
-/* 태블릿 */
-@media (min-width: 768px) {
-  .image-grid {
-    column-count: 3; /* 3열 */
+/* 반응형 미디어 쿼리는 컬럼 컨트롤이 없을 때만 적용 */
+@media (max-width: 1440px) {
+  .image-grid:not([style*="column-count"]) {
+    column-count: 3;
   }
 }
 
-/* 데스크탑 */
-@media (min-width: 1024px) {
-  .image-grid {
-    column-count: 3; /* 3열 */
+@media (max-width: 900px) {
+  .image-grid:not([style*="column-count"]) {
+    column-count: 2;
   }
 }
 
-/* 대형 데스크탑 */
-@media (min-width: 1440px) {
+@media (max-width: 600px) {
   .image-grid {
-    column-count: 4; /* 4열 */
+    column-count: 1 !important; /* 모바일에서는 항상 1열 */
   }
 }
 
