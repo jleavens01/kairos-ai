@@ -390,7 +390,7 @@ watch(searchQuery, () => {
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 0.75rem;
-  background: var(--bg-secondary);
+  background: transparent;
   border: 2px solid var(--border-color);
   border-radius: 8px 0 0 8px;
   color: var(--text-primary);
@@ -402,7 +402,8 @@ watch(searchQuery, () => {
 }
 
 .media-type-button:hover {
-  background: var(--bg-tertiary);
+  background: var(--bg-secondary);
+  border-color: var(--primary-color);
 }
 
 .dropdown-arrow {

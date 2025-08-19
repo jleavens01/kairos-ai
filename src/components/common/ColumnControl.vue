@@ -81,16 +81,19 @@ defineEmits(['change'])
 
 .column-slider {
   flex: 1;
-  height: 5px;
-  background: linear-gradient(to right, var(--border-color) 0%, var(--border-color) 100%);
-  border-radius: 3px;
+  height: 20px; /* 썸을 수용할 수 있는 높이로 증가 */
+  background: transparent;
   outline: none;
   -webkit-appearance: none;
+  appearance: none;
   cursor: pointer;
+  vertical-align: middle; /* 수직 정렬 */
+  position: relative;
 }
 
 .column-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
+  appearance: none;
   width: 18px;
   height: 18px;
   background: var(--primary-color);
@@ -98,6 +101,9 @@ defineEmits(['change'])
   cursor: pointer;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   transition: transform 0.2s;
+  margin-top: -6.5px; /* (썸 높이 18px - 트랙 높이 5px) / 2 = 6.5px */
+  position: relative;
+  z-index: 2;
 }
 
 .column-slider::-webkit-slider-thumb:hover {
@@ -113,6 +119,8 @@ defineEmits(['change'])
   border: none;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
   transition: transform 0.2s;
+  position: relative;
+  z-index: 2;
 }
 
 .column-slider::-moz-range-thumb:hover {
@@ -123,6 +131,7 @@ defineEmits(['change'])
   height: 5px;
   background: var(--border-color);
   border-radius: 3px;
+  margin-top: 7.5px; /* 트랙을 중앙에 위치시킴 */
 }
 
 .column-slider::-moz-range-track {
