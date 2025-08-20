@@ -240,13 +240,59 @@ export async function generateImage({
                            result.output;
             
             if (imageUrl) {
+              // 이미지를 Supabase Storage에 저장
+              let storageUrl = imageUrl; // 기본값은 원본 URL
+              
+              try {
+                // 이미지 다운로드
+                const imageResponse = await fetch(imageUrl);
+                if (!imageResponse.ok) {
+                  throw new Error('Failed to fetch generated image');
+                }
+                
+                const imageBuffer = await imageResponse.arrayBuffer();
+                const uint8Array = new Uint8Array(imageBuffer);
+                
+                // 파일명 생성
+                const timestamp = Date.now();
+                const fileName = `${timestamp}_${imageRecord.id}.png`;
+                const storagePath = `gen-images/${projectId}/${category}/${fileName}`;
+                
+                // Supabase Storage에 업로드
+                const { data: uploadData, error: uploadError } = await supabaseAdmin
+                  .storage
+                  .from('projects')
+                  .upload(storagePath, uint8Array, {
+                    contentType: 'image/png',
+                    cacheControl: '3600',
+                    upsert: true
+                  });
+                
+                if (uploadError) {
+                  console.error('Storage upload error:', uploadError);
+                  // 업로드 실패 시 원본 URL 사용
+                } else {
+                  // 공개 URL 생성
+                  const { data: { publicUrl } } = supabaseAdmin
+                    .storage
+                    .from('projects')
+                    .getPublicUrl(storagePath);
+                  
+                  storageUrl = publicUrl;
+                  console.log('Image saved to storage:', storageUrl);
+                }
+              } catch (storageError) {
+                console.error('Failed to save image to storage:', storageError);
+                // 저장 실패 시 원본 URL 사용
+              }
+              
               // DB 업데이트
               await supabaseAdmin
                 .from('gen_images')
                 .update({
                   generation_status: 'completed',
                   result_image_url: imageUrl,
-                  storage_image_url: imageUrl,
+                  storage_image_url: storageUrl,
                   updated_at: new Date().toISOString()
                 })
                 .eq('id', imageRecord.id);
@@ -258,7 +304,7 @@ export async function generateImage({
                   request_id: request_id,
                   status: 'completed',
                   result_image_url: imageUrl,
-                  storage_image_url: imageUrl
+                  storage_image_url: storageUrl
                 }
               };
             } else {

@@ -116,13 +116,15 @@ async function handleVideoWebhook(supabase, webhookData) {
     
     const timestamp = Date.now();
     const randomId = Math.random().toString(36).substring(2, 9);
-    const fileName = `${video.project_id}/${video.video_type}/${timestamp}-${randomId}.mp4`;
+    const videoType = video.video_type || 'scene';
+    const fileName = `gen-videos/${video.project_id}/${videoType}/${timestamp}_${randomId}.mp4`;
     
     const { data: uploadData, error: uploadError } = await supabase
       .storage
-      .from('gen-videos')
+      .from('projects')
       .upload(fileName, videoData, {
         contentType: 'video/mp4',
+        cacheControl: '3600',
         upsert: false
       });
 
@@ -133,7 +135,7 @@ async function handleVideoWebhook(supabase, webhookData) {
     // Storage URL 생성
     const { data: { publicUrl } } = supabase
       .storage
-      .from('gen-videos')
+      .from('projects')
       .getPublicUrl(fileName);
 
     // 썸네일 처리
@@ -145,20 +147,21 @@ async function handleVideoWebhook(supabase, webhookData) {
         const thumbBuffer = await thumbBlob.arrayBuffer();
         const thumbData = Buffer.from(thumbBuffer);
         
-        const thumbFileName = `${video.project_id}/thumbnails/${timestamp}-${randomId}.jpg`;
+        const thumbFileName = `gen-videos/${video.project_id}/thumbnails/${timestamp}_${randomId}.jpg`;
         
         const { data: thumbUpload, error: thumbError } = await supabase
           .storage
-          .from('gen-videos')
+          .from('projects')
           .upload(thumbFileName, thumbData, {
             contentType: 'image/jpeg',
+            cacheControl: '3600',
             upsert: false
           });
 
         if (!thumbError) {
           const { data: { publicUrl: thumbPublicUrl } } = supabase
             .storage
-            .from('gen-videos')
+            .from('projects')
             .getPublicUrl(thumbFileName);
           storageThumbnailUrl = thumbPublicUrl;
         }
@@ -260,13 +263,15 @@ async function handleImageWebhook(supabase, webhookData) {
     
     const timestamp = Date.now();
     const randomId = Math.random().toString(36).substring(2, 9);
-    const fileName = `${image.project_id}/images/${timestamp}-${randomId}.png`;
+    const category = image.category || 'general';
+    const fileName = `gen-images/${image.project_id}/${category}/${timestamp}_${randomId}.png`;
     
     const { data: uploadData, error: uploadError } = await supabase
       .storage
-      .from('gen-images')
+      .from('projects')
       .upload(fileName, imageData, {
         contentType: 'image/png',
+        cacheControl: '3600',
         upsert: false
       });
 
@@ -277,7 +282,7 @@ async function handleImageWebhook(supabase, webhookData) {
     // Storage URL 생성
     const { data: { publicUrl } } = supabase
       .storage
-      .from('gen-images')
+      .from('projects')
       .getPublicUrl(fileName);
 
     // DB 업데이트
