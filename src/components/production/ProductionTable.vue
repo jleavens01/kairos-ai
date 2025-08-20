@@ -9,8 +9,8 @@
         <button @click="handleCharacterExtraction" class="btn-character">
           👥 캐릭터 추출
         </button>
-        <button @click="$emit('open-news-collector')" class="btn-ai-news">
-          📰 AI 뉴스 수집
+        <button @click="handleReferenceKeywordExtraction" class="btn-reference-keywords">
+          🔍 자료 키워드 추출
         </button>
         <button @click="generateBatchTTS" class="btn-tts">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -155,12 +155,19 @@
                 <div class="tag-list">
                   <span 
                     v-for="(character, idx) in scene.characters" 
-                    :key="idx"
+                    :key="`char-${idx}`"
                     class="tag character-tag"
                   >
                     {{ character }}
                   </span>
-                  <span v-if="!scene.characters || scene.characters.length === 0" class="empty-hint">
+                  <span 
+                    v-for="(keyword, idx) in scene.reference_keywords" 
+                    :key="`keyword-${idx}`"
+                    class="tag reference-keyword-tag"
+                  >
+                    {{ keyword }}
+                  </span>
+                  <span v-if="(!scene.characters || scene.characters.length === 0) && (!scene.reference_keywords || scene.reference_keywords.length === 0)" class="empty-hint">
                     캐릭터 추가
                   </span>
                 </div>
@@ -784,6 +791,62 @@ const handleCharacterExtraction = () => {
     return
   }
   emit('character-extraction')
+}
+
+const handleReferenceKeywordExtraction = async () => {
+  if (props.selectedScenes.length === 0) {
+    alert('자료 키워드를 추출할 씬을 선택해주세요.')
+    return
+  }
+  
+  try {
+    // 로딩 표시
+    const loadingMessage = '자료 키워드를 추출하는 중...'
+    console.log(loadingMessage)
+    
+    // Supabase 세션 확인
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      alert('로그인이 필요합니다.')
+      return
+    }
+    
+    // API 호출
+    const response = await fetch('/.netlify/functions/extractReferenceKeywords', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      body: JSON.stringify({
+        projectId: props.projectId,
+        sheetIds: props.selectedScenes
+      })
+    })
+    
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || '키워드 추출에 실패했습니다')
+    }
+    
+    const result = await response.json()
+    console.log('키워드 추출 결과:', result)
+    
+    // 성공 메시지
+    if (result.success) {
+      alert(result.message || '자료 키워드가 추출되었습니다.')
+      
+      // 프로덕션 시트 다시 로드하여 새로운 키워드 표시
+      await productionStore.fetchProductionSheets(props.projectId)
+      
+      // 선택 해제
+      clearSelection()
+    }
+    
+  } catch (error) {
+    console.error('자료 키워드 추출 오류:', error)
+    alert(`자료 키워드 추출 실패: ${error.message}`)
+  }
 }
 
 const generateBatchTTS = async () => {
@@ -1462,6 +1525,7 @@ defineExpose({ deleteSelectedScenes })
 }
 
 .btn-character,
+.btn-reference-keywords,
 .btn-tts,
 .btn-download-tts {
   display: flex;
@@ -1513,6 +1577,7 @@ defineExpose({ deleteSelectedScenes })
 }
 
 .btn-character:hover,
+.btn-reference-keywords:hover,
 .btn-tts:hover,
 .btn-download-tts:hover {
   background-color: var(--primary-dark);
@@ -1925,6 +1990,13 @@ defineExpose({ deleteSelectedScenes })
 .character-tag {
   background-color: rgba(168, 85, 247, 0.15);
   color: #a855f7;
+  font-size: 0.75rem;
+  padding: 1px 6px;
+}
+
+.reference-keyword-tag {
+  background-color: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
   font-size: 0.75rem;
   padding: 1px 6px;
 }

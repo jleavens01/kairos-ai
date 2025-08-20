@@ -391,7 +391,7 @@ watch(searchQuery, () => {
   gap: 0.5rem;
   padding: 0.5rem 0.75rem;
   background: transparent;
-  border: 2px solid var(--border-color);
+  border: none;
   border-radius: 8px 0 0 8px;
   color: var(--text-primary);
   font-size: 0.9rem;
@@ -403,7 +403,6 @@ watch(searchQuery, () => {
 
 .media-type-button:hover {
   background: var(--bg-secondary);
-  border-color: var(--primary-color);
 }
 
 .dropdown-arrow {
@@ -468,9 +467,6 @@ watch(searchQuery, () => {
   padding: 0.875rem 3rem 0.875rem 160px; /* 왼쪽 패딩 증가 */
   border: 2px solid var(--border-color);
   border-radius: 8px;
-  border-left: none;
-  border-top-left-radius: 0;
-  border-bottom-left-radius: 0;
   font-size: 1rem;
   background: var(--bg-primary);
   color: var(--text-primary);
