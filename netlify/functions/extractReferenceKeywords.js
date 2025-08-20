@@ -109,7 +109,33 @@ export const handler = async (event) => {
         }
 
         const data = await response.json()
-        const aiResponse = JSON.parse(data.candidates[0].content.parts[0].text)
+        console.log('Gemini API response:', JSON.stringify(data, null, 2))
+        
+        // 응답 구조 안전하게 파싱
+        if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+          console.error('Invalid Gemini response structure:', data)
+          results.push({ 
+            id: sheet.id,
+            scene_number: sheet.scene_number,
+            keywords: [],
+            error: 'AI 응답 구조 오류'
+          })
+          continue
+        }
+        
+        let aiResponse
+        try {
+          aiResponse = JSON.parse(data.candidates[0].content.parts[0].text)
+        } catch (parseError) {
+          console.error('Failed to parse AI response:', data.candidates[0].content.parts[0].text)
+          results.push({ 
+            id: sheet.id,
+            scene_number: sheet.scene_number,
+            keywords: [],
+            error: 'AI 응답 파싱 실패'
+          })
+          continue
+        }
         
         // 키워드가 있는 경우만 저장
         const keywords = aiResponse.needs_reference ? (aiResponse.keywords || []) : []
