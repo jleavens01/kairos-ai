@@ -216,7 +216,7 @@ export async function generateImage({
     // 4. 개발 환경에서는 폴링, 프로덕션에서는 즉시 응답
     if (isDevelopment) {
       // 개발 환경: 폴링하여 결과 기다리기
-      const maxPollingTime = 60000; // 60초
+      const maxPollingTime = 25000; // 25초 (Netlify Dev의 30초 타임아웃보다 짧게)
       const pollingInterval = 2000; // 2초마다 체크
       const startTime = Date.now();
       
@@ -229,7 +229,15 @@ export async function generateImage({
           
           if (status.status === 'COMPLETED') {
             const result = await fal.queue.result(apiEndpoint, { requestId: request_id });
-            const imageUrl = result.images?.[0]?.url || result.image_url || result.url;
+            console.log('FAL AI result structure:', JSON.stringify(result, null, 2));
+            
+            // FAL AI 응답 구조에 따라 이미지 URL 추출
+            const imageUrl = result.images?.[0]?.url || 
+                           result.images?.[0] || 
+                           result.image?.url || 
+                           result.image_url || 
+                           result.url ||
+                           result.output;
             
             if (imageUrl) {
               // DB 업데이트
@@ -253,6 +261,10 @@ export async function generateImage({
                   storage_image_url: imageUrl
                 }
               };
+            } else {
+              // 이미지 URL을 찾을 수 없는 경우
+              console.error('No image URL found in result:', result);
+              throw new Error('Image URL not found in generation result');
             }
           } else if (status.status === 'FAILED') {
             throw new Error('Image generation failed');
