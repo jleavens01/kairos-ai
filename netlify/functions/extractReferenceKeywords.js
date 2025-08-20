@@ -40,7 +40,7 @@ export const handler = async (event) => {
     // 선택된 씬들의 정보 가져오기
     const { data: sheets, error: fetchError } = await supabase
       .from('production_sheets')
-      .select('id, scene_number, scene_description')
+      .select('id, scene_number, original_script_text')
       .in('id', sheetIds)
       .order('scene_number')
 
@@ -54,10 +54,10 @@ export const handler = async (event) => {
     
     for (const sheet of sheets) {
       const prompt = `
-다음 씬 설명을 분석하여 이 씬을 시각화하는데 필요한 자료나 레퍼런스를 검색하기 위한 키워드를 추출해주세요.
+다음 씬 스크립트를 분석하여 이 씬을 시각화하는데 필요한 자료나 레퍼런스를 검색하기 위한 키워드를 추출해주세요.
 
 씬 번호: ${sheet.scene_number}
-씬 설명: ${sheet.scene_description || '설명 없음'}
+씬 스크립트: ${sheet.original_script_text || '스크립트 없음'}
 
 분석 기준:
 1. 먼저 이 씬에서 시각적 자료가 필요한지 판단해주세요
