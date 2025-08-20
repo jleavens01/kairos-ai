@@ -216,7 +216,7 @@ export async function generateImage({
     // 4. 개발 환경에서는 폴링, 프로덕션에서는 즉시 응답
     if (isDevelopment) {
       // 개발 환경: 폴링하여 결과 기다리기
-      const maxPollingTime = 25000; // 25초 (Netlify Dev의 30초 타임아웃보다 짧게)
+      const maxPollingTime = 120000; // 120초
       const pollingInterval = 2000; // 2초마다 체크
       const startTime = Date.now();
       
