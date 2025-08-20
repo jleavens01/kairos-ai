@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY
+const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 export const handler = async (event) => {
   // CORS 처리
@@ -47,7 +47,7 @@ export const handler = async (event) => {
     if (fetchError) throw fetchError
 
     // Gemini API로 각 씬의 자료 키워드 추출
-    const GEMINI_API_KEY = process.env.GEMINI_API_KEY
+    const GEMINI_API_KEY = process.env.GENERATIVE_LANGUAGE_API_KEY
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`
 
     const results = []
