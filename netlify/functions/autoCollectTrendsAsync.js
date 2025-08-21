@@ -403,15 +403,58 @@ ${collectedData.naver.map(n => `- ${n.category}: ${n.trend}`).join('\n')}
 
 // 브랜드별 그룹화
 function groupByBrands(keywords) {
-  const brands = {};
+  const brandGroups = {};
   
-  keywords.forEach(kw => {
-    const brand = kw.brand || 'general';
-    if (!brands[brand]) {
-      brands[brand] = [];
+  if (!keywords || !Array.isArray(keywords)) {
+    return [];
+  }
+  
+  // 각 키워드를 브랜드로 그룹화
+  keywords.forEach((item, index) => {
+    const brand = item.brand || item.keyword || 'Unknown';
+    if (!brandGroups[brand]) {
+      brandGroups[brand] = {
+        brand,
+        trend: item.trend || 'steady',
+        topics: [],
+        score: 0,
+        count: 0
+      };
     }
-    brands[brand].push(kw);
+    
+    if (item.topic) {
+      brandGroups[brand].topics.push(item.topic);
+    }
+    
+    brandGroups[brand].count++;
+    
+    // 트렌드별 기본 점수 (더 다양하게 설정)
+    const trendScores = { 
+      viral: 85 + Math.random() * 15,  // 85-100
+      hot: 60 + Math.random() * 20,    // 60-80
+      rising: 35 + Math.random() * 20, // 35-55
+      steady: 15 + Math.random() * 15  // 15-30
+    };
+    
+    const baseScore = trendScores[item.trend] || (10 + Math.random() * 10);
+    const positionBonus = Math.max(0, (15 - index) * 1.5); // 상위 항목 보너스
+    const randomFactor = Math.random() * 10 - 5; // ±5 랜덤 요소
+    
+    brandGroups[brand].score += baseScore + positionBonus + randomFactor;
   });
   
-  return brands;
+  // 평균 점수 계산하고 정규화
+  Object.values(brandGroups).forEach(group => {
+    // 평균 점수 계산
+    group.score = Math.round(group.score / Math.max(1, group.count));
+    
+    // 점수 범위 제한 (10-100)
+    group.score = Math.min(100, Math.max(10, group.score));
+    
+    // 중복 토픽 제거
+    group.topics = [...new Set(group.topics)];
+  });
+  
+  // 점수 순으로 정렬하여 배열로 반환
+  return Object.values(brandGroups).sort((a, b) => b.score - a.score);
 }
