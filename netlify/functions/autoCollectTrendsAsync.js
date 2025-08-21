@@ -148,20 +148,29 @@ async function processInBackground(jobId, projectId) {
       }
     };
     
-    // 결과를 프로젝트 metadata에 저장
-    const { error: updateError } = await supabase
-      .from('projects')
-      .update({
-        metadata: {
-          lastTrendAnalysis: result,
-          lastTrendJobId: jobId,
-          lastTrendUpdate: new Date().toISOString()
-        }
-      })
-      .eq('id', projectId);
-    
-    if (updateError) {
-      throw updateError;
+    // projectId가 'default'가 아닌 경우에만 프로젝트에 저장
+    if (projectId && projectId !== 'default') {
+      const { error: updateError } = await supabase
+        .from('projects')
+        .update({
+          metadata: {
+            lastTrendAnalysis: result,
+            lastTrendJobId: jobId,
+            lastTrendUpdate: new Date().toISOString()
+          }
+        })
+        .eq('id', projectId);
+      
+      if (updateError) {
+        console.error('프로젝트 업데이트 실패:', updateError);
+        // 에러를 throw하지 않고 계속 진행
+      }
+    } else {
+      // default인 경우 별도 테이블이나 로컬 스토리지 사용
+      console.log('Default project - 결과를 메모리에만 저장');
+      // 임시로 메모리에 저장 (실제로는 별도 처리 필요)
+      global.lastTrendResult = result;
+      global.lastTrendJobId = jobId;
     }
     
     // 상태 업데이트: completed

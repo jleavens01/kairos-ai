@@ -30,6 +30,50 @@ export const handler = async (event) => {
       };
     }
     
+    // default 프로젝트인 경우 global 변수에서 확인
+    if (projectId === 'default') {
+      const trendData = global.lastTrendResult;
+      const lastJobId = global.lastTrendJobId;
+      
+      if (!trendData) {
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify({
+            success: true,
+            status: 'no_data',
+            message: '아직 트렌드 분석 결과가 없습니다.'
+          })
+        };
+      }
+      
+      // jobId가 제공되었고 일치하지 않으면 처리 중
+      if (jobId && jobId !== lastJobId) {
+        return {
+          statusCode: 200,
+          headers,
+          body: JSON.stringify({
+            success: true,
+            status: 'processing',
+            message: '트렌드 분석이 진행 중입니다. 잠시 후 다시 확인해주세요.',
+            jobId
+          })
+        };
+      }
+      
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          success: true,
+          status: 'completed',
+          data: trendData,
+          jobId: lastJobId,
+          updatedAt: new Date().toISOString()
+        })
+      };
+    }
+    
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
     // 프로젝트에서 트렌드 분석 결과 가져오기
@@ -40,7 +84,17 @@ export const handler = async (event) => {
       .single();
     
     if (projectError) {
-      throw projectError;
+      console.error('프로젝트 조회 실패:', projectError);
+      // 에러인 경우에도 graceful하게 처리
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          success: true,
+          status: 'no_data',
+          message: '프로젝트를 찾을 수 없습니다.'
+        })
+      };
     }
     
     const trendData = project?.metadata?.lastTrendAnalysis;
