@@ -58,6 +58,12 @@ export const handler = async (event) => {
 
     // Gemini API로 캐릭터 정규화
     const GEMINI_API_KEY = process.env.GENERATIVE_LANGUAGE_API_KEY;
+    
+    if (!GEMINI_API_KEY) {
+      console.error('GENERATIVE_LANGUAGE_API_KEY 환경 변수가 설정되지 않았습니다');
+      throw new Error('Gemini API 키가 설정되지 않았습니다');
+    }
+    
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
 
     const prompt = `
@@ -122,11 +128,23 @@ ${Object.entries(characterByScene).map(([scene, chars]) =>
 
     const data = await response.json();
     
-    if (!data.candidates?.[0]?.content?.parts?.[0]) {
+    console.log('Gemini API Response:', JSON.stringify(data, null, 2));
+    
+    if (!data.candidates?.[0]?.content?.parts?.[0]?.text) {
+      console.error('Gemini API 응답 형식 오류:', data);
       throw new Error('Gemini API 응답 형식 오류');
     }
 
-    const aiResult = JSON.parse(data.candidates[0].content.parts[0].text);
+    let aiResult;
+    try {
+      const responseText = data.candidates[0].content.parts[0].text;
+      console.log('Parsing response text:', responseText);
+      aiResult = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('JSON 파싱 오류:', parseError);
+      console.error('Response text:', data.candidates[0].content.parts[0].text);
+      throw new Error(`Gemini 응답 파싱 실패: ${parseError.message}`);
+    }
     
     // 각 시트의 캐릭터 정규화 및 업데이트
     const updatePromises = sheets.map(async sheet => {
@@ -202,13 +220,28 @@ ${Object.entries(characterByScene).map(([scene, chars]) =>
     };
 
   } catch (error) {
-    console.error('Error:', error);
+    console.error('Smart normalization error:', error);
+    console.error('Error stack:', error.stack);
+    
+    // 상세한 에러 메시지 반환
+    let errorMessage = '스마트 캐릭터 정규화 중 오류가 발생했습니다';
+    let errorDetails = error.message;
+    
+    if (error.message && error.message.includes('API 키')) {
+      errorMessage = 'Gemini API 키가 설정되지 않았습니다';
+      errorDetails = 'Netlify 환경 변수에 GENERATIVE_LANGUAGE_API_KEY를 설정해주세요';
+    } else if (error.message && error.message.includes('파싱')) {
+      errorMessage = 'AI 응답 파싱 실패';
+      errorDetails = 'Gemini API가 올바른 JSON 형식을 반환하지 않았습니다';
+    }
+    
     return {
       statusCode: 500,
       headers,
       body: JSON.stringify({ 
         success: false,
-        error: error.message || '스마트 캐릭터 정규화 중 오류가 발생했습니다'
+        error: errorMessage,
+        details: errorDetails
       })
     };
   }
