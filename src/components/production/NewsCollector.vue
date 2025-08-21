@@ -11,7 +11,7 @@
       <div class="header-actions">
         <button @click="collectTrends" :disabled="isCollecting || isLoading" class="btn-primary">
           <RefreshCw :size="16" :class="{ spinning: isCollecting }" />
-          {{ isCollecting ? '분석 중...' : '새로 수집' }}
+          {{ isCollecting ? (collectingProgress || '분석 중...') : '새로 수집' }}
         </button>
         <span v-if="lastCollected" class="last-collected">
           <Clock :size="14" />
@@ -429,6 +429,7 @@ const productionStore = useProductionStore()
 
 // State
 const isCollecting = ref(false)
+const collectingProgress = ref('')
 const isLoading = ref(true)
 const trendData = ref(null)
 const lastCollected = ref(null)
@@ -452,42 +453,85 @@ const filteredBrands = computed(() => {
 // Methods
 const collectTrends = async () => {
   isCollecting.value = true
+  collectingProgress.value = '시작 중...'
   errorMessage.value = null
+  let currentJobId = null
   
   try {
-    const response = await fetch('/.netlify/functions/autoCollectTrends', {
+    // 1. 비동기 작업 시작
+    const startResponse = await fetch('/.netlify/functions/autoCollectTrendsAsync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({})
+      body: JSON.stringify({
+        projectId: props.projectId || 'default'
+      })
     })
     
-    const result = await response.json()
+    const startResult = await startResponse.json()
     
-    if (result.success) {
-      trendData.value = result.data
+    if (!startResult.success) {
+      throw new Error(startResult.error || '트렌드 수집 시작 실패')
+    }
+    
+    currentJobId = startResult.jobId
+    console.log('트렌드 수집 시작:', currentJobId)
+    collectingProgress.value = '수집 중...'
+    
+    // 2. 폴링으로 결과 확인 (최대 60초)
+    const maxAttempts = 30 // 2초마다 체크, 최대 60초
+    let attempts = 0
+    let resultData = null
+    
+    while (attempts < maxAttempts) {
+      await new Promise(resolve => setTimeout(resolve, 2000)) // 2초 대기
+      
+      const checkResponse = await fetch(`/.netlify/functions/getTrendResult?projectId=${props.projectId || 'default'}&jobId=${currentJobId}`)
+      const checkResult = await checkResponse.json()
+      
+      if (checkResult.success && checkResult.status === 'completed') {
+        resultData = checkResult.data
+        break
+      } else if (checkResult.status === 'failed') {
+        throw new Error('트렌드 수집 실패')
+      }
+      
+      attempts++
+      
+      // 진행 상황 표시
+      const elapsedSeconds = attempts * 2
+      collectingProgress.value = `${elapsedSeconds}초...`
+      
+      if (attempts % 5 === 0) {
+        console.log(`트렌드 수집 진행 중... (${elapsedSeconds}초 경과)`)
+      }
+    }
+    
+    if (resultData) {
+      collectingProgress.value = '완료!'
+      trendData.value = resultData
       lastCollected.value = new Date()
       dataSource.value = 'fresh'
-      console.log('트렌드 수집 완료:', result.data)
+      console.log('트렌드 수집 완료:', resultData)
       
       // 스토어에 저장
       if (productionStore.setTrendData) {
-        productionStore.setTrendData(result.data)
+        productionStore.setTrendData(resultData)
       }
       
       // Supabase에 저장
-      await saveTrendDataToSupabase(result.data)
+      await saveTrendDataToSupabase(resultData)
     } else {
-      errorMessage.value = result.error || '트렌드 수집 실패'
-      trendData.value = null
-      console.error('트렌드 수집 실패:', result.error)
+      errorMessage.value = '트렌드 수집 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.'
+      console.error('트렌드 수집 타임아웃')
     }
     
   } catch (error) {
     console.error('트렌드 수집 오류:', error)
-    errorMessage.value = '트렌드 수집 중 오류가 발생했습니다. API 설정을 확인해주세요.'
+    errorMessage.value = error.message || '트렌드 수집 중 오류가 발생했습니다.'
     trendData.value = null
   } finally {
     isCollecting.value = false
+    collectingProgress.value = ''
   }
 }
 
