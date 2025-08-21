@@ -12,9 +12,6 @@
         <button @click="handleReferenceKeywordExtraction" class="btn-reference-keywords">
           🔍 자료 키워드 추출
         </button>
-        <button @click="handleCharacterNormalization" class="btn-normalize">
-          🔄 캐릭터 정규화
-        </button>
         <button @click="generateBatchTTS" class="btn-tts">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
@@ -882,59 +879,6 @@ const handleReferenceKeywordExtraction = async () => {
   } catch (error) {
     console.error('자료 키워드 추출 오류:', error)
     alert(`자료 키워드 추출 실패: ${error.message}`)
-  }
-}
-
-const handleCharacterNormalization = async () => {
-  try {
-    const confirmMessage = '모든 씬의 캐릭터를 정규화하시겠습니까?\n(동일 캐릭터의 다양한 표현을 하나로 통합합니다)'
-    if (!confirm(confirmMessage)) {
-      return
-    }
-    
-    // 로딩 표시
-    const loadingMessage = '캐릭터를 정규화하는 중...'
-    console.log(loadingMessage)
-    
-    // Supabase 세션 확인
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      alert('로그인이 필요합니다.')
-      return
-    }
-    
-    // API 호출 (스마트 AI 정규화 사용)
-    const response = await fetch('/.netlify/functions/smartNormalizeCharacters', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`
-      },
-      body: JSON.stringify({
-        projectId: props.projectId
-      })
-    })
-    
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.error || '캐릭터 정규화에 실패했습니다')
-    }
-    
-    const result = await response.json()
-    console.log('캐릭터 정규화 결과:', result)
-    
-    // 성공 메시지
-    if (result.success) {
-      const mainCharacters = result.data.mainCharacters || []
-      alert(`캐릭터 정규화 완료!\n\n주요 캐릭터: ${mainCharacters.join(', ')}\n${result.data.message}`)
-      
-      // 프로덕션 시트 다시 로드하여 정규화된 캐릭터 표시
-      await productionStore.fetchProductionSheets(props.projectId)
-    }
-    
-  } catch (error) {
-    console.error('캐릭터 정규화 오류:', error)
-    alert(`캐릭터 정규화 실패: ${error.message}`)
   }
 }
 
