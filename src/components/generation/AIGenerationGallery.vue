@@ -197,6 +197,18 @@
       @edit-tags="openTagEditorFromDetail"
       @connect-scene="connectToSceneFromDetail"
       @edit-image="handleEditImage"
+      @generate-video="handleGenerateVideo"
+    />
+    
+    <!-- 비디오 생성 모달 -->
+    <VideoGenerationModal
+      v-if="showVideoModal"
+      :show="showVideoModal"
+      :project-id="projectId"
+      :initial-prompt="videoPrompt"
+      :initial-image="videoReferenceImage"
+      @close="closeVideoModal"
+      @generated="handleVideoGenerated"
     />
   </div>
 </template>
@@ -206,6 +218,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { supabase } from '@/utils/supabase'
 import { useProductionStore } from '@/stores/production'
 import ImageGenerationModal from './ImageGenerationModal.vue'
+import VideoGenerationModal from './VideoGenerationModal.vue'
 import SceneConnectionModal from './SceneConnectionModal.vue'
 import { Link, Tag, Download, Trash2, Loader, Plus, User, Image, Star, Archive } from 'lucide-vue-next'
 import TagEditModal from './TagEditModal.vue'
@@ -231,12 +244,15 @@ const showGenerationModal = ref(false)
 const showSceneModal = ref(false)
 const showTagModal = ref(false)
 const showDetailModal = ref(false)
+const showVideoModal = ref(false) // 비디오 생성 모달 상태
 const currentPrompt = ref('')
 const currentCharacter = ref('')
 const imageToConnect = ref(null)
 const imageToEdit = ref(null)
 const imageToView = ref(null)
 const editImageData = ref(null) // 이미지 수정을 위한 데이터
+const videoPrompt = ref('') // 비디오 생성용 프롬프트
+const videoReferenceImage = ref(null) // 비디오 생성용 참조 이미지
 // const realtimeChannel = ref(null) - Realtime 제거
 
 // 모달 상태를 store와 동기화
@@ -253,6 +269,10 @@ watch(showSceneModal, (isOpen) => {
 })
 
 watch(showTagModal, (isOpen) => {
+  productionStore.setModalOpen(isOpen)
+})
+
+watch(showVideoModal, (isOpen) => {
   productionStore.setModalOpen(isOpen)
 })
 
@@ -857,6 +877,28 @@ const handleEditImage = (editData) => {
   
   // 생성 모달 열기
   showGenerationModal.value = true
+}
+
+const handleGenerateVideo = (videoData) => {
+  // 비디오 생성 모달에 데이터 전달
+  videoPrompt.value = videoData.prompt || ''
+  videoReferenceImage.value = videoData.imageUrl || null
+  
+  // 비디오 생성 모달 열기
+  showVideoModal.value = true
+}
+
+const closeVideoModal = () => {
+  showVideoModal.value = false
+  videoPrompt.value = ''
+  videoReferenceImage.value = null
+}
+
+const handleVideoGenerated = () => {
+  // 비디오 생성 성공 시 처리
+  closeVideoModal()
+  // 비디오 갤러리로 전환하거나 알림 표시 등
+  console.log('비디오 생성이 시작되었습니다.')
 }
 
 // 웹훅 업데이트 처리

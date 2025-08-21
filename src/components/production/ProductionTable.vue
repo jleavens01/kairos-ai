@@ -12,6 +12,9 @@
         <button @click="handleReferenceKeywordExtraction" class="btn-reference-keywords">
           🔍 자료 키워드 추출
         </button>
+        <button @click="handleCharacterNormalization" class="btn-normalize">
+          🔄 캐릭터 정규화
+        </button>
         <button @click="generateBatchTTS" class="btn-tts">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
@@ -801,7 +804,7 @@ const handleReferenceKeywordExtraction = async () => {
   
   try {
     // 로딩 표시
-    const loadingMessage = '자료 키워드를 추출하는 중...'
+    const loadingMessage = '자료 키워드 추출을 시작합니다...'
     console.log(loadingMessage)
     
     // Supabase 세션 확인
@@ -811,8 +814,8 @@ const handleReferenceKeywordExtraction = async () => {
       return
     }
     
-    // API 호출
-    const response = await fetch('/.netlify/functions/extractReferenceKeywords', {
+    // 비동기 API 호출 (웹훅 방식)
+    const response = await fetch('/.netlify/functions/extractReferenceKeywordsAsync', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -826,26 +829,112 @@ const handleReferenceKeywordExtraction = async () => {
     
     if (!response.ok) {
       const error = await response.json()
-      throw new Error(error.error || '키워드 추출에 실패했습니다')
+      throw new Error(error.error || '키워드 추출 시작에 실패했습니다')
     }
     
     const result = await response.json()
-    console.log('키워드 추출 결과:', result)
+    console.log('키워드 추출 시작:', result)
     
     // 성공 메시지
     if (result.success) {
-      alert(result.message || '자료 키워드가 추출되었습니다.')
-      
-      // 프로덕션 시트 다시 로드하여 새로운 키워드 표시
-      await productionStore.fetchProductionSheets(props.projectId)
+      alert(`${props.selectedScenes.length}개 씬의 키워드 추출이 시작되었습니다.\n백그라운드에서 처리되며, 완료되면 자동으로 반영됩니다.`)
       
       // 선택 해제
       clearSelection()
+      
+      // 작업 상태 체크 (5초마다)
+      const checkJobStatus = setInterval(async () => {
+        try {
+          const { data: project } = await supabase
+            .from('projects')
+            .select('metadata')
+            .eq('id', props.projectId)
+            .single()
+          
+          const job = project?.metadata?.keyword_extraction_jobs?.[result.jobId]
+          
+          if (job) {
+            if (job.status === 'completed') {
+              clearInterval(checkJobStatus)
+              console.log('키워드 추출 완료!')
+              // 프로덕션 시트 다시 로드하여 새로운 키워드 표시
+              await productionStore.fetchProductionSheets(props.projectId)
+            } else if (job.status === 'failed') {
+              clearInterval(checkJobStatus)
+              console.error('키워드 추출 실패:', job.error)
+              alert('키워드 추출에 실패했습니다.')
+            } else {
+              // 진행 상황 표시 (옵션)
+              console.log(`진행 중: ${job.processedSheets}/${job.totalSheets}`)
+            }
+          }
+        } catch (error) {
+          console.error('Job status check error:', error)
+        }
+      }, 5000)
+      
+      // 최대 5분 후 체크 중지
+      setTimeout(() => {
+        clearInterval(checkJobStatus)
+      }, 300000)
     }
     
   } catch (error) {
     console.error('자료 키워드 추출 오류:', error)
     alert(`자료 키워드 추출 실패: ${error.message}`)
+  }
+}
+
+const handleCharacterNormalization = async () => {
+  try {
+    const confirmMessage = '모든 씬의 캐릭터를 정규화하시겠습니까?\n(동일 캐릭터의 다양한 표현을 하나로 통합합니다)'
+    if (!confirm(confirmMessage)) {
+      return
+    }
+    
+    // 로딩 표시
+    const loadingMessage = '캐릭터를 정규화하는 중...'
+    console.log(loadingMessage)
+    
+    // Supabase 세션 확인
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) {
+      alert('로그인이 필요합니다.')
+      return
+    }
+    
+    // API 호출 (스마트 AI 정규화 사용)
+    const response = await fetch('/.netlify/functions/smartNormalizeCharacters', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`
+      },
+      body: JSON.stringify({
+        projectId: props.projectId
+      })
+    })
+    
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || '캐릭터 정규화에 실패했습니다')
+    }
+    
+    const result = await response.json()
+    console.log('캐릭터 정규화 결과:', result)
+    
+    // 성공 메시지
+    if (result.success) {
+      const mainCharacters = result.data.mainCharacters || []
+      alert(`캐릭터 정규화 완료!\n\n주요 캐릭터: ${mainCharacters.join(', ')}\n${result.data.message}`)
+      
+      // 프로덕션 시트 다시 로드하여 정규화된 캐릭터 표시
+      await productionStore.fetchProductionSheets(props.projectId)
+    }
+    
+  } catch (error) {
+    console.error('캐릭터 정규화 오류:', error)
+    alert(`캐릭터 정규화 실패: ${error.message}`)
   }
 }
 
@@ -1757,6 +1846,27 @@ defineExpose({ deleteSelectedScenes })
 /* 비디오 레이블 활성화 시 초록색 */
 .media-label:last-child.active {
   color: var(--primary-color);
+}
+
+/* 캐릭터 정규화 버튼 스타일 */
+.btn-normalize {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-normalize:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
 }
 
 /* Toggle switch styles */

@@ -541,27 +541,53 @@ const downloadAllFrames = async () => {
 
 const saveFrameToSupabase = async (frame) => {
   try {
-    const fileName = `videos/${props.video.id}/frames/frame-${frame.time.toFixed(1)}s-${Date.now()}.jpg`
+    // Blob을 Base64로 변환
+    const reader = new FileReader()
+    const base64Promise = new Promise((resolve) => {
+      reader.onloadend = () => resolve(reader.result)
+      reader.readAsDataURL(frame.blob)
+    })
+    const imageBase64 = await base64Promise
     
-    const { data, error } = await supabase.storage
-      .from('projects')
-      .upload(fileName, frame.blob, {
-        contentType: 'image/jpeg',
-        cacheControl: '3600'
+    // Netlify 함수를 통해 저장
+    const response = await fetch('/.netlify/functions/saveVideoFrame', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        videoId: props.video.id,
+        projectId: props.video.project_id,
+        productionSheetId: props.video.production_sheet_id || props.video.linked_scene_id,
+        frameTime: frame.time.toFixed(1),
+        frameTimestamp: frame.timestamp,
+        videoDuration: videoElement.value?.duration || 0,
+        videoModel: props.video.generation_model,
+        videoPrompt: props.video.prompt_used || props.video.custom_prompt,
+        imageBase64: imageBase64
       })
+    })
     
-    if (error) throw error
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Failed to save frame')
+    }
     
-    // 공개 URL 가져오기
-    const { data: { publicUrl } } = supabase.storage
-      .from('projects')
-      .getPublicUrl(fileName)
+    const result = await response.json()
     
-    alert(`프레임이 저장되었습니다.`)
-    console.log('프레임 저장됨:', publicUrl)
+    alert(result.message || '프레임이 이미지 갤러리에 저장되었습니다.')
+    console.log('프레임 저장됨:', result)
     
-    // 프레임 객체에 URL 추가
-    frame.savedUrl = publicUrl
+    // 프레임 객체에 URL과 ID 추가
+    frame.savedUrl = result.publicUrl
+    frame.imageId = result.imageId
+    
+    // 부모 컴포넌트에 알림 (필요시)
+    emit('frame-saved', {
+      id: result.imageId,
+      storage_image_url: result.publicUrl
+    })
+    
   } catch (error) {
     console.error('프레임 저장 실패:', error)
     alert('프레임 저장에 실패했습니다.')

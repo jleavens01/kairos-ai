@@ -107,6 +107,12 @@
 
           <!-- 업로드 탭 -->
           <div v-if="referenceTab === 'upload'" class="reference-content">
+            <!-- 이미 선택된 이미지가 있으면 표시 -->
+            <div v-if="referenceImages.length > 0" class="upload-info">
+              <p class="upload-status">✅ 이미지가 선택되었습니다 ({{ referenceImages.length }}개)</p>
+              <p class="upload-hint">아래에서 선택된 이미지를 확인하고 편집할 수 있습니다.</p>
+            </div>
+            <!-- 추가 업로드 영역 -->
             <div 
               class="drop-zone-compact"
               :class="{ 'drag-over': isDragging }"
@@ -125,7 +131,7 @@
               />
               <div class="drop-zone-content">
                 <span class="drop-icon-small">📁</span>
-                <span>클릭 또는 드래그하여 업로드</span>
+                <span>{{ referenceImages.length > 0 ? '추가 이미지 업로드' : '클릭 또는 드래그하여 업로드' }}</span>
               </div>
             </div>
           </div>
@@ -526,7 +532,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { supabase } from '@/utils/supabase'
 import { Video, X, Layers, Upload, BookOpen, ImagePlus, Settings, Edit2, Brush } from 'lucide-vue-next'
 import PresetManageModal from './PresetManageModal.vue'
@@ -545,6 +551,10 @@ const props = defineProps({
   initialPrompt: {
     type: String,
     default: ''
+  },
+  initialImage: {
+    type: String,
+    default: null
   }
 })
 
@@ -560,7 +570,8 @@ const selectedModel = ref('veo2')  // Google Veo2가 기본 모델
 const generating = ref(false)
 
 // 참조 이미지 관련
-const referenceTab = ref('storyboard')  // 기본값을 스토리보드로 변경
+// 초기 이미지가 있으면 upload 탭으로, 없으면 storyboard 탭으로 시작
+const referenceTab = ref(props.initialImage ? 'upload' : 'storyboard')
 const referenceImages = ref([])
 const isDragging = ref(false)
 const libraryImages = ref([])
@@ -679,22 +690,65 @@ onMounted(async () => {
   if (props.initialPrompt) {
     prompt.value = props.initialPrompt
   }
+  
+  // 초기 이미지가 있으면 설정
+  if (props.initialImage && props.show) {
+    referenceImages.value = [{
+      url: props.initialImage,
+      preview: props.initialImage,
+      thumbnail: props.initialImage,
+      name: 'Selected Image from Gallery'
+    }]
+    referenceTab.value = 'upload'
+  }
+  
   await loadLibraryImages()
   await loadStoryboardImages()
   await loadPresets()
   await loadLastUsedSettings()
 })
 
-// watch props 변경
-watch(() => props.show, (newVal) => {
-  if (newVal) {
-    if (referenceTab.value === 'library') {
-      loadLibraryImages()
-    } else if (referenceTab.value === 'storyboard') {
-      loadStoryboardImages()
+// watch props 변경 - show와 initialImage를 모두 감시
+watch(
+  () => ({ show: props.show, image: props.initialImage, prompt: props.initialPrompt }),
+  (newVal, oldVal) => {
+    if (newVal.show) {
+      // 모달이 열릴 때마다 초기화 및 설정
+      
+      // 초기 이미지가 전달되면 참조 이미지에 추가
+      if (newVal.image) {
+        // 참조 이미지 배열 초기화 후 새 이미지 추가
+        const newImage = {
+          url: newVal.image,
+          preview: newVal.image,
+          thumbnail: newVal.image,
+          name: 'Selected Image from Gallery'
+        }
+        referenceImages.value = [newImage]
+        // 업로드 탭으로 전환
+        referenceTab.value = 'upload'
+      } else {
+        // 초기 이미지가 없으면 참조 이미지 초기화
+        referenceImages.value = []
+        // 기본 탭으로 전환
+        referenceTab.value = 'storyboard'
+        // 스토리보드 이미지 로드
+        loadStoryboardImages()
+      }
+      
+      // 초기 프롬프트 설정
+      if (newVal.prompt) {
+        prompt.value = newVal.prompt
+      }
+    } else if (!newVal.show && oldVal?.show) {
+      // 모달이 닫힐 때 초기화
+      referenceImages.value = []
+      prompt.value = ''
+      referenceTab.value = 'storyboard'
     }
-  }
-})
+  },
+  { immediate: true }
+)
 
 // 메서드들
 const close = () => {
@@ -990,8 +1044,21 @@ const handleTranslationToggle = () => {
 
 // 컴포넌트 마운트 시 초기 번역
 watch(() => props.show, (newVal) => {
-  if (newVal && enableTranslation.value && prompt.value) {
-    translatePrompts()
+  if (newVal) {
+    // 초기 프롬프트가 전달되면 설정
+    if (props.initialPrompt) {
+      console.log('Initial prompt received:', props.initialPrompt)
+      prompt.value = props.initialPrompt
+    }
+    
+    if (enableTranslation.value && prompt.value) {
+      translatePrompts()
+    }
+  } else {
+    // 모달이 닫힐 때 프롬프트 초기화 (초기값이 있었던 경우)
+    if (props.initialPrompt) {
+      prompt.value = ''
+    }
   }
 })
 
@@ -1404,6 +1471,26 @@ const generateVideo = async () => {
 .reference-content {
   margin-top: 10px;
   min-height: 80px;
+}
+
+/* 업로드 정보 표시 */
+.upload-info {
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.upload-status {
+  color: var(--success-color, #4ade80);
+  font-weight: 600;
+  margin: 0 0 4px 0;
+}
+
+.upload-hint {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin: 0;
 }
 
 /* 컴팩트 드래그 영역 */

@@ -1,6 +1,12 @@
 // 백그라운드에서 이미지 생성 상태를 확인하는 워커 함수
 import { createClient } from '@supabase/supabase-js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { fal } from '@fal-ai/client';
+
+// FAL AI 클라이언트 설정
+fal.config({
+  credentials: process.env.FAL_API_KEY
+});
 
 export const handler = async (event) => {
   const headers = {
@@ -49,108 +55,78 @@ export const handler = async (event) => {
     // 각 이미지의 상태 확인
     const results = await Promise.allSettled(
       processingImages.map(async (image) => {
-        if (!image.metadata?.status_url) {
-          return { id: image.id, status: 'no_status_url' };
+        // request_id가 없으면 스킵
+        if (!image.request_id) {
+          console.log(`Image ${image.id} has no request_id`);
+          return { id: image.id, status: 'no_request_id' };
         }
 
         try {
-          // FAL AI 상태 확인
-          const statusResponse = await fetch(image.metadata.status_url, {
-            headers: {
-              'Authorization': `Key ${process.env.FAL_API_KEY}`
+          // FAL AI SDK로 상태 확인
+          // 모델별로 엔드포인트가 다름
+          let apiEndpoint;
+          if (image.generation_model === 'gpt-image-1') {
+            // GPT 이미지는 참조 이미지 여부에 따라 엔드포인트가 다름
+            if (image.reference_image_url) {
+              apiEndpoint = 'fal-ai/gpt-image-1/edit-image/byok';
+            } else {
+              apiEndpoint = 'fal-ai/gpt-image-1/text-to-image/byok';
             }
-          });
-
-          if (!statusResponse.ok) {
-            throw new Error('Failed to check FAL AI status');
+          } else if (image.generation_model?.includes('flux')) {
+            // Flux 모델들
+            if (image.generation_model === 'flux-schnell') {
+              apiEndpoint = 'fal-ai/flux/schnell';
+            } else if (image.generation_model === 'flux-pro') {
+              apiEndpoint = 'fal-ai/flux-pro';
+            } else if (image.generation_model === 'flux-kontext') {
+              apiEndpoint = 'fal-ai/flux-pro/kontext';
+            } else if (image.generation_model === 'flux-kontext-multi') {
+              apiEndpoint = 'fal-ai/flux-pro/kontext/max/multi';
+            } else {
+              apiEndpoint = 'fal-ai/flux/schnell'; // 기본값
+            }
+          } else {
+            // 알 수 없는 모델
+            console.log(`Unknown model for image ${image.id}: ${image.generation_model}`);
+            return { id: image.id, status: 'unknown_model' };
           }
 
-          const statusData = await statusResponse.json();
-          console.log(`Status for image ${image.id}:`, statusData);
+          console.log(`Checking status for image ${image.id} with model ${image.generation_model} at ${apiEndpoint}`);
           
-          // FAL AI 응답 구조 확인 및 처리
-          // FAL AI는 완료 시 바로 결과를 반환 (status 필드가 없을 수 있음)
-          // FAL AI는 대문자 상태 코드를 사용 (COMPLETED, IN_PROGRESS 등)
-          const isCompleted = statusData.images || statusData.output || statusData.image || 
-                            (statusData.status && (statusData.status === 'completed' || statusData.status === 'COMPLETED'));
+          // FAL AI SDK로 상태 확인
+          const statusData = await fal.queue.status(apiEndpoint, { 
+            requestId: image.request_id 
+          });
+          
+          console.log(`Status for image ${image.id}:`, statusData.status);
+          
+          // 상태별 처리
+          const status = statusData.status;
           
           // 완료된 경우
-          if (isCompleted) {
+          if (status === 'COMPLETED') {
+            // FAL AI SDK로 결과 가져오기
+            const result = await fal.queue.result(apiEndpoint, { 
+              requestId: image.request_id 
+            });
+            
+            console.log(`Result for image ${image.id}:`, result);
+            
             // 다양한 응답 형식 처리
             let imageUrl = null;
             
-            // COMPLETED 상태이지만 실제 결과가 없는 경우 response_url에서 가져오기
-            if (statusData.status === 'COMPLETED' && !statusData.images && !statusData.output && statusData.response_url) {
-              console.log('Fetching completed result from response_url:', statusData.response_url);
-              const resultResponse = await fetch(statusData.response_url, {
-                headers: {
-                  'Authorization': `Key ${process.env.FAL_API_KEY}`
-                }
-              });
-              
-              if (resultResponse.ok) {
-                const resultData = await resultResponse.json();
-                console.log('Result from response_url:', resultData);
-                
-                // 에러 체크 (Flux 모델의 경우 validation error가 있을 수 있음)
-                if (resultData.error || resultData.detail) {
-                  const errorMessage = resultData.detail || resultData.error || 'Generation failed';
-                  console.error('Flux model error:', errorMessage);
-                  
-                  // 실패 상태로 업데이트
-                  await supabaseAdmin
-                    .from('gen_images')
-                    .update({
-                      generation_status: 'failed',
-                      metadata: {
-                        ...image.metadata,
-                        error: errorMessage,
-                        error_details: resultData,
-                        failed_at: new Date().toISOString()
-                      },
-                      updated_at: new Date().toISOString()
-                    })
-                    .eq('id', image.id);
-                  
-                  return { id: image.id, status: 'failed', error: errorMessage };
-                }
-                
-                if (resultData.images && resultData.images.length > 0) {
-                  imageUrl = resultData.images[0].url || resultData.images[0];
-                } else if (resultData.output) {
-                  imageUrl = resultData.output.url || resultData.output;
-                } else if (resultData.image) {
-                  imageUrl = resultData.image.url || resultData.image;
-                }
-              } else {
-                // response_url 요청 실패
-                const errorText = await resultResponse.text();
-                console.error('Failed to fetch result from response_url:', errorText);
-                
-                await supabaseAdmin
-                  .from('gen_images')
-                  .update({
-                    generation_status: 'failed',
-                    metadata: {
-                      ...image.metadata,
-                      error: 'Failed to fetch generation result',
-                      error_details: errorText,
-                      failed_at: new Date().toISOString()
-                    },
-                    updated_at: new Date().toISOString()
-                  })
-                  .eq('id', image.id);
-                
-                return { id: image.id, status: 'failed', error: 'Failed to fetch result' };
-              }
-            } else if (statusData.images && statusData.images.length > 0) {
-              imageUrl = statusData.images[0].url || statusData.images[0];
-            } else if (statusData.output) {
-              imageUrl = statusData.output.url || statusData.output;
-            } else if (statusData.image) {
-              imageUrl = statusData.image.url || statusData.image;
-            } else if (typeof statusData === 'string') {
-              imageUrl = statusData;
+            if (result.images && result.images.length > 0) {
+              imageUrl = result.images[0].url || result.images[0];
+            } else if (result.output) {
+              imageUrl = result.output.url || result.output;
+            } else if (result.image) {
+              imageUrl = result.image.url || result.image;
+            } else if (result.image_url) {
+              imageUrl = result.image_url;
+            } else if (result.url) {
+              imageUrl = result.url;
+            } else if (typeof result === 'string') {
+              imageUrl = result;
             }
             
             if (!imageUrl) {
@@ -271,14 +247,8 @@ JSON 배열 형태로만 반환하고 다른 설명은 하지 마세요.
             return { id: image.id, status: 'completed' };
           }
           
-          // 실패한 경우 (대소문자 모두 처리)
-          const isFailed = statusData.status === 'failed' || 
-                          statusData.status === 'FAILED' ||
-                          statusData.status === 'error' ||
-                          statusData.status === 'ERROR' ||
-                          statusData.error;
-          
-          if (isFailed) {
+          // 실패한 경우
+          if (status === 'FAILED') {
             await supabaseAdmin
               .from('gen_images')
               .update({
@@ -295,15 +265,8 @@ JSON 배열 형태로만 반환하고 다른 설명은 하지 마세요.
             return { id: image.id, status: 'failed' };
           }
           
-          // 아직 처리 중 (IN_QUEUE, IN_PROGRESS 등 - 대소문자 모두 처리)
-          const isProcessing = statusData.status === 'IN_QUEUE' || 
-                             statusData.status === 'IN_PROGRESS' ||
-                             statusData.status === 'processing' ||
-                             statusData.status === 'PROCESSING' ||
-                             statusData.status === 'pending' ||
-                             statusData.status === 'PENDING';
-          
-          if (isProcessing) {
+          // 아직 처리 중
+          if (status === 'IN_QUEUE' || status === 'IN_PROGRESS') {
             // processing 상태가 너무 오래되면 타임아웃 처리 (5분)
             const createdAt = new Date(image.created_at);
             const now = new Date();
@@ -345,8 +308,8 @@ JSON 배열 형태로만 반환하고 다른 설명은 하지 마세요.
       total: results.length,
       completed: results.filter(r => r.value?.status === 'completed').length,
       failed: results.filter(r => r.value?.status === 'failed' || r.value?.status === 'timeout').length,
-      processing: results.filter(r => r.value?.status === 'processing').length,
-      unknown: results.filter(r => r.value?.status === 'unknown').length,
+      processing: results.filter(r => r.value?.status === 'processing' || r.value?.status === 'IN_PROGRESS' || r.value?.status === 'IN_QUEUE').length,
+      unknown: results.filter(r => r.value?.status === 'unknown' || r.value?.status === 'unknown_model' || r.value?.status === 'no_request_id').length,
       errors: results.filter(r => r.status === 'rejected' || r.value?.status === 'error').length,
       pending: 0 // pending은 이미 processing으로 처리됨
     };

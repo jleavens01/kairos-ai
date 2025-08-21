@@ -50,120 +50,155 @@ export const handler = async (event) => {
     const GEMINI_API_KEY = process.env.GENERATIVE_LANGUAGE_API_KEY
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`
 
+    // 씬을 배치로 나누어 병렬 처리 (3개씩으로 줄임)
+    const BATCH_SIZE = 3
+    const MAX_SCENES = 30  // 최대 30개 씬만 처리 (타임아웃 방지)
+    
+    // 너무 많은 씬이면 일부만 처리
+    const scenesToProcess = sheets.slice(0, MAX_SCENES)
+    
+    const batches = []
+    for (let i = 0; i < scenesToProcess.length; i += BATCH_SIZE) {
+      batches.push(scenesToProcess.slice(i, i + BATCH_SIZE))
+    }
+    
+    console.log(`Processing ${scenesToProcess.length} of ${sheets.length} scenes in ${batches.length} batches`)
+    
+    if (sheets.length > MAX_SCENES) {
+      console.log(`Note: Processing first ${MAX_SCENES} scenes to avoid timeout`);
+    }
+    
     const results = []
     
-    for (const sheet of sheets) {
-      const prompt = `
-다음 씬 스크립트를 분석하여 이 씬을 시각화하는데 필요한 자료나 레퍼런스를 검색하기 위한 키워드를 추출해주세요.
+    // 각 배치를 순차적으로 처리하되, 배치 내에서는 병렬 처리
+    for (const batch of batches) {
+      const batchPromises = batch.map(async (sheet) => {
+        // 스크립트 길이 제한 (너무 긴 스크립트는 줄임)
+        let scriptText = sheet.original_script_text || '스크립트 없음'
+        if (scriptText.length > 300) {
+          scriptText = scriptText.substring(0, 300) + '...'
+        }
+        
+        const prompt = `
+씬 ${sheet.scene_number}: ${scriptText}
 
-씬 번호: ${sheet.scene_number}
-씬 스크립트: ${sheet.original_script_text || '스크립트 없음'}
+위 씬의 시각 자료가 필요한지 판단하고, 필요하면 검색 키워드 2개를 추출하세요.
+키워드는 영어로, 구체적이고 검색 가능한 형태로 작성하세요.
 
-분석 기준:
-1. 먼저 이 씬에서 시각적 자료가 필요한지 판단해주세요
-2. 필요하다면 구체적인 검색 키워드를 추출해주세요
-3. 키워드는 다음을 고려해주세요:
-   - 장소/배경 (예: 도시 야경, 숲속, 사무실)
-   - 시대/스타일 (예: 1950년대, 미래도시, 중세)
-   - 오브젝트 (예: 빈티지 자동차, 우주선, 고대 유물)
-   - 분위기/톤 (예: 어두운, 몽환적인, 활기찬)
-   - 특정 문화/지역 (예: 일본 전통, 북유럽, 사이버펑크)
+JSON 형식으로만 응답:
+{"needs":true/false,"keywords":["키워드1","키워드2"]}
 
-응답 형식 (JSON):
-{
-  "needs_reference": true/false,
-  "reason": "자료가 필요한/불필요한 이유",
-  "keywords": ["키워드1", "키워드2", ...] // 최대 5개, needs_reference가 false면 빈 배열
-}
-
-예시:
-- "회사 사무실에서 회의하는 장면" → ["modern office", "business meeting", "conference room"]
-- "우주선 내부" → ["spaceship interior", "sci-fi corridor", "futuristic control panel"]
-- "단순 대화 장면" → needs_reference: false, keywords: []
+자료 불필요시: {"needs":false,"keywords":[]}
 `
 
-      try {
-        const response = await fetch(apiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [{ text: prompt }]
-            }],
-            generationConfig: {
-              temperature: 0.3,
-              maxOutputTokens: 500,
-              responseMimeType: "application/json"
-            }
-          })
-        })
-
-        if (!response.ok) {
-          console.error('Gemini API error for sheet', sheet.id)
-          results.push({ 
-            id: sheet.id, 
-            keywords: [],
-            error: 'AI 분석 실패'
-          })
-          continue
-        }
-
-        const data = await response.json()
-        console.log('Gemini API response:', JSON.stringify(data, null, 2))
-        
-        // 응답 구조 안전하게 파싱
-        if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
-          console.error('Invalid Gemini response structure:', data)
-          results.push({ 
-            id: sheet.id,
-            scene_number: sheet.scene_number,
-            keywords: [],
-            error: 'AI 응답 구조 오류'
-          })
-          continue
-        }
-        
-        let aiResponse
         try {
-          aiResponse = JSON.parse(data.candidates[0].content.parts[0].text)
-        } catch (parseError) {
-          console.error('Failed to parse AI response:', data.candidates[0].content.parts[0].text)
-          results.push({ 
+          const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{
+                parts: [{ text: prompt }]
+              }],
+              generationConfig: {
+                temperature: 0.2,
+                maxOutputTokens: 100,  // 간단한 JSON 응답이므로 줄임
+                responseMimeType: "application/json"
+              }
+            })
+          })
+
+          if (!response.ok) {
+            console.error('Gemini API error for sheet', sheet.id, response.status)
+            return { 
+              id: sheet.id,
+              scene_number: sheet.scene_number,
+              keywords: [],
+              error: `AI 분석 실패 (${response.status})`
+            }
+          }
+
+          const data = await response.json()
+          
+          // 응답 구조 안전하게 파싱
+          if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+            console.error('Invalid Gemini response structure:', data)
+            return { 
+              id: sheet.id,
+              scene_number: sheet.scene_number,
+              keywords: [],
+              error: 'AI 응답 구조 오류'
+            }
+          }
+          
+          // parts가 없는 경우 체크 (MAX_TOKENS 에러)
+          if (!data.candidates[0].content.parts || !data.candidates[0].content.parts[0]) {
+            console.error('No parts in response (MAX_TOKENS error):', data.candidates[0])
+            return { 
+              id: sheet.id,
+              scene_number: sheet.scene_number,
+              keywords: [],
+              error: 'AI 응답 불완전 (토큰 제한)'
+            }
+          }
+          
+          let aiResponse
+          try {
+            aiResponse = JSON.parse(data.candidates[0].content.parts[0].text)
+          } catch (parseError) {
+            console.error('Failed to parse AI response:', data.candidates[0].content.parts[0].text)
+            return { 
+              id: sheet.id,
+              scene_number: sheet.scene_number,
+              keywords: [],
+              error: 'AI 응답 파싱 실패'
+            }
+          }
+          
+          // 키워드가 있는 경우만 저장 (needs 또는 needs_reference 모두 체크)
+          const needsRef = aiResponse.needs || aiResponse.needs_reference
+          const keywords = needsRef ? (aiResponse.keywords || []).slice(0, 2) : []  // 최대 2개로 제한
+          
+          // DB에 키워드 저장
+          const { error: updateError } = await supabase
+            .from('production_sheets')
+            .update({ reference_keywords: keywords })
+            .eq('id', sheet.id)
+
+          if (updateError) {
+            console.error('DB update error:', updateError)
+            return {
+              id: sheet.id,
+              scene_number: sheet.scene_number,
+              keywords: [],
+              error: 'DB 업데이트 실패'
+            }
+          }
+
+          return {
+            id: sheet.id,
+            scene_number: sheet.scene_number,
+            needs_reference: needsRef,
+            keywords: keywords
+          }
+
+        } catch (aiError) {
+          console.error('Error processing sheet:', sheet.id, aiError)
+          return { 
             id: sheet.id,
             scene_number: sheet.scene_number,
             keywords: [],
-            error: 'AI 응답 파싱 실패'
-          })
-          continue
+            error: '키워드 추출 실패: ' + aiError.message
+          }
         }
-        
-        // 키워드가 있는 경우만 저장
-        const keywords = aiResponse.needs_reference ? (aiResponse.keywords || []) : []
-        
-        // DB에 키워드 저장
-        const { error: updateError } = await supabase
-          .from('production_sheets')
-          .update({ reference_keywords: keywords })
-          .eq('id', sheet.id)
-
-        if (updateError) throw updateError
-
-        results.push({
-          id: sheet.id,
-          scene_number: sheet.scene_number,
-          needs_reference: aiResponse.needs_reference,
-          reason: aiResponse.reason,
-          keywords: keywords
-        })
-
-      } catch (aiError) {
-        console.error('Error processing sheet:', sheet.id, aiError)
-        results.push({ 
-          id: sheet.id,
-          scene_number: sheet.scene_number,
-          keywords: [],
-          error: '키워드 추출 실패'
-        })
+      })
+      
+      // 배치 내 모든 씬을 병렬로 처리
+      const batchResults = await Promise.all(batchPromises)
+      results.push(...batchResults)
+      
+      // 배치 간 짧은 지연 (API rate limiting 방지)
+      if (batches.indexOf(batch) < batches.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 200))  // 지연 시간 줄임
       }
     }
 
@@ -173,7 +208,11 @@ export const handler = async (event) => {
       body: JSON.stringify({
         success: true,
         data: results,
-        message: `${results.length}개 씬의 자료 키워드를 추출했습니다`
+        message: sheets.length > MAX_SCENES 
+          ? `${results.length}개 씬의 자료 키워드를 추출했습니다 (전체 ${sheets.length}개 중)`
+          : `${results.length}개 씬의 자료 키워드를 추출했습니다`,
+        totalScenes: sheets.length,
+        processedScenes: results.length
       })
     }
 

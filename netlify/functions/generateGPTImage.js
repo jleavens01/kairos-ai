@@ -130,16 +130,19 @@ export async function generateImage({
     // 4. 개발 환경에서는 폴링, 프로덕션에서는 즉시 응답
     if (isDevelopment) {
       // 개발 환경: 폴링하여 결과 기다리기
-      const maxPollingTime = 60000; // 60초
-      const pollingInterval = 2000; // 2초마다 체크
+      const maxPollingTime = 120000; // 120초
+      const pollingInterval = 3000; // 3초마다 체크
       const startTime = Date.now();
+      
+      console.log(`Starting polling for ${request_id} (max ${maxPollingTime/1000}s)`);
       
       while (Date.now() - startTime < maxPollingTime) {
         await new Promise(resolve => setTimeout(resolve, pollingInterval));
         
         try {
           const status = await fal.queue.status(apiEndpoint, { requestId: request_id });
-          console.log(`Polling status for ${request_id}:`, status.status);
+          const elapsedTime = Math.round((Date.now() - startTime) / 1000);
+          console.log(`[${elapsedTime}s] Polling status for ${request_id}:`, status.status);
           
           if (status.status === 'COMPLETED') {
             const result = await fal.queue.result(apiEndpoint, { requestId: request_id });

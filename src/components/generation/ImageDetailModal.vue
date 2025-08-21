@@ -158,7 +158,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['close', 'update', 'edit-tags', 'connect-scene', 'edit-image'])
+const emit = defineEmits(['close', 'update', 'edit-tags', 'connect-scene', 'edit-image', 'generate-video'])
 
 // State
 const isZoomed = ref(false)
@@ -295,9 +295,20 @@ const handleImageEdit = () => {
 }
 
 const handleVideoGeneration = () => {
-  // TODO: 영상 생성 기능 구현
-  console.log('영상 생성 기능 - 추후 구현 예정')
-  alert('영상 생성 기능은 준비 중입니다.')
+  // 영상 생성을 위한 데이터 전달
+  const videoData = {
+    imageUrl: props.image.storage_image_url || props.image.result_image_url || props.image.thumbnail_url,
+    imageId: props.image.id,
+    prompt: props.image.prompt_used || '',
+    elementName: props.image.element_name || '',
+    category: props.image.image_type || 'scene',
+    projectId: props.image.project_id,
+    productionSheetId: props.image.production_sheet_id
+  }
+  
+  // 부모 컴포넌트에 이벤트 발생
+  emit('generate-video', videoData)
+  emit('close')
 }
 </script>
 

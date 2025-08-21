@@ -42,12 +42,6 @@ const router = createRouter({
       component: () => import('../views/UITestView.vue')
     },
     {
-      path: '/aerial',
-      name: 'aerial',
-      component: () => import('../views/AerialTestView.vue'),
-      meta: { requiresAuth: false }
-    },
-    {
       path: '/ai-content',
       name: 'ai-content',
       component: () => import('../components/ai-content-production/AIContentDashboard.vue'),
