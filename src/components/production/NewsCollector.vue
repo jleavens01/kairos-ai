@@ -425,6 +425,14 @@ import {
 } from 'lucide-vue-next'
 import Badge from '@/components/ui/Badge.vue'
 
+// Props 정의
+const props = defineProps({
+  projectId: {
+    type: String,
+    default: null
+  }
+})
+
 const productionStore = useProductionStore()
 
 // State
