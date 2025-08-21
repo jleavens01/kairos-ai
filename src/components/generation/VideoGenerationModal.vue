@@ -759,7 +759,7 @@ const close = () => {
 const handleDrop = (e) => {
   isDragging.value = false
   const files = Array.from(e.dataTransfer.files)
-  handleFiles(files)
+  handleFiles(files) // handleFiles 함수에서 이미 파일명 변경 처리
 }
 
 const handleDragOver = () => {
@@ -778,14 +778,45 @@ const handleFileSelect = (e) => {
 const handleFiles = async (files) => {
   for (const file of files) {
     if (file.type.startsWith('image/')) {
-      const preview = URL.createObjectURL(file)
-      const item = { file, preview, uploading: true }
+      // 파일명을 영문과 숫자로 변경
+      const sanitizedFile = await sanitizeFileName(file)
+      
+      const preview = URL.createObjectURL(sanitizedFile)
+      const item = { 
+        file: sanitizedFile, 
+        preview, 
+        uploading: true,
+        originalName: file.name,
+        sanitizedName: sanitizedFile.name
+      }
       referenceImages.value.push(item)
       
       // 실제 업로드는 생성 시점에 수행
       item.uploading = false
     }
   }
+}
+
+// 파일명을 영문과 숫자로 변경하는 함수
+const sanitizeFileName = async (file) => {
+  // 파일 확장자 추출
+  const lastDotIndex = file.name.lastIndexOf('.')
+  const extension = lastDotIndex > -1 ? file.name.slice(lastDotIndex) : ''
+  
+  // 타임스탬프와 랜덤 문자열로 파일명 생성
+  const timestamp = Date.now()
+  const randomStr = Math.random().toString(36).substring(2, 8)
+  const sanitizedName = `ref_${timestamp}_${randomStr}${extension}`
+  
+  // 새로운 File 객체 생성
+  const sanitizedFile = new File([file], sanitizedName, {
+    type: file.type,
+    lastModified: file.lastModified
+  })
+  
+  console.log(`파일명 변경: ${file.name} → ${sanitizedName}`)
+  
+  return sanitizedFile
 }
 
 const removeReferenceImage = (index) => {
@@ -1087,7 +1118,8 @@ const generateVideo = async () => {
         throw new Error('사용자 인증이 필요합니다.')
       }
       
-      const fileName = `ref_${Date.now()}_${firstRef.file.name}`
+      // 이미 sanitizeFileName에서 변경된 파일명 사용
+      const fileName = firstRef.file.name
       const filePath = `${userId}/${props.projectId}/${fileName}`
       
       const { data: uploadData, error: uploadError } = await supabase.storage
