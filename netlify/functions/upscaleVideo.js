@@ -268,52 +268,76 @@ async function pollUpscaleStatus(videoId, requestId) {
           throw new Error('No video URL in upscale result');
         }
 
-        // Storage에 저장
-        console.log('Downloading video from:', videoUrl);
-        const videoResponse = await fetch(videoUrl);
-        const videoBlob = await videoResponse.blob();
-        const videoBuffer = await videoBlob.arrayBuffer();
-        const videoData = Buffer.from(videoBuffer);
+        // 파일 크기 확인
+        console.log('Checking video size from:', videoUrl);
+        const headResponse = await fetch(videoUrl, { method: 'HEAD' });
+        const contentLength = headResponse.headers.get('content-length');
+        const fileSizeInMB = contentLength ? parseInt(contentLength) / (1024 * 1024) : 0;
         
-        const timestamp = Date.now();
-        const randomId = Math.random().toString(36).substring(2, 9);
-        const fileName = `upscaled/${timestamp}-${randomId}.mp4`;
+        console.log(`Video file size: ${fileSizeInMB.toFixed(2)} MB`);
         
-        console.log('Uploading to Storage:', fileName);
-        const { data: uploadData, error: uploadError } = await supabaseAdmin
-          .storage
-          .from('gen-videos')
-          .upload(fileName, videoData, {
-            contentType: 'video/mp4',
-            upsert: false
-          });
+        let storageUrl = null;
+        
+        // 50MB 이하인 경우만 Storage에 업로드 시도
+        if (fileSizeInMB <= 50) {
+          try {
+            console.log('Downloading video for storage upload...');
+            const videoResponse = await fetch(videoUrl);
+            const videoBlob = await videoResponse.blob();
+            const videoBuffer = await videoBlob.arrayBuffer();
+            const videoData = Buffer.from(videoBuffer);
+            
+            const timestamp = Date.now();
+            const randomId = Math.random().toString(36).substring(2, 9);
+            const fileName = `upscaled/${timestamp}-${randomId}.mp4`;
+            
+            console.log('Uploading to Storage:', fileName);
+            const { data: uploadData, error: uploadError } = await supabaseAdmin
+              .storage
+              .from('gen-videos')
+              .upload(fileName, videoData, {
+                contentType: 'video/mp4',
+                upsert: false
+              });
 
-        if (uploadError) {
-          console.error('Storage upload error:', uploadError);
-          throw uploadError;
+            if (uploadError) {
+              console.error('Storage upload error:', uploadError);
+              console.log('Will use FAL AI URL directly');
+            } else {
+              // Storage URL 생성
+              const { data: { publicUrl } } = supabaseAdmin
+                .storage
+                .from('gen-videos')
+                .getPublicUrl(fileName);
+              
+              storageUrl = publicUrl;
+              console.log('Storage URL:', publicUrl);
+            }
+          } catch (uploadErr) {
+            console.error('Storage upload failed:', uploadErr);
+            console.log('Will use FAL AI URL directly');
+          }
+        } else {
+          console.log(`File too large (${fileSizeInMB.toFixed(2)} MB > 50 MB), using FAL AI URL directly`);
         }
 
-        // Storage URL 생성
-        const { data: { publicUrl } } = supabaseAdmin
-          .storage
-          .from('gen-videos')
-          .getPublicUrl(fileName);
-
-        console.log('Storage URL:', publicUrl);
-
         // DB 업데이트
+        const updateData = {
+          generation_status: 'completed',
+          result_video_url: videoUrl,
+          storage_video_url: storageUrl || videoUrl, // Storage 업로드 실패시 FAL URL 사용
+          completed_at: new Date().toISOString(),
+          metadata: {
+            completed_response: result.data || result,
+            processing_time: attempt * pollInterval,
+            file_size_mb: fileSizeInMB,
+            storage_uploaded: !!storageUrl
+          }
+        };
+        
         const { error: updateError } = await supabaseAdmin
           .from('gen_videos')
-          .update({
-            generation_status: 'completed',
-            result_video_url: videoUrl,
-            storage_video_url: publicUrl,
-            completed_at: new Date().toISOString(),
-            metadata: {
-              completed_response: result.data || result,
-              processing_time: attempt * pollInterval
-            }
-          })
+          .update(updateData)
           .eq('id', videoId);
 
         if (updateError) {
