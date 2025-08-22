@@ -98,7 +98,6 @@ export const handler = async (event) => {
     // 2. 업스케일 레코드 생성
     const insertData = {
       project_id: projectId,
-      user_id: user.sub,
       video_type: 'upscaled',
       element_name: `${originalVideo.element_name || 'Video'} - Upscaled ${upscaleFactor}x`,
       generation_status: 'pending',
