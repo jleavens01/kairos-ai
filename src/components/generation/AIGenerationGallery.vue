@@ -928,24 +928,31 @@ onMounted(async () => {
       startPollingWorker()
     }
   } else {
-    // 프로덕션 환경에서는 Realtime 구독
-    productionStore.setupRealtimeSubscription(props.projectId)
-    setupRealtimeSubscription()
+    // 프로덕션 환경에서도 폴링 사용 (Realtime 비용 문제로 임시 비활성화)
+    // productionStore.setupRealtimeSubscription(props.projectId)
+    // setupRealtimeSubscription()
+    
+    // 프로덕션에서도 처리 중인 이미지가 있으면 폴링
+    if (processingImages.value.length > 0) {
+      console.log(`[Production] Found ${processingImages.value.length} processing images, starting polling...`)
+      startPollingWorker()
+    }
   }
   
   // 미디어 업데이트 이벤트 리스너 등록
   window.addEventListener('media-update', handleMediaUpdate)
 })
 
-// 컴포넌트 언마운트 시 Realtime 구독 해제 및 폴링 중지
+// 컴포넌트 언마운트 시 폴링 중지
 onUnmounted(() => {
-  cleanupRealtimeSubscription()
+  // Realtime 구독 해제 - 비활성화
+  // cleanupRealtimeSubscription()
   stopPollingWorker()
   
-  // 프로덕션 환경에서 Realtime 구독 해제
-  if (import.meta.env.MODE === 'production') {
-    productionStore.cleanupRealtimeSubscription()
-  }
+  // 프로덕션 환경에서 Realtime 구독 해제 - 비활성화
+  // if (import.meta.env.MODE === 'production') {
+  //   productionStore.cleanupRealtimeSubscription()
+  // }
   
   // 이벤트 리스너 제거
   window.removeEventListener('media-update', handleMediaUpdate)
@@ -986,9 +993,12 @@ const cleanupRealtimeSubscription = () => {
 // projectId 변경 감지
 watch(() => props.projectId, async (newId, oldId) => {
   if (newId && newId !== oldId) {
-    // Realtime 구독 재설정
-    cleanupRealtimeSubscription()
-    setupRealtimeSubscription()
+    // Realtime 구독 재설정 - 비활성화
+    // cleanupRealtimeSubscription()
+    // setupRealtimeSubscription()
+    
+    // 폴링 중지 후 재시작
+    stopPollingWorker()
     
     // 이미지 목록 초기화 및 새 데이터 로드
     images.value = []
@@ -996,6 +1006,12 @@ watch(() => props.projectId, async (newId, oldId) => {
     loading.value = true
     filterCategory.value = 'all'
     await fetchImages()
+    
+    // 처리 중인 이미지가 있으면 폴링 시작
+    if (processingImages.value.length > 0) {
+      console.log(`Project changed, found ${processingImages.value.length} processing images, starting polling...`)
+      startPollingWorker()
+    }
     // 스토리보드 데이터도 다시 로드
     await productionStore.fetchProductionSheets(newId)
   }

@@ -738,8 +738,14 @@ onMounted(async () => {
       startPolling()
     }
   } else {
-    // 프로덕션 환경에서는 Realtime 구독
-    productionStore.setupRealtimeSubscription(props.projectId)
+    // 프로덕션 환경에서도 폴링 사용 (Realtime 비용 문제로 임시 비활성화)
+    // productionStore.setupRealtimeSubscription(props.projectId)
+    
+    // 프로덕션에서도 처리 중인 비디오가 있으면 폴링
+    if (processingVideos.value.length > 0) {
+      console.log(`[Production] Found ${processingVideos.value.length} processing videos, starting polling...`)
+      startPolling()
+    }
   }
   
   // 미디어 업데이트 이벤트 리스너 등록
@@ -750,10 +756,10 @@ onUnmounted(() => {
   // cleanupRealtimeSubscription() - Realtime 제거
   stopPolling()
   
-  // 프로덕션 환경에서 Realtime 구독 해제
-  if (import.meta.env.MODE === 'production') {
-    productionStore.cleanupRealtimeSubscription()
-  }
+  // 프로덕션 환경에서 Realtime 구독 해제 - 비활성화
+  // if (import.meta.env.MODE === 'production') {
+  //   productionStore.cleanupRealtimeSubscription()
+  // }
   
   // 이벤트 리스너 제거
   window.removeEventListener('media-update', handleMediaUpdate)
