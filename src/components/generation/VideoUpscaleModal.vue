@@ -36,12 +36,26 @@
           
           <!-- 업스케일 배수 -->
           <div class="setting-group">
-            <label for="upscale-factor">업스케일 배수</label>
-            <select v-model="upscaleFactor" id="upscale-factor" class="setting-select">
-              <option :value="2">2x (2배)</option>
-              <option :value="4">4x (4배)</option>
-              <option :value="8">8x (8배)</option>
-            </select>
+            <label for="upscale-factor">
+              업스케일 배수: <span class="value-display">{{ upscaleFactor }}x</span>
+            </label>
+            <div class="slider-container">
+              <input 
+                type="range" 
+                id="upscale-factor"
+                v-model.number="upscaleFactor"
+                min="1"
+                max="4"
+                step="0.1"
+                class="slider"
+              />
+              <div class="slider-labels">
+                <span>1x</span>
+                <span>2x</span>
+                <span>3x</span>
+                <span>4x</span>
+              </div>
+            </div>
             <div class="setting-help">
               현재 해상도의 {{ upscaleFactor }}배로 업스케일됩니다
             </div>
@@ -60,14 +74,29 @@
             </div>
             
             <div v-if="enableInterpolation" class="sub-settings">
-              <label for="target-fps">목표 FPS</label>
-              <select v-model="targetFps" id="target-fps" class="setting-select">
-                <option :value="30">30 FPS</option>
-                <option :value="60">60 FPS</option>
-                <option :value="120">120 FPS</option>
-              </select>
+              <label for="target-fps">
+                목표 FPS: <span class="value-display">{{ targetFps }} FPS</span>
+              </label>
+              <div class="slider-container">
+                <input 
+                  type="range" 
+                  id="target-fps"
+                  v-model.number="targetFps"
+                  min="16"
+                  max="60"
+                  step="1"
+                  class="slider"
+                />
+                <div class="slider-labels">
+                  <span>16</span>
+                  <span>24</span>
+                  <span>30</span>
+                  <span>48</span>
+                  <span>60</span>
+                </div>
+              </div>
               <div class="setting-help">
-                Apollo v8 모델을 사용하여 프레임을 보간합니다
+                Apollo v8 모델을 사용하여 프레임을 보간합니다 (원본: {{ video.fps || 30 }} FPS)
               </div>
             </div>
           </div>
@@ -163,9 +192,9 @@ const isOpen = ref(true)
 const processing = ref(false)
 
 // 설정
-const upscaleFactor = ref(2)
+const upscaleFactor = ref(2.0)
 const enableInterpolation = ref(false)
-const targetFps = ref(60)
+const targetFps = ref(30)
 const useH264 = ref(false)
 
 // 계산된 속성
@@ -183,8 +212,9 @@ const estimatedResolution = computed(() => {
 
 const estimatedTime = computed(() => {
   const baseDuration = props.video.duration_seconds || 10
-  const factorMultiplier = upscaleFactor.value / 2
-  const interpolationMultiplier = enableInterpolation.value ? 1.5 : 1
+  const factorMultiplier = Math.max(1, upscaleFactor.value / 2)
+  const interpolationMultiplier = enableInterpolation.value ? 
+    (1 + (targetFps.value - (props.video.fps || 30)) / 100) : 1
   
   return Math.ceil(baseDuration * factorMultiplier * interpolationMultiplier / 60)
 })
@@ -193,11 +223,12 @@ const estimatedCredits = computed(() => {
   // 기본 비용: 초당 10 크레딧
   const baseCredits = (props.video.duration_seconds || 10) * 10
   
-  // 업스케일 배수에 따른 배율
-  const factorMultiplier = upscaleFactor.value
+  // 업스케일 배수에 따른 배율 (1x는 비용이 적음)
+  const factorMultiplier = Math.pow(upscaleFactor.value, 1.5)
   
-  // 프레임 보간 추가 비용
-  const interpolationMultiplier = enableInterpolation.value ? 1.5 : 1
+  // 프레임 보간 추가 비용 (FPS 증가율에 따라)
+  const interpolationMultiplier = enableInterpolation.value ? 
+    (1 + (targetFps.value - (props.video.fps || 30)) / 60) : 1
   
   return Math.ceil(baseCredits * factorMultiplier * interpolationMultiplier)
 })
@@ -425,6 +456,74 @@ const startUpscale = async () => {
   margin-left: 26px;
   padding-left: 15px;
   border-left: 2px solid var(--border-color);
+}
+
+/* 슬라이더 스타일 */
+.slider-container {
+  margin: 15px 0;
+}
+
+.slider {
+  width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+  outline: none;
+  transition: background 0.2s;
+}
+
+.slider:hover {
+  background: var(--border-color);
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  background: var(--primary-color);
+  cursor: pointer;
+  border-radius: 50%;
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 3px 8px rgba(102, 126, 234, 0.4);
+}
+
+.slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  background: var(--primary-color);
+  cursor: pointer;
+  border-radius: 50%;
+  border: none;
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.slider::-moz-range-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 3px 8px rgba(102, 126, 234, 0.4);
+}
+
+.slider-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.value-display {
+  color: var(--primary-color);
+  font-weight: 600;
+  font-size: 16px;
+  margin-left: 8px;
 }
 
 .estimation {
