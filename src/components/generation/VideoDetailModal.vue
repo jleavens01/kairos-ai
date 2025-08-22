@@ -292,6 +292,13 @@ const toggleFavorite = () => {
 }
 
 const openUpscaleModal = () => {
+  // 프레임 추출기 정리
+  if (frameExtractor.value) {
+    frameExtractor.value.destroy()
+    frameExtractor.value = null
+  }
+  capturedFrames.value = []
+  
   emit('upscale', props.video)
   emit('close')
 }
@@ -424,13 +431,24 @@ const saveChanges = async () => {
 
 // 프레임 캡처 메서드들
 const initializeFrameExtractor = async () => {
-  if (!props.video.storage_video_url) return
+  if (!props.video || !props.video.storage_video_url) return
+  
+  // 기존 추출기가 있으면 먼저 정리
+  if (frameExtractor.value) {
+    try {
+      frameExtractor.value.destroy()
+    } catch (e) {
+      console.warn('프레임 추출기 정리 중 오류:', e)
+    }
+    frameExtractor.value = null
+  }
   
   try {
     frameExtractor.value = new VideoFrameExtractor(props.video.storage_video_url)
     await frameExtractor.value.initialize()
   } catch (error) {
     console.error('프레임 추출기 초기화 실패:', error)
+    frameExtractor.value = null
   }
 }
 
@@ -612,7 +630,7 @@ const removeFrame = (index) => {
 
 // Lifecycle
 onMounted(() => {
-  if (props.show && props.video.storage_video_url) {
+  if (props.show && props.video && props.video.storage_video_url) {
     // 모달이 열리면 프레임 추출기 초기화
     initializeFrameExtractor()
   }
@@ -629,11 +647,19 @@ onUnmounted(() => {
 
 // Watch for modal open/close
 watch(() => props.show, (newShow) => {
-  if (newShow && props.video.storage_video_url && !frameExtractor.value) {
+  if (newShow && props.video && props.video.storage_video_url) {
+    // 모달이 열릴 때 프레임 추출기 초기화
     initializeFrameExtractor()
-  } else if (!newShow && frameExtractor.value) {
-    frameExtractor.value.destroy()
-    frameExtractor.value = null
+  } else if (!newShow) {
+    // 모달이 닫힐 때 정리
+    if (frameExtractor.value) {
+      try {
+        frameExtractor.value.destroy()
+      } catch (error) {
+        console.warn('프레임 추출기 정리 중 오류:', error)
+      }
+      frameExtractor.value = null
+    }
     capturedFrames.value = []
   }
 })
