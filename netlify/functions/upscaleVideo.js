@@ -78,41 +78,51 @@ export const handler = async (event) => {
     }
 
     // 2. 업스케일 레코드 생성
+    const insertData = {
+      project_id: projectId,
+      user_id: user.sub,
+      video_type: 'upscaled',
+      element_name: `${originalVideo.element_name || 'Video'} - Upscaled ${upscaleFactor}x`,
+      generation_status: 'pending',
+      generation_model: 'topaz-upscale',
+      prompt_used: `Upscale ${upscaleFactor}x${targetFps ? ` @ ${targetFps}fps` : ''}`,
+      is_upscaled: true,
+      original_video_id: originalVideoId,
+      upscale_factor: upscaleFactor,
+      upscale_target_fps: targetFps,
+      upscale_settings: {
+        h264_output: h264Output,
+        original_metadata: metadata,
+        model: 'Proteus v4',
+        interpolation_model: targetFps ? 'Apollo v8' : null
+      },
+      metadata: {
+        ...metadata,
+        upscale_params: {
+          factor: upscaleFactor,
+          target_fps: targetFps,
+          h264: h264Output
+        }
+      }
+    };
+
+    console.log('Attempting to insert upscale record:', insertData);
+
     const { data: upscaleRecord, error: insertError } = await supabaseAdmin
       .from('gen_videos')
-      .insert({
-        project_id: projectId,
-        user_id: user.sub,
-        video_type: 'upscaled',
-        element_name: `${originalVideo.element_name || 'Video'} - Upscaled ${upscaleFactor}x`,
-        generation_status: 'pending',
-        generation_model: 'topaz-upscale',
-        prompt_used: `Upscale ${upscaleFactor}x${targetFps ? ` @ ${targetFps}fps` : ''}`,
-        is_upscaled: true,
-        original_video_id: originalVideoId,
-        upscale_factor: upscaleFactor,
-        upscale_target_fps: targetFps,
-        upscale_settings: {
-          h264_output: h264Output,
-          original_metadata: metadata,
-          model: 'Proteus v4',
-          interpolation_model: targetFps ? 'Apollo v8' : null
-        },
-        metadata: {
-          ...metadata,
-          upscale_params: {
-            factor: upscaleFactor,
-            target_fps: targetFps,
-            h264: h264Output
-          }
-        }
-      })
+      .insert(insertData)
       .select()
       .single();
 
     if (insertError) {
-      console.error('Database insert error:', insertError);
-      throw new Error('Failed to create upscale record');
+      console.error('Database insert error details:', {
+        error: insertError,
+        message: insertError.message,
+        details: insertError.details,
+        hint: insertError.hint,
+        code: insertError.code
+      });
+      throw new Error(`Failed to create upscale record: ${insertError.message || 'Unknown database error'}`);
     }
 
     // 3. FAL AI 업스케일 요청

@@ -443,8 +443,14 @@ const initializeFrameExtractor = async () => {
     frameExtractor.value = null
   }
   
+  const videoUrl = props.video?.storage_video_url || props.video?.result_video_url
+  if (!videoUrl) {
+    console.warn('비디오 URL을 찾을 수 없습니다')
+    return
+  }
+  
   try {
-    frameExtractor.value = new VideoFrameExtractor(props.video.storage_video_url)
+    frameExtractor.value = new VideoFrameExtractor(videoUrl)
     await frameExtractor.value.initialize()
   } catch (error) {
     console.error('프레임 추출기 초기화 실패:', error)
