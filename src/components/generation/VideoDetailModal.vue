@@ -187,6 +187,12 @@
                   <line x1="12" y1="15" x2="12" y2="3"/>
                 </svg>
               </button>
+              <button @click="openUpscaleModal" class="icon-btn upscale-btn" title="비디오 업스케일">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 3l-6 6m6-6v5m0-5h-5"/>
+                  <path d="M21 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h6"/>
+                </svg>
+              </button>
               <button @click="$emit('connect-scene', video)" class="icon-btn" title="씬에 연결">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
@@ -230,7 +236,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['close', 'update', 'connect-scene'])
+const emit = defineEmits(['close', 'update', 'connect-scene', 'upscale'])
 
 // State
 const localFavorite = ref(props.video.is_favorite || false)
@@ -240,6 +246,7 @@ const capturedFrames = ref([])
 const capturingFrame = ref(false)
 const frameExtractor = ref(null)
 const videoElement = ref(null)
+const showUpscaleModal = ref(false)
 
 // Computed
 const hasChanges = computed(() => {
@@ -282,6 +289,11 @@ const formatDate = (dateString) => {
 
 const toggleFavorite = () => {
   localFavorite.value = !localFavorite.value
+}
+
+const openUpscaleModal = () => {
+  emit('upscale', props.video)
+  emit('close')
 }
 
 const downloadVideo = async () => {
@@ -917,6 +929,18 @@ watch(() => props.show, (newShow) => {
   background: var(--bg-tertiary);
   transform: translateY(-2px);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.upscale-btn {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  color: white;
+}
+
+.upscale-btn:hover {
+  background: linear-gradient(135deg, #5568d3 0%, #6a3f90 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
 }
 
 .icon-btn.btn-primary {

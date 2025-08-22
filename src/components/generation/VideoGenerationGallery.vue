@@ -169,6 +169,16 @@
       @close="showDetailModal = false"
       @update="handleVideoUpdate"
       @connect-scene="connectToSceneFromDetail"
+      @upscale="openUpscaleModal"
+    />
+    
+    <!-- 업스케일 모달 -->
+    <VideoUpscaleModal
+      v-if="showUpscaleModal"
+      :video="videoToUpscale"
+      :project-id="projectId"
+      @close="showUpscaleModal = false"
+      @upscaled="handleUpscaleSuccess"
     />
 
     <!-- 씬 연결 모달 -->
@@ -190,6 +200,7 @@ import { supabase } from '@/utils/supabase'
 import { useProductionStore } from '@/stores/production'
 import VideoGenerationModal from './VideoGenerationModal.vue'
 import VideoDetailModal from './VideoDetailModal.vue'
+import VideoUpscaleModal from './VideoUpscaleModal.vue'
 import { Plus, Link, Download, Trash2, Loader, Clock, AlertCircle, Video, Star, Archive } from 'lucide-vue-next'
 import SceneConnectionModal from './SceneConnectionModal.vue'
 import ColumnControl from '@/components/common/ColumnControl.vue'
@@ -212,9 +223,11 @@ const showKeptOnly = ref(false)
 const showGenerationModal = ref(false)
 const showDetailModal = ref(false)
 const showSceneModal = ref(false)
+const showUpscaleModal = ref(false)
 const currentPrompt = ref('')
 const videoToView = ref(null)
 const videoToConnect = ref(null)
+const videoToUpscale = ref(null)
 // const realtimeChannel = ref(null) - Realtime 제거
 const videoRefs = ref({})
 let pollingInterval = null
@@ -229,6 +242,10 @@ watch(showDetailModal, (isOpen) => {
 })
 
 watch(showSceneModal, (isOpen) => {
+  productionStore.setModalOpen(isOpen)
+})
+
+watch(showUpscaleModal, (isOpen) => {
   productionStore.setModalOpen(isOpen)
 })
 
@@ -558,6 +575,18 @@ const handleSceneConnection = async (result) => {
   
   // 피드백
   console.log('비디오가 씬에 연결되었습니다:', result)
+}
+
+const openUpscaleModal = (video) => {
+  videoToUpscale.value = video
+  showUpscaleModal.value = true
+  showDetailModal.value = false
+}
+
+const handleUpscaleSuccess = (result) => {
+  console.log('업스케일 시작됨:', result)
+  // 폴링 시작하여 업스케일 진행 상황 추적
+  startPolling()
 }
 
 // 폴링 관련
