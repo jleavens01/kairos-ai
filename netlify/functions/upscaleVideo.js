@@ -26,6 +26,11 @@ export const handler = async (event) => {
   );
   
   try {
+    // 개발 환경 여부 확인
+    const isDevelopment = process.env.CONTEXT === 'dev' || 
+                         process.env.NETLIFY_DEV === 'true' ||
+                         (process.env.URL && process.env.URL.includes('localhost'));
+
     // 사용자 인증
     const authHeader = event.headers.authorization;
     if (!authHeader) throw { statusCode: 401, message: 'Authorization header is missing.' };
@@ -33,13 +38,26 @@ export const handler = async (event) => {
     const token = authHeader.split(' ')[1];
     if (!token) throw { statusCode: 401, message: 'Token is missing.' };
     
-    // JWT 검증
-    try {
-      user = jwt.verify(token, process.env.SUPABASE_JWT_SECRET);
-      if (!user || !user.sub) throw { statusCode: 401, message: 'Invalid token payload.' };
-    } catch (jwtError) {
-      console.error('JWT verification error:', jwtError);
-      throw { statusCode: 401, message: 'Invalid token.' };
+    // JWT 검증 (개발 환경에서는 간소화)
+    if (isDevelopment) {
+      // 개발 환경: 토큰을 디코드만 하고 검증은 건너뜀
+      try {
+        const decoded = jwt.decode(token);
+        user = decoded || { sub: 'dev-user-id' };
+        console.log('Development mode: Using decoded token or default user');
+      } catch (e) {
+        console.log('Development mode: Using default user due to decode error');
+        user = { sub: 'dev-user-id' };
+      }
+    } else {
+      // 프로덕션 환경: 정상적인 JWT 검증
+      try {
+        user = jwt.verify(token, process.env.SUPABASE_JWT_SECRET);
+        if (!user || !user.sub) throw { statusCode: 401, message: 'Invalid token payload.' };
+      } catch (jwtError) {
+        console.error('JWT verification error:', jwtError);
+        throw { statusCode: 401, message: 'Invalid token.' };
+      }
     }
 
     // 요청 데이터 파싱
@@ -142,11 +160,6 @@ export const handler = async (event) => {
     }
 
     console.log('Submitting to FAL AI Topaz:', falParams);
-
-    // 개발 환경 여부 확인
-    const isDevelopment = process.env.CONTEXT === 'dev' || 
-                         process.env.NETLIFY_DEV === 'true' ||
-                         (process.env.URL && process.env.URL.includes('localhost'));
 
     let requestId;
     
