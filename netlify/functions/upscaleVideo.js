@@ -239,7 +239,7 @@ async function pollUpscaleStatus(videoId, requestId) {
     process.env.SUPABASE_SERVICE_ROLE_KEY
   );
 
-  const maxAttempts = 60; // 최대 60번 시도 (10분)
+  const maxAttempts = 12; // 최대 12번 시도 (120초)
   const pollInterval = 10000; // 10초마다
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
