@@ -1171,4 +1171,37 @@ defineExpose({
   line-height: 1.3;
   margin: 0 auto;
 }
+
+/* 모바일 반응형 스타일 */
+@media (max-width: 768px) {
+  .video-generation-gallery {
+    padding: 10px 0;
+  }
+  
+  .gallery-section {
+    padding: 0 10px;
+  }
+  
+  .loading-state,
+  .processing-item,
+  .failed-content {
+    padding: 40px 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .video-generation-gallery {
+    padding: 5px 0;
+  }
+  
+  .gallery-section {
+    padding: 0 5px;
+  }
+  
+  .loading-state,
+  .processing-item,
+  .failed-content {
+    padding: 30px 5px;
+  }
+}
 </style>

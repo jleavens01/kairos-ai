@@ -1087,4 +1087,65 @@ const totalTokens = computed(() => {
   color: var(--primary-color);
   font-weight: 600;
 }
+
+/* 모바일 반응형 스타일 */
+@media (max-width: 768px) {
+  .storyboard-lab {
+    padding: 1rem 0;
+  }
+  
+  .lab-header {
+    padding: 0 1rem;
+    margin-bottom: 2rem;
+  }
+  
+  .upload-section {
+    padding: 0 1rem;
+  }
+  
+  .results-section {
+    padding: 0 1rem;
+  }
+  
+  .btn-analyze {
+    padding: 0.8rem 1.5rem;
+    width: calc(100% - 2rem);
+    margin: 0 1rem;
+  }
+  
+  .drop-zone {
+    margin: 15px 1rem 0 1rem;
+    padding: 15px;
+  }
+}
+
+@media (max-width: 480px) {
+  .storyboard-lab {
+    padding: 0.5rem 0;
+  }
+  
+  .lab-header {
+    padding: 0 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+  
+  .upload-section {
+    padding: 0 0.5rem;
+  }
+  
+  .results-section {
+    padding: 0 0.5rem;
+  }
+  
+  .btn-analyze {
+    padding: 0.7rem 1rem;
+    width: calc(100% - 1rem);
+    margin: 0 0.5rem;
+  }
+  
+  .drop-zone {
+    margin: 10px 0.5rem 0 0.5rem;
+    padding: 10px;
+  }
+}
 </style>

@@ -1566,4 +1566,38 @@ defineExpose({
   font-size: 0.85rem;
   color: var(--text-secondary);
 }
+
+/* 모바일 반응형 스타일 */
+@media (max-width: 768px) {
+  .ai-generation-gallery {
+    padding: 10px 0;
+  }
+  
+  .suggestions-section {
+    padding: 0 10px 20px 10px;
+  }
+  
+  .gallery-section {
+    padding: 0 10px;
+  }
+  
+  .loading-state,
+  .error-message {
+    padding: 40px 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .ai-generation-gallery {
+    padding: 5px 0;
+  }
+  
+  .suggestions-section {
+    padding: 0 5px 15px 5px;
+  }
+  
+  .gallery-section {
+    padding: 0 5px;
+  }
+}
 </style>
