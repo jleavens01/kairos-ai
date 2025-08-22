@@ -2618,4 +2618,196 @@ onMounted(async () => {
 .info-value {
   color: var(--text-secondary);
 }
+
+/* 모바일 반응형 스타일 */
+@media (max-width: 768px) {
+  .modal-container {
+    width: 95%;
+    max-width: 100%;
+    margin: 10px;
+    max-height: 95vh;
+  }
+
+  .modal-container.expanded {
+    max-width: 100%;
+  }
+
+  .modal-main-content {
+    min-width: unset;
+    width: 100%;
+  }
+
+  .modal-header {
+    padding: 12px 16px;
+  }
+
+  .modal-header h3 {
+    font-size: 1.1rem;
+  }
+
+  .modal-body {
+    padding: 16px;
+  }
+
+  /* 인라인 그룹 수직 정렬 */
+  .inline-group {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .inline-item {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .inline-label {
+    min-width: unset;
+    width: 100%;
+    margin-bottom: 6px;
+  }
+
+  /* 스타일 선택 영역 */
+  .style-select-wrapper {
+    width: 100%;
+  }
+
+  .style-preview-compact {
+    margin-left: 0;
+    margin-top: 12px;
+    display: block;
+  }
+
+  .style-dropdown-preview {
+    max-width: calc(100vw - 40px);
+    left: 0;
+    right: 0;
+  }
+
+  /* 참조 이미지 탭 */
+  .reference-tabs {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .tab-btn {
+    flex: 1 1 calc(50% - 4px);
+    padding: 8px;
+    font-size: 0.85rem;
+  }
+
+  /* 참조 이미지 그리드 */
+  .reference-grid,
+  .library-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+
+  /* 업로드 영역 */
+  .upload-area {
+    padding: 20px;
+  }
+
+  /* 사이드 패널 */
+  .modal-side-panel {
+    display: none; /* 모바일에서는 사이드 패널 숨김 */
+  }
+
+  .btn-toggle-panel {
+    display: none; /* 모바일에서는 토글 버튼도 숨김 */
+  }
+
+  /* 프롬프트 입력 */
+  .form-textarea {
+    min-height: 80px;
+    font-size: 14px;
+  }
+
+  /* 버튼 */
+  .modal-footer {
+    padding: 12px 16px;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .btn-generate,
+  .btn-cancel {
+    width: 100%;
+    padding: 12px;
+    font-size: 0.95rem;
+  }
+
+  /* 씬 선택 영역 */
+  .scene-input-wrapper {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .scene-number-input {
+    flex: 1;
+    width: 100%;
+  }
+
+  .or-text {
+    text-align: center;
+  }
+
+  .scene-select {
+    width: 100%;
+  }
+
+  /* 미리보기 이미지 */
+  .preview-overlay img,
+  .reference-preview img {
+    max-width: 90vw;
+    max-height: 70vh;
+  }
+
+  /* 선택/복사 버튼 */
+  .select-copy-buttons {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .select-copy-buttons button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .modal-container {
+    width: 100%;
+    height: 100vh;
+    max-height: 100vh;
+    margin: 0;
+    border-radius: 0;
+  }
+
+  .modal-header {
+    padding: 10px 12px;
+  }
+
+  .modal-body {
+    padding: 12px;
+  }
+
+  .reference-grid,
+  .library-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-group > label {
+    font-size: 0.9rem;
+  }
+
+  .style-option .style-thumb {
+    width: 32px;
+    height: 32px;
+  }
+
+  .style-option .no-style-placeholder {
+    width: 32px;
+    height: 32px;
+  }
+}
 </style>
