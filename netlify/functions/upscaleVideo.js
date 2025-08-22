@@ -269,6 +269,7 @@ async function pollUpscaleStatus(videoId, requestId) {
         }
 
         // Storage에 저장
+        console.log('Downloading video from:', videoUrl);
         const videoResponse = await fetch(videoUrl);
         const videoBlob = await videoResponse.blob();
         const videoBuffer = await videoBlob.arrayBuffer();
@@ -278,6 +279,7 @@ async function pollUpscaleStatus(videoId, requestId) {
         const randomId = Math.random().toString(36).substring(2, 9);
         const fileName = `upscaled/${timestamp}-${randomId}.mp4`;
         
+        console.log('Uploading to Storage:', fileName);
         const { data: uploadData, error: uploadError } = await supabaseAdmin
           .storage
           .from('gen-videos')
@@ -297,8 +299,10 @@ async function pollUpscaleStatus(videoId, requestId) {
           .from('gen-videos')
           .getPublicUrl(fileName);
 
+        console.log('Storage URL:', publicUrl);
+
         // DB 업데이트
-        await supabaseAdmin
+        const { error: updateError } = await supabaseAdmin
           .from('gen_videos')
           .update({
             generation_status: 'completed',
@@ -312,7 +316,12 @@ async function pollUpscaleStatus(videoId, requestId) {
           })
           .eq('id', videoId);
 
-        console.log('Upscale video saved successfully');
+        if (updateError) {
+          console.error('Database update error:', updateError);
+          throw updateError;
+        }
+
+        console.log('Upscale video saved successfully for ID:', videoId);
         return;
       } else if (status.status === 'FAILED' || status.status === 'ERROR') {
         // 실패 처리
