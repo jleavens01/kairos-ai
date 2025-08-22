@@ -39,6 +39,7 @@ export const handler = async (event) => {
       videoId,  // 라우터에서 전달되는 비디오 ID
       prompt,
       imageUrl, // 시작 이미지 URL
+      endImageUrl, // 끝 이미지 URL (선택사항)
       parameters = {},
       modelParams = {},
       category = 'scene',
@@ -85,6 +86,12 @@ export const handler = async (event) => {
       duration: duration.toString(), // FAL expects string
       camera_fixed: cameraFixed
     };
+
+    // 끝 이미지가 제공되면 추가
+    if (endImageUrl) {
+      requestBody.end_image_url = endImageUrl;
+      console.log('Using end image for SeedDance Lite:', endImageUrl);
+    }
 
     if (seed !== undefined) {
       requestBody.seed = seed;

@@ -38,6 +38,7 @@ export const handler = async (event) => {
     }
 
     // 요청 데이터 파싱
+    const body = JSON.parse(event.body || '{}');
     const {
       projectId,
       prompt,
@@ -45,8 +46,9 @@ export const handler = async (event) => {
       category = 'scene',
       parameters = {},
       referenceImageUrl = null,
-      styleId = null
-    } = JSON.parse(event.body || '{}');
+      styleId = null,
+      endImageUrl = null  // 씨댄스 라이트용 추가
+    } = body;
 
     if (!projectId || !prompt) {
       throw new Error('projectId and prompt are required.');
@@ -250,6 +252,7 @@ export const handler = async (event) => {
           projectId,
           videoId: videoRecord.id,
           imageUrl: referenceImageUrl,
+          endImageUrl: endImageUrl,  // 씨댄스 라이트용 마지막 이미지 추가
           prompt: prompt,
           model: model,  // 모델명 전달 추가
           parameters: parameters,

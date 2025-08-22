@@ -22,6 +22,8 @@ export async function generateImage({
   try {
     console.log('GPT Image generation request:', {
       projectId,
+      prompt: prompt || 'NO PROMPT PROVIDED',
+      promptLength: prompt ? prompt.length : 0,
       imageSize,
       category,
       hasReferenceImages: referenceImages.length > 0
@@ -86,7 +88,12 @@ export async function generateImage({
     }
 
     console.log('Submitting to FAL AI:', {
-      endpoint: apiEndpoint
+      endpoint: apiEndpoint,
+      requestBody: {
+        ...requestBody,
+        prompt: requestBody.prompt ? `${requestBody.prompt.substring(0, 100)}...` : 'NO PROMPT',
+        fullPromptLength: requestBody.prompt ? requestBody.prompt.length : 0
+      }
     });
 
     // 개발 환경 여부 확인 (Netlify 환경 변수 체크)
@@ -127,73 +134,19 @@ export async function generateImage({
       console.error('Failed to update request_id:', updateError);
     }
 
-    // 4. 개발 환경에서는 폴링, 프로덕션에서는 즉시 응답
-    if (isDevelopment) {
-      // 개발 환경: 폴링하여 결과 기다리기
-      const maxPollingTime = 120000; // 120초
-      const pollingInterval = 3000; // 3초마다 체크
-      const startTime = Date.now();
-      
-      console.log(`Starting polling for ${request_id} (max ${maxPollingTime/1000}s)`);
-      
-      while (Date.now() - startTime < maxPollingTime) {
-        await new Promise(resolve => setTimeout(resolve, pollingInterval));
-        
-        try {
-          const status = await fal.queue.status(apiEndpoint, { requestId: request_id });
-          const elapsedTime = Math.round((Date.now() - startTime) / 1000);
-          console.log(`[${elapsedTime}s] Polling status for ${request_id}:`, status.status);
-          
-          if (status.status === 'COMPLETED') {
-            const result = await fal.queue.result(apiEndpoint, { requestId: request_id });
-            const imageUrl = result.images?.[0]?.url || result.image_url || result.url;
-            
-            if (imageUrl) {
-              // DB 업데이트
-              await supabaseAdmin
-                .from('gen_images')
-                .update({
-                  generation_status: 'completed',
-                  result_image_url: imageUrl,
-                  storage_image_url: imageUrl,
-                  updated_at: new Date().toISOString()
-                })
-                .eq('id', imageRecord.id);
-              
-              return {
-                success: true,
-                data: {
-                  ...imageRecord,
-                  request_id: request_id,
-                  status: 'completed',
-                  result_image_url: imageUrl,
-                  storage_image_url: imageUrl
-                }
-              };
-            }
-          } else if (status.status === 'FAILED') {
-            throw new Error('Image generation failed');
-          }
-        } catch (pollError) {
-          console.error('Polling error:', pollError);
-        }
+    // 4. 개발 환경과 프로덕션 모두 즉시 응답 반환
+    // 개발 환경에서도 비동기 처리로 변경 (타임아웃 문제 해결)
+    console.log(`GPT Image generation initiated in ${isDevelopment ? 'development' : 'production'} mode`);
+    
+    return {
+      success: true,
+      data: {
+        ...imageRecord,
+        request_id: request_id,
+        status: 'processing',
+        message: '이미지 생성이 시작되었습니다. 완료되면 자동으로 갤러리에 표시됩니다.'
       }
-      
-      // 타임아웃
-      throw new Error('Image generation timed out');
-      
-    } else {
-      // 프로덕션: 웹훅이 처리하므로 즉시 응답
-      return {
-        success: true,
-        data: {
-          ...imageRecord,
-          request_id: request_id,
-          status: 'processing',
-          message: '이미지 생성이 시작되었습니다. 완료되면 자동으로 갤러리에 표시됩니다.'
-        }
-      };
-    }
+    };
 
   } catch (error) {
     console.error('GPT Image generation error:', error);

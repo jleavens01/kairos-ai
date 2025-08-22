@@ -1,6 +1,6 @@
 <!-- 실험적 스토리보드 연출 분석 시스템 - 기존 코드와 완전 분리 -->
 <template>
-  <div class="storyboard-lab">
+  <div class="storyboard-lab" :class="{ 'panel-open': mediaPanelOpen }">
     <div class="lab-header">
       <h1>🧪 스토리보드 연출 실험실</h1>
       <p>AI 모델별 연출 분석 비교 테스트 (독립 실행)</p>
@@ -157,6 +157,31 @@
             <p><strong>분위기:</strong> {{ currentResult.mood }}</p>
             <p><strong>주요 요소:</strong> {{ currentResult.keyElements?.join(', ') }}</p>
           </div>
+          
+          <!-- 미디어 드롭 존 -->
+          <div 
+            class="media-drop-zone"
+            :class="{ 'drag-over': isDraggingOver }"
+            @dragover="handleDragOver"
+            @dragleave="handleDragLeave"
+            @drop="handleDrop($event, currentResult)"
+          >
+            <div class="drop-zone-text">
+              <span>🎨</span>
+              씬 분석 참조 이미지/비디오 드래그
+            </div>
+            
+            <!-- 첨부된 미디어 -->
+            <div v-if="currentResult.attachedMedia?.length" class="attached-media">
+              <div v-for="(media, index) in currentResult.attachedMedia" :key="media.id" class="attached-item">
+                <img v-if="media.type === 'image'" :src="media.thumbnailUrl || media.url" :alt="media.name" />
+                <video v-else-if="media.type === 'video' && media.thumbnailUrl" :src="media.thumbnailUrl" muted />
+                <div v-else-if="media.type === 'video'" class="video-placeholder">🎬</div>
+                <span class="media-type-badge">{{ media.type }}</span>
+                <button @click="removeMedia(currentResult, index)" class="remove-media">×</button>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="result-section" v-if="analysisOptions.includeContext">
@@ -173,6 +198,31 @@
             <p><strong>카메라 앵글:</strong> {{ currentResult.cameraAngle }}</p>
             <p><strong>색상 팔레트:</strong> {{ currentResult.colorPalette }}</p>
             <p><strong>조명:</strong> {{ currentResult.lighting }}</p>
+          </div>
+          
+          <!-- 미디어 드롭 존 -->
+          <div 
+            class="media-drop-zone"
+            :class="{ 'drag-over': isDraggingOver }"
+            @dragover="handleDragOver"
+            @dragleave="handleDragLeave"
+            @drop="handleDrop($event, currentResult)"
+          >
+            <div class="drop-zone-text">
+              <span>🎬</span>
+              시각적 레퍼런스 이미지/비디오 드래그
+            </div>
+            
+            <!-- 첨부된 미디어 -->
+            <div v-if="currentResult.visualReferences?.length" class="attached-media">
+              <div v-for="(media, index) in currentResult.visualReferences" :key="media.id" class="attached-item">
+                <img v-if="media.type === 'image'" :src="media.thumbnailUrl || media.url" :alt="media.name" />
+                <video v-else-if="media.type === 'video' && media.thumbnailUrl" :src="media.thumbnailUrl" muted />
+                <div v-else-if="media.type === 'video'" class="video-placeholder">🎬</div>
+                <span class="media-type-badge">{{ media.type }}</span>
+                <button @click="removeVisualReference(currentResult, index)" class="remove-media">×</button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -220,14 +270,32 @@
         </div>
       </div>
     </div>
+    
+    <!-- 미디어 패널 -->
+    <MediaPanel 
+      v-if="currentProjectId"
+      ref="mediaPanel"
+      :project-id="currentProjectId"
+      @media-drop="handleMediaDrop"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import MediaPanel from '@/components/storyboard/MediaPanel.vue'
+import { useProjectStore } from '@/stores/projects'
 
 const router = useRouter()
+const route = useRoute()
+const projectStore = useProjectStore()
+
+// 미디어 패널 참조
+const mediaPanel = ref(null)
+const mediaPanelOpen = ref(false)
+const currentProjectId = ref(null)
+const isDraggingOver = ref(false)
 
 // 상태 관리
 const testScript = ref(`씬 1. 도시의 아침
@@ -469,6 +537,80 @@ const simulateAnalysis = async (model, scene, context) => {
     raw: { model: model.id, timestamp: new Date().toISOString() }
   }
 }
+
+// 드래그 앤 드롭 핸들러
+const handleDragOver = (event) => {
+  event.preventDefault()
+  isDraggingOver.value = true
+}
+
+const handleDragLeave = (event) => {
+  event.preventDefault()
+  isDraggingOver.value = false
+}
+
+const handleDrop = (event, result, mediaType = 'attachedMedia') => {
+  event.preventDefault()
+  isDraggingOver.value = false
+  
+  // JSON 데이터 파싱
+  const jsonData = event.dataTransfer.getData('application/json')
+  if (jsonData) {
+    try {
+      const mediaData = JSON.parse(jsonData)
+      
+      // 드롭 위치에 따라 다른 속성에 저장
+      const targetProperty = event.currentTarget.classList.contains('visual-drop-zone') 
+        ? 'visualReferences' 
+        : 'attachedMedia'
+      
+      // 결과에 미디어 첨부
+      if (!result[targetProperty]) {
+        result[targetProperty] = []
+      }
+      
+      result[targetProperty].push({
+        type: mediaData.type,
+        id: mediaData.id,
+        url: mediaData.url,
+        thumbnailUrl: mediaData.thumbnailUrl,
+        name: mediaData.name,
+        prompt: mediaData.prompt
+      })
+      
+      console.log(`미디어 첨부됨 (${targetProperty}):`, mediaData)
+    } catch (error) {
+      console.error('드롭 데이터 파싱 오류:', error)
+    }
+  }
+}
+
+const removeMedia = (result, index) => {
+  if (result.attachedMedia) {
+    result.attachedMedia.splice(index, 1)
+  }
+}
+
+const removeVisualReference = (result, index) => {
+  if (result.visualReferences) {
+    result.visualReferences.splice(index, 1)
+  }
+}
+
+const handleMediaDrop = (data) => {
+  console.log('미디어 패널에서 드롭:', data)
+}
+
+// 컴포넌트 마운트 시
+onMounted(() => {
+  // 프로젝트 ID 설정 (라우트 파라미터에서 가져오기)
+  currentProjectId.value = route.params.projectId || projectStore.currentProject?.id
+  
+  // 미디어 패널 상태 업데이트
+  if (mediaPanel.value) {
+    mediaPanelOpen.value = mediaPanel.value.isOpen
+  }
+})
 
 // 계산된 속성
 const currentResult = computed(() => {
@@ -827,5 +969,122 @@ const totalTokens = computed(() => {
   border-radius: 4px;
   font-size: 0.8rem;
   overflow-x: auto;
+}
+
+/* 미디어 드롭 존 */
+.media-drop-zone {
+  border: 2px dashed var(--border-color);
+  border-radius: 8px;
+  padding: 20px;
+  margin-top: 15px;
+  background: var(--bg-tertiary);
+  transition: all 0.3s ease;
+  text-align: center;
+}
+
+.media-drop-zone.drag-over {
+  border-color: var(--primary-color);
+  background: var(--primary-light);
+  transform: scale(1.02);
+}
+
+.drop-zone-text {
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin-bottom: 10px;
+}
+
+.drop-zone-text span {
+  font-size: 24px;
+  display: block;
+  margin-bottom: 5px;
+}
+
+/* 첨부된 미디어 */
+.attached-media {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.attached-item {
+  position: relative;
+  width: 100px;
+  height: 100px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 2px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.attached-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.attached-item video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.video-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  font-size: 32px;
+}
+
+.remove-media {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 24px;
+  height: 24px;
+  background: rgba(255, 0, 0, 0.8);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+  transition: background 0.2s;
+}
+
+.remove-media:hover {
+  background: rgba(255, 0, 0, 1);
+}
+
+.media-type-badge {
+  position: absolute;
+  bottom: 5px;
+  left: 5px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+/* 드래그 중인 상태 */
+.dragging-over {
+  background-color: var(--primary-light);
+  box-shadow: 0 0 20px rgba(102, 126, 234, 0.3);
+}
+
+.dragging-over .drop-zone-text {
+  color: var(--primary-color);
+  font-weight: 600;
 }
 </style>

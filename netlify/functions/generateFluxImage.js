@@ -213,131 +213,19 @@ export async function generateImage({
       console.error('Failed to update request_id:', updateError);
     }
 
-    // 4. 개발 환경에서는 폴링, 프로덕션에서는 즉시 응답
-    if (isDevelopment) {
-      // 개발 환경: 폴링하여 결과 기다리기
-      const maxPollingTime = 120000; // 120초
-      const pollingInterval = 3000; // 3초마다 체크
-      const startTime = Date.now();
-      
-      console.log(`Starting polling for ${request_id} (max ${maxPollingTime/1000}s)`);
-      
-      while (Date.now() - startTime < maxPollingTime) {
-        await new Promise(resolve => setTimeout(resolve, pollingInterval));
-        
-        try {
-          const status = await fal.queue.status(apiEndpoint, { requestId: request_id });
-          const elapsedTime = Math.round((Date.now() - startTime) / 1000);
-          console.log(`[${elapsedTime}s] Polling status for ${request_id}:`, status.status);
-          
-          if (status.status === 'COMPLETED') {
-            const result = await fal.queue.result(apiEndpoint, { requestId: request_id });
-            console.log('FAL AI result structure:', JSON.stringify(result, null, 2));
-            
-            // FAL AI 응답 구조에 따라 이미지 URL 추출
-            const imageUrl = result.images?.[0]?.url || 
-                           result.images?.[0] || 
-                           result.image?.url || 
-                           result.image_url || 
-                           result.url ||
-                           result.output;
-            
-            if (imageUrl) {
-              // 이미지를 Supabase Storage에 저장
-              let storageUrl = imageUrl; // 기본값은 원본 URL
-              
-              try {
-                // 이미지 다운로드
-                const imageResponse = await fetch(imageUrl);
-                if (!imageResponse.ok) {
-                  throw new Error('Failed to fetch generated image');
-                }
-                
-                const imageBuffer = await imageResponse.arrayBuffer();
-                const uint8Array = new Uint8Array(imageBuffer);
-                
-                // 파일명 생성
-                const timestamp = Date.now();
-                const fileName = `${timestamp}_${imageRecord.id}.png`;
-                const storagePath = `gen-images/${projectId}/${category}/${fileName}`;
-                
-                // Supabase Storage에 업로드
-                const { data: uploadData, error: uploadError } = await supabaseAdmin
-                  .storage
-                  .from('projects')
-                  .upload(storagePath, uint8Array, {
-                    contentType: 'image/png',
-                    cacheControl: '3600',
-                    upsert: true
-                  });
-                
-                if (uploadError) {
-                  console.error('Storage upload error:', uploadError);
-                  // 업로드 실패 시 원본 URL 사용
-                } else {
-                  // 공개 URL 생성
-                  const { data: { publicUrl } } = supabaseAdmin
-                    .storage
-                    .from('projects')
-                    .getPublicUrl(storagePath);
-                  
-                  storageUrl = publicUrl;
-                  console.log('Image saved to storage:', storageUrl);
-                }
-              } catch (storageError) {
-                console.error('Failed to save image to storage:', storageError);
-                // 저장 실패 시 원본 URL 사용
-              }
-              
-              // DB 업데이트
-              await supabaseAdmin
-                .from('gen_images')
-                .update({
-                  generation_status: 'completed',
-                  result_image_url: imageUrl,
-                  storage_image_url: storageUrl,
-                  updated_at: new Date().toISOString()
-                })
-                .eq('id', imageRecord.id);
-              
-              return {
-                success: true,
-                data: {
-                  ...imageRecord,
-                  request_id: request_id,
-                  status: 'completed',
-                  result_image_url: imageUrl,
-                  storage_image_url: storageUrl
-                }
-              };
-            } else {
-              // 이미지 URL을 찾을 수 없는 경우
-              console.error('No image URL found in result:', result);
-              throw new Error('Image URL not found in generation result');
-            }
-          } else if (status.status === 'FAILED') {
-            throw new Error('Image generation failed');
-          }
-        } catch (pollError) {
-          console.error('Polling error:', pollError);
-        }
+    // 4. 개발 환경과 프로덕션 모두 즉시 응답 반환
+    // 개발 환경에서도 비동기 처리로 변경 (타임아웃 문제 해결)
+    console.log(`Flux Image generation initiated in ${isDevelopment ? 'development' : 'production'} mode`);
+    
+    return {
+      success: true,
+      data: {
+        ...imageRecord,
+        request_id: request_id,
+        status: 'processing',
+        message: '이미지 생성이 시작되었습니다. 완료되면 자동으로 갤러리에 표시됩니다.'
       }
-      
-      // 타임아웃
-      throw new Error('Image generation timed out');
-      
-    } else {
-      // 프로덕션: 웹훅이 처리하므로 즉시 응답
-      return {
-        success: true,
-        data: {
-          ...imageRecord,
-          request_id: request_id,
-          status: 'processing',
-          message: '이미지 생성이 시작되었습니다. 완료되면 자동으로 갤러리에 표시됩니다.'
-        }
-      };
-    }
+    };
 
   } catch (error) {
     console.error('Flux Image generation error:', error);

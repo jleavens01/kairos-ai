@@ -1789,32 +1789,42 @@ onMounted(async () => {
 /* 참조 이미지 그리드 */
 .reference-images-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   gap: 10px;
   width: 100%;
   margin-bottom: 10px;
+  grid-auto-rows: 100px; /* 고정 높이 */
 }
 
 .reference-image-item {
   position: relative;
-  aspect-ratio: 1;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  overflow: hidden;
 }
 
 .image-preview-wrapper {
   width: 100%;
   height: 100%;
-  border-radius: 6px;
-  overflow: hidden;
-  background: var(--bg-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .image-preview-wrapper img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain; /* 원본 비율 유지 */
+  display: block;
 }
 
 .upload-loading {
@@ -2312,10 +2322,11 @@ onMounted(async () => {
 
 .library-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
   gap: 8px;
   max-height: 300px;
   overflow-y: auto;
+  grid-auto-rows: 100px; /* 고정 높이 */
   padding: 8px;
   background: var(--bg-secondary);
   border-radius: 8px;
@@ -2323,10 +2334,14 @@ onMounted(async () => {
 
 .library-item {
   position: relative;
-  aspect-ratio: 1;
+  height: 100%;
   border-radius: 6px;
   overflow: hidden;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary);
   border: 2px solid transparent;
   transition: all 0.2s;
 }
@@ -2469,9 +2484,12 @@ onMounted(async () => {
 }
 
 .library-item img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain; /* 원본 빔율 유지 */
+  display: block;
 }
 
 .library-item-overlay {

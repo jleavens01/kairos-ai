@@ -93,12 +93,57 @@ export const handler = async (event) => {
 
           console.log(`Checking status for image ${image.id} with model ${image.generation_model} at ${apiEndpoint}`);
           
-          // FAL AI SDK로 상태 확인
-          const statusData = await fal.queue.status(apiEndpoint, { 
-            requestId: image.request_id 
-          });
-          
-          console.log(`Status for image ${image.id}:`, statusData.status);
+          let statusData;
+          try {
+            // FAL AI SDK로 상태 확인
+            statusData = await fal.queue.status(apiEndpoint, { 
+              requestId: image.request_id 
+            });
+            
+            console.log(`Status for image ${image.id}:`, statusData.status);
+          } catch (statusError) {
+            console.error(`FAL AI status check error for ${image.id}:`, statusError);
+            
+            // 422 에러나 다른 FAL AI 에러 처리
+            if (statusError.status === 422 || statusError.message?.includes('422')) {
+              // 422 Unprocessable Entity - 요청 검증 실패
+              await supabaseAdmin
+                .from('gen_images')
+                .update({
+                  generation_status: 'failed',
+                  metadata: {
+                    ...image.metadata,
+                    error: 'Invalid request parameters (422)',
+                    error_details: statusError.message || 'Request validation failed',
+                    failed_at: new Date().toISOString()
+                  },
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', image.id);
+              
+              return { id: image.id, status: 'failed', error: '422 validation error' };
+            } else if (statusError.status === 404 || statusError.message?.includes('not found')) {
+              // 404 - 요청 ID를 찾을 수 없음
+              await supabaseAdmin
+                .from('gen_images')
+                .update({
+                  generation_status: 'failed',
+                  metadata: {
+                    ...image.metadata,
+                    error: 'Request not found (404)',
+                    error_details: statusError.message || 'Request ID not found in FAL AI',
+                    failed_at: new Date().toISOString()
+                  },
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', image.id);
+              
+              return { id: image.id, status: 'failed', error: '404 not found' };
+            } else {
+              // 기타 FAL AI 에러
+              throw statusError;
+            }
+          }
           
           // 상태별 처리
           const status = statusData.status;
@@ -110,23 +155,25 @@ export const handler = async (event) => {
               requestId: image.request_id 
             });
             
-            console.log(`Result for image ${image.id}:`, result);
+            console.log(`Result for image ${image.id}:`, JSON.stringify(result, null, 2));
             
-            // 다양한 응답 형식 처리
+            // 다양한 응답 형식 처리 (FAL AI의 result.data 구조 처리)
             let imageUrl = null;
+            const responseData = result.data || result;
             
-            if (result.images && result.images.length > 0) {
-              imageUrl = result.images[0].url || result.images[0];
-            } else if (result.output) {
-              imageUrl = result.output.url || result.output;
-            } else if (result.image) {
-              imageUrl = result.image.url || result.image;
-            } else if (result.image_url) {
-              imageUrl = result.image_url;
-            } else if (result.url) {
-              imageUrl = result.url;
-            } else if (typeof result === 'string') {
-              imageUrl = result;
+            if (responseData.images && responseData.images.length > 0) {
+              // GPT-Image-1 형식: data.images[0].url
+              imageUrl = responseData.images[0].url || responseData.images[0];
+            } else if (responseData.output) {
+              imageUrl = responseData.output.url || responseData.output;
+            } else if (responseData.image) {
+              imageUrl = responseData.image.url || responseData.image;
+            } else if (responseData.image_url) {
+              imageUrl = responseData.image_url;
+            } else if (responseData.url) {
+              imageUrl = responseData.url;
+            } else if (typeof responseData === 'string') {
+              imageUrl = responseData;
             }
             
             if (!imageUrl) {
@@ -134,7 +181,12 @@ export const handler = async (event) => {
               throw new Error('No image URL in response');
             }
             
-            // 이미지를 Supabase Storage에 저장
+            // Storage 업로드 시도 (실패해도 FAL URL 사용)
+            let storageUrl = imageUrl; // 기본값은 FAL AI URL
+            let imageData = null;
+            
+            try {
+              // 이미지를 Supabase Storage에 저장
             const imageResponse = await fetch(imageUrl);
             const imageBlob = await imageResponse.blob();
             const imageBuffer = await imageBlob.arrayBuffer();
@@ -146,26 +198,37 @@ export const handler = async (event) => {
             
             const { data: uploadData, error: uploadError } = await supabaseAdmin
               .storage
-              .from('gen-images')
+              .from('gen-images')  // gen-images 버킷 사용
               .upload(fileName, imageData, {
                 contentType: 'image/png',
                 upsert: false
               });
 
             if (uploadError) {
-              console.error('Storage upload error:', uploadError);
-              throw uploadError;
+              console.error('Storage upload error (using FAL URL instead):', uploadError.message);
+              // Storage 업로드 실패해도 FAL AI URL을 사용하여 계속 진행
+            } else {
+              // Storage URL 생성 성공
+              const { data: { publicUrl } } = supabaseAdmin
+                .storage
+                .from('gen-images')
+                .getPublicUrl(fileName);
+              
+              if (publicUrl) {
+                storageUrl = publicUrl;
+                console.log('Image saved to storage:', storageUrl);
+              }
+            }
+            } catch (storageError) {
+              console.error('Storage operation failed (using FAL URL):', storageError.message);
+              // Storage 실패해도 계속 진행
             }
 
-            // Storage URL 생성
-            const { data: { publicUrl } } = supabaseAdmin
-              .storage
-              .from('gen-images')
-              .getPublicUrl(fileName);
 
-            // Gemini 1.5를 사용한 태그 추출
+            // Gemini 1.5를 사용한 태그 추출 (선택적)
             let extractedTags = [];
-            try {
+            if (imageData) {
+              try {
               const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
               const model = genAI.getGenerativeModel({
                 model: "gemini-1.5-flash",
@@ -217,8 +280,9 @@ JSON 배열 형태로만 반환하고 다른 설명은 하지 마세요.
               } catch (parseError) {
                 console.error('Failed to parse tags:', parseError);
               }
-            } catch (geminiError) {
-              console.error('Gemini tag extraction failed:', geminiError);
+              } catch (geminiError) {
+                console.error('Gemini tag extraction failed:', geminiError);
+              }
             }
 
             // 기존 태그와 병합
@@ -231,8 +295,8 @@ JSON 배열 형태로만 반환하고 다른 설명은 하지 마세요.
               .update({
                 generation_status: 'completed',
                 result_image_url: imageUrl,
-                storage_image_url: publicUrl,
-                thumbnail_url: publicUrl,
+                storage_image_url: storageUrl,  // FAL URL 또는 Storage URL
+                thumbnail_url: storageUrl,       // FAL URL 또는 Storage URL
                 tags: allTags,
                 metadata: {
                   ...image.metadata,
@@ -248,21 +312,24 @@ JSON 배열 형태로만 반환하고 다른 설명은 하지 마세요.
           }
           
           // 실패한 경우
-          if (status === 'FAILED') {
+          if (status === 'FAILED' || status === 'ERROR') {
+            const errorMessage = statusData.error || statusData.message || statusData.detail || 'Generation failed';
+            
             await supabaseAdmin
               .from('gen_images')
               .update({
                 generation_status: 'failed',
                 metadata: {
                   ...image.metadata,
-                  error: statusData.error || statusData.message || 'Generation failed',
+                  error: errorMessage,
+                  error_details: statusData,
                   failed_at: new Date().toISOString()
                 },
                 updated_at: new Date().toISOString()
               })
               .eq('id', image.id);
 
-            return { id: image.id, status: 'failed' };
+            return { id: image.id, status: 'failed', error: errorMessage };
           }
           
           // 아직 처리 중

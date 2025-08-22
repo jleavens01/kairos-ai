@@ -62,6 +62,24 @@
             </div>
           </div>
 
+          <!-- 씨댄스 라이트 모델 안내 -->
+          <div v-if="selectedModel === 'seedance-lite' && referenceTab !== 'storyboard'" class="seedance-info">
+            <p class="seedance-hint">
+              <span class="icon">ℹ️</span>
+              SeedDance Lite는 <strong>첫 프레임</strong>과 <strong>끝 이미지</strong>를 참조합니다.
+              <br>
+              <span v-if="referenceImages.length === 0" class="warning">
+                ⚠️ 최소 1개의 이미지를 선택해주세요.
+              </span>
+              <span v-else-if="referenceImages.length === 1" class="info">
+                🎬 첫 이미지만 사용됩니다.
+              </span>
+              <span v-else class="info">
+                🎬 첫 이미지와 마지막 이미지를 사용합니다.
+              </span>
+            </p>
+          </div>
+
           <!-- 선택된 참조 이미지 미리보기 -->
           <div v-if="referenceImages.length > 0" class="selected-references">
             <div class="reference-images-grid">
@@ -100,6 +118,11 @@
                 </div>
                 <div v-if="item.hasAnnotations" class="annotation-badge" title="주석 추가됨">
                   🎨
+                </div>
+                <!-- 씨댄스 라이트 모델일 때 첫/마짉 이미지 표시 -->
+                <div v-if="selectedModel === 'seedance-lite' && referenceImages.length > 1" class="image-position-badge">
+                  <span v-if="index === 0" class="badge-first">첫 프레임</span>
+                  <span v-else-if="index === referenceImages.length - 1" class="badge-last">끝 이미지</span>
                 </div>
               </div>
             </div>
@@ -463,15 +486,27 @@
             <div class="form-group inline-group">
               <label class="inline-label">해상도</label>
               <select v-model="seedanceLiteParams.resolution" class="form-select">
-                <option value="480p">480p (기본)</option>
-                <option value="720p">720p</option>
+                <option value="480p">480p</option>
+                <option value="720p">720p (기본)</option>
+                <option value="1080p" v-if="referenceImages.length < 2">1080p (단일 이미지만)</option>
               </select>
+              <p v-if="referenceImages.length >= 2" class="hint" style="margin-top: 4px; font-size: 0.85rem; color: #f59e0b;">
+                ⚠️ 끝 이미지 사용 시 1080p는 지원되지 않습니다.
+              </p>
             </div>
             <div class="form-group inline-group">
               <label class="inline-label">비디오 길이</label>
               <select v-model="seedanceLiteParams.duration" class="form-select">
-                <option :value="3">3초 (기본)</option>
-                <option :value="5">5초</option>
+                <option :value="3">3초</option>
+                <option :value="4">4초</option>
+                <option :value="5">5초 (기본)</option>
+                <option :value="6">6초</option>
+                <option :value="7">7초</option>
+                <option :value="8">8초</option>
+                <option :value="9">9초</option>
+                <option :value="10">10초</option>
+                <option :value="11">11초</option>
+                <option :value="12">12초</option>
               </select>
             </div>
             <div class="form-group inline-group">
@@ -640,8 +675,8 @@ const seedanceParams = ref({
 })
 
 const seedanceLiteParams = ref({
-  resolution: '480p',
-  duration: 3,
+  resolution: '720p',  // 480p, 720p, 1080p
+  duration: 5,  // 3-12 seconds, default 5
   cameraFixed: false,
   seed: null
 })
@@ -708,6 +743,31 @@ onMounted(async () => {
   await loadLastUsedSettings()
 })
 
+// 스토리보드 이미지 로드 - watch에서 사용되므로 먼저 정의
+const loadStoryboardImages = async () => {
+  if (!props.projectId) return
+  
+  loadingStoryboard.value = true
+  
+  try {
+    const { data, error } = await supabase
+      .from('production_sheets')
+      .select('id, scene_number, scene_image_url, original_script_text')
+      .eq('project_id', props.projectId)
+      .not('scene_image_url', 'is', null)
+      .order('scene_number', { ascending: true })
+    
+    if (error) throw error
+    
+    storyboardImages.value = data || []
+  } catch (error) {
+    console.error('스토리보드 이미지 로드 실패:', error)
+    storyboardImages.value = []
+  } finally {
+    loadingStoryboard.value = false
+  }
+}
+
 // watch props 변경 - show와 initialImage를 모두 감시
 watch(
   () => ({ show: props.show, image: props.initialImage, prompt: props.initialPrompt }),
@@ -748,6 +808,19 @@ watch(
     }
   },
   { immediate: true }
+)
+
+// 씨댄스 라이트에서 참조 이미지가 2개 이상일 때 1080p를 720p로 변경
+watch(
+  () => referenceImages.value.length,
+  (newLength) => {
+    if (selectedModel.value === 'seedance-lite' && newLength >= 2) {
+      if (seedanceLiteParams.value.resolution === '1080p') {
+        seedanceLiteParams.value.resolution = '720p'
+        console.log('씨댄스 라이트: 끝 이미지 사용으로 해상도를 720p로 변경')
+      }
+    }
+  }
 )
 
 // 메서드들
@@ -964,30 +1037,7 @@ const onPresetsSaved = () => {
   loadPresets()
 }
 
-// 스토리보드 이미지 로드
-const loadStoryboardImages = async () => {
-  if (!props.projectId) return
-  
-  loadingStoryboard.value = true
-  
-  try {
-    const { data, error } = await supabase
-      .from('production_sheets')
-      .select('id, scene_number, scene_image_url, original_script_text')
-      .eq('project_id', props.projectId)
-      .not('scene_image_url', 'is', null)
-      .order('scene_number', { ascending: true })
-    
-    if (error) throw error
-    
-    storyboardImages.value = data || []
-  } catch (error) {
-    console.error('스토리보드 이미지 로드 실패:', error)
-    storyboardImages.value = []
-  } finally {
-    loadingStoryboard.value = false
-  }
-}
+// loadStoryboardImages 함수는 이미 위에 정의됨
 
 // 스토리보드 이미지 선택 여부 확인
 const isStoryboardImageSelected = (sceneId) => {
@@ -1109,8 +1159,11 @@ const generateVideo = async () => {
     }
     // 참조 이미지 업로드 (필요한 경우)
     let referenceImageUrl = null
+    let endImageUrl = null // 씨댄스 라이트용 마지막 이미지
     const firstRef = referenceImages.value[0]
+    const lastRef = referenceImages.value[referenceImages.value.length - 1]
     
+    // 첫 번째 이미지 처리
     if (firstRef.file) {
       // 파일 업로드 - RLS 정책에 맞춰 userId를 첫 번째 폴더로 사용
       const userId = authStore.user?.id
@@ -1122,7 +1175,7 @@ const generateVideo = async () => {
       const fileName = firstRef.file.name
       const filePath = `${userId}/${props.projectId}/${fileName}`
       
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from('ref-images')
         .upload(filePath, firstRef.file)
 
@@ -1135,6 +1188,29 @@ const generateVideo = async () => {
       referenceImageUrl = publicUrl
     } else {
       referenceImageUrl = firstRef.url
+    }
+    
+    // 씨댄스 라이트 모델이고 이미지가 2개 이상일 때 마지막 이미지 처리
+    if (selectedModel.value === 'seedance-lite' && referenceImages.value.length > 1) {
+      if (lastRef.file) {
+        const userId = authStore.user?.id
+        const fileName = lastRef.file.name
+        const filePath = `${userId}/${props.projectId}/end_${fileName}`
+        
+        const { error: uploadError } = await supabase.storage
+          .from('ref-images')
+          .upload(filePath, lastRef.file)
+
+        if (uploadError) throw uploadError
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('ref-images')
+          .getPublicUrl(filePath)
+        
+        endImageUrl = publicUrl
+      } else {
+        endImageUrl = lastRef.url
+      }
     }
 
     // 모델별 파라미터 준비
@@ -1181,6 +1257,7 @@ const generateVideo = async () => {
         model: selectedModel.value,
         projectId: props.projectId,
         referenceImageUrl,
+        endImageUrl,  // 씨댄스 라이트용 마지막 이미지 추가
         modelParams,
         parameters: modelParams,  // parameters로도 전달 (백엔드 호환성)
         usedPrompt: prompt.value,  // 원본 프롬프트 저장
@@ -1932,6 +2009,69 @@ const generateVideo = async () => {
 .preset-chip.active {
   background: var(--primary-color);
   border-color: var(--primary-color);
+  color: white;
+}
+
+/* 씨댄스 라이트 안내 메시지 */
+.seedance-info {
+  margin: 12px 0;
+  padding: 12px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(147, 51, 234, 0.05));
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 8px;
+}
+
+.seedance-hint {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.seedance-hint .icon {
+  margin-right: 6px;
+}
+
+.seedance-hint strong {
+  color: var(--primary-color);
+}
+
+.seedance-hint .warning {
+  color: #f59e0b;
+  font-weight: 500;
+}
+
+.seedance-hint .info {
+  color: var(--text-secondary);
+  display: block;
+  margin-top: 4px;
+}
+
+/* 이미지 위치 배지 */
+.image-position-badge {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  display: flex;
+  gap: 4px;
+}
+
+.badge-first,
+.badge-last {
+  padding: 2px 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+}
+
+.badge-first {
+  background: rgba(34, 197, 94, 0.9);
+  color: white;
+}
+
+.badge-last {
+  background: rgba(239, 68, 68, 0.9);
   color: white;
 }
 
