@@ -285,11 +285,11 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import MediaPanel from '@/components/storyboard/MediaPanel.vue'
-import { useProjectStore } from '@/stores/projects'
+import { useProjectsStore } from '@/stores/projects'
 
 const router = useRouter()
 const route = useRoute()
-const projectStore = useProjectStore()
+const projectStore = useProjectsStore()
 
 // 미디어 패널 참조
 const mediaPanel = ref(null)

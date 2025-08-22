@@ -113,7 +113,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useProjectStore } from '@/stores/projects'
+import { useProjectsStore } from '@/stores/projects'
 import { supabase } from '@/utils/supabase'
 
 const props = defineProps({
@@ -135,7 +135,7 @@ const videos = ref([])
 const draggedItem = ref(null)
 
 // 프로젝트 스토어
-const projectStore = useProjectStore()
+const projectStore = useProjectsStore()
 
 // 계산된 속성
 const filteredImages = computed(() => {
