@@ -103,11 +103,23 @@ export const handler = async (event) => {
       dbInsertData.aspect_ratio = parameters.aspectRatio || '16:9';
       dbInsertData.person_generation = parameters.personGeneration || 'allow_adult';
       dbInsertData.model_version = model;
+      // Veo 모델의 기본 해상도 설정 (aspect ratio 기준)
+      const aspectRatio = parameters.aspectRatio || '16:9';
+      if (aspectRatio === '16:9') {
+        dbInsertData.resolution = '1280x720'; // HD
+      } else if (aspectRatio === '9:16') {
+        dbInsertData.resolution = '720x1280'; // Vertical HD
+      } else if (aspectRatio === '1:1') {
+        dbInsertData.resolution = '720x720'; // Square
+      } else {
+        dbInsertData.resolution = '1280x720'; // Default HD
+      }
     } else if (model.includes('kling')) {
       // Kling 모델
       dbInsertData.duration_seconds = parameters.duration || 5;
       dbInsertData.negative_prompt = parameters.negative_prompt || 'blur, distort, and low quality';
       dbInsertData.model_version = 'kling-2.1';
+      dbInsertData.resolution = '1280x720'; // Kling 2.1은 HD 고정
     } else if (model.includes('hailou')) {
       // Hailou 모델
       dbInsertData.prompt_optimizer = parameters.prompt_optimizer !== undefined ? parameters.prompt_optimizer : true;
@@ -117,7 +129,18 @@ export const handler = async (event) => {
         dbInsertData.model_version = 'hailou-02-standard';
       } else {
         dbInsertData.duration_seconds = 5; // Pro는 5초 고정
+        dbInsertData.resolution = '1280x720'; // Pro는 HD
         dbInsertData.model_version = 'hailou-02-pro';
+      }
+    } else if (model.includes('seedance')) {
+      // SeedDance 모델
+      dbInsertData.duration_seconds = parameters.duration || (model.includes('lite') ? 3 : 5);
+      if (model.includes('lite')) {
+        dbInsertData.resolution = parameters.resolution || '480p';
+        dbInsertData.model_version = 'seedance-v1-lite';
+      } else {
+        dbInsertData.resolution = parameters.resolution || '720p';
+        dbInsertData.model_version = 'seedance-v1-pro';
       }
     }
 

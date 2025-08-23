@@ -57,7 +57,7 @@
               </div>
             </div>
             <div class="setting-help">
-              현재 해상도의 {{ upscaleFactor }}배로 업스케일됩니다
+              {{ getOriginalResolution() }}에서 {{ upscaleFactor }}배로 업스케일됩니다
             </div>
           </div>
 
@@ -237,6 +237,42 @@ const estimatedCredits = computed(() => {
 const close = () => {
   isOpen.value = false
   emit('close')
+}
+
+const getOriginalResolution = () => {
+  if (!props.video) return '원본 해상도'
+  
+  // 이미 resolution이 있으면 사용
+  if (props.video.resolution) {
+    return props.video.resolution
+  }
+  
+  // 모델별 기본 해상도 추정
+  const model = props.video.generation_model?.toLowerCase() || ''
+  
+  if (model.includes('veo')) {
+    if (props.video.aspect_ratio === '9:16') return '720x1280'
+    if (props.video.aspect_ratio === '1:1') return '720x720'
+    return '1280x720'
+  }
+  
+  if (model.includes('kling')) {
+    return '1280x720'
+  }
+  
+  if (model.includes('hailou')) {
+    if (model.includes('standard')) return '768P'
+    if (model.includes('pro')) return '1280x720'
+    return '768P'
+  }
+  
+  if (model.includes('seedance')) {
+    if (model.includes('lite')) return '480p'
+    if (model.includes('pro')) return '720p'
+    return '480p'
+  }
+  
+  return '원본 해상도'
 }
 
 const startUpscale = async () => {

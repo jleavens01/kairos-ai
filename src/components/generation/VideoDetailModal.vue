@@ -43,9 +43,9 @@
                 <span class="label">길이:</span>
                 <span class="value">{{ video.duration_seconds }}초</span>
               </div>
-              <div v-if="video.resolution" class="info-item">
+              <div class="info-item">
                 <span class="label">해상도:</span>
-                <span class="value">{{ video.resolution }}</span>
+                <span class="value">{{ video.resolution || getDefaultResolution(video) }}</span>
               </div>
               <div v-if="video.fps" class="info-item">
                 <span class="label">FPS:</span>
@@ -270,10 +270,61 @@ const handleOverlayClick = () => {
 const getModelName = (model) => {
   const modelNames = {
     'veo2': 'Google Veo 2',
+    'veo-2': 'Google Veo 2',
+    'veo3': 'Google Veo 3',
+    'veo-3': 'Google Veo 3',
+    'veo3-preview': 'Google Veo 3 Preview',
+    'veo3-fast': 'Google Veo 3 Fast',
     'kling2.1': 'Kling AI 2.1',
-    'hailou02': 'Hailou 02'
+    'kling-2.1': 'Kling AI 2.1',
+    'hailou02': 'Hailou 02',
+    'hailou-02-standard': 'Hailou 02 Standard',
+    'hailou-02-pro': 'Hailou 02 Pro',
+    'seedance-v1-pro': 'SeedDance v1 Pro',
+    'seedance-v1-lite': 'SeedDance v1 Lite',
+    'topaz-upscale': 'Topaz Video AI'
   }
   return modelNames[model] || model
+}
+
+const getDefaultResolution = (video) => {
+  // 모델별 기본 해상도
+  if (!video.generation_model) return '알 수 없음'
+  
+  const model = video.generation_model.toLowerCase()
+  
+  // Veo 모델들
+  if (model.includes('veo')) {
+    if (video.aspect_ratio === '9:16') return '720x1280'
+    if (video.aspect_ratio === '1:1') return '720x720'
+    return '1280x720' // 기본 16:9
+  }
+  
+  // Kling 모델
+  if (model.includes('kling')) {
+    return '1280x720'
+  }
+  
+  // Hailou 모델
+  if (model.includes('hailou')) {
+    if (model.includes('standard')) return '768P'
+    if (model.includes('pro')) return '1280x720'
+    return '768P'
+  }
+  
+  // SeedDance 모델
+  if (model.includes('seedance')) {
+    if (model.includes('lite')) return '480p'
+    if (model.includes('pro')) return '720p'
+    return '480p'
+  }
+  
+  // 업스케일된 비디오
+  if (model.includes('topaz') || video.is_upscaled) {
+    return '업스케일됨'
+  }
+  
+  return '알 수 없음'
 }
 
 const formatDate = (dateString) => {
