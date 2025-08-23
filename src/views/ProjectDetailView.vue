@@ -373,6 +373,7 @@ const toggleVideoKeptView = () => {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  overflow: hidden; /* 전체 스크롤 방지 */
 }
 
 .loading-container, .error-container {
@@ -426,6 +427,7 @@ const toggleVideoKeptView = () => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  position: relative;
 }
 
 .tabs {
@@ -434,6 +436,8 @@ const toggleVideoKeptView = () => {
   align-items: center;
   background-color: #2d3748;
   padding-right: 20px;
+  flex-shrink: 0; /* 탭 영역이 축소되지 않도록 */
+  z-index: 100;
 }
 
 .tabs-left {
@@ -523,9 +527,11 @@ const toggleVideoKeptView = () => {
 .tab-content {
   padding: 0 1rem;
   flex: 1;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
+  min-height: 0; /* flexbox 내에서 올바른 스크롤 동작을 위해 */
 }
 
 /* 스토리보드 섹션 */
@@ -769,7 +775,9 @@ const toggleVideoKeptView = () => {
   .tab-content {
     padding: 15px 10px;
     overflow-y: auto;
-    height: calc(100vh - 120px); /* 탭 높이를 고려한 컨텐츠 영역 */
+    overflow-x: hidden;
+    flex: 1;
+    min-height: 0;
   }
 }
 </style>
