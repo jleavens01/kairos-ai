@@ -125,16 +125,24 @@ export const handler = async (event) => {
 
         console.log(`Image ${request_id} marked as completed`);
       }
-    } else if (status === 'FAILED' || status === 'failed' || status === 'error') {
+    } else if (status === 'FAILED' || status === 'failed' || status === 'ERROR' || status === 'error') {
       // 실패 처리 (이미지/비디오 공통)
-      const errorMessage = error?.message || error || 'Generation failed';
+      const errorMessage = error?.message || error || webhookData.message || webhookData.error_message || 'Generation failed';
       const table = isVideo ? 'gen_videos' : 'gen_images';
+
+      console.log(`Marking ${table} ${request_id} as failed with error:`, errorMessage);
 
       const { error: dbError } = await supabase
         .from(table)
         .update({
           generation_status: 'failed',
           error_message: errorMessage,
+          metadata: {
+            ...(isVideo ? {} : {}), // 기존 메타데이터 유지를 위한 처리 필요시 추가
+            error: errorMessage,
+            failed_at: new Date().toISOString(),
+            webhook_data: webhookData
+          },
           updated_at: new Date().toISOString()
         })
         .eq('request_id', request_id);

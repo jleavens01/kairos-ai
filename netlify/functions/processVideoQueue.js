@@ -211,9 +211,11 @@ export const handler = async (event) => {
             return { id: video.id, status: 'completed' };
           }
           
-          // 실패한 경우
+          // 실패한 경우 (대소문자 모두 처리)
           const isFailed = statusData.status === 'failed' || 
+                          statusData.status === 'FAILED' ||
                           statusData.status === 'error' ||
+                          statusData.status === 'ERROR' ||
                           statusData.error;
           
           if (isFailed) {
