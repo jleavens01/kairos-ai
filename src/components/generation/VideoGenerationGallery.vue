@@ -2,8 +2,8 @@
   <div class="video-generation-gallery">
     <!-- 갤러리 섹션 -->
     <div class="gallery-section">
-      <!-- 컬럼 컨트롤 -->
-      <div v-if="filteredVideos.length > 0 || processingVideos.length > 0" class="gallery-controls">
+      <!-- 컬럼 컨트롤 (모바일에서는 숨김) -->
+      <div v-if="(filteredVideos.length > 0 || processingVideos.length > 0) && !isMobile" class="gallery-controls">
         <ColumnControl 
           v-model="columnCount"
           :min-columns="2"
@@ -47,8 +47,11 @@
           v-for="video in filteredVideos" 
           :key="video.id"
           class="gallery-item video-card"
-          :class="{ 'failed-card': video.generation_status === 'failed' }"
-          @click="openDetailModal(video)"
+          :class="{ 
+            'failed-card': video.generation_status === 'failed',
+            'selected': isMobile && selectedVideo?.id === video.id
+          }"
+          @click="handleVideoClick(video)"
           @mouseenter="() => handleVideoHover(video.id, true)"
           @mouseleave="() => handleVideoHover(video.id, false)"
         >
@@ -228,6 +231,7 @@ const currentPrompt = ref('')
 const videoToView = ref(null)
 const videoToConnect = ref(null)
 const videoToUpscale = ref(null)
+const selectedVideo = ref(null) // 모바일에서 선택된 비디오 추적
 // const realtimeChannel = ref(null) - Realtime 제거
 const videoRefs = ref({})
 let pollingInterval = null
@@ -249,14 +253,32 @@ watch(showUpscaleModal, (isOpen) => {
   productionStore.setModalOpen(isOpen)
 })
 
+// 모바일 여부 감지
+const isMobile = ref(window.innerWidth <= 768)
+const handleResize = () => {
+  isMobile.value = window.innerWidth <= 768
+  // 모바일에서는 컬럼 수를 2로 고정
+  if (isMobile.value) {
+    columnCount.value = 2
+  }
+}
+
 // 컬럼 수 상태 (localStorage에 저장)
 const savedColumns = localStorage.getItem('videoGenerationGalleryColumns')
-const columnCount = ref(savedColumns ? parseInt(savedColumns) : 3)
+const columnCount = ref(isMobile.value ? 2 : (savedColumns ? parseInt(savedColumns) : 3))
 
 const updateColumnCount = (count) => {
-  columnCount.value = count
-  localStorage.setItem('videoGenerationGalleryColumns', count.toString())
+  if (!isMobile.value) {
+    columnCount.value = count
+    localStorage.setItem('videoGenerationGalleryColumns', count.toString())
+  }
 }
+
+// 리사이즈 이벤트 리스너 추가
+window.addEventListener('resize', handleResize)
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+})
 
 // Computed
 const processingVideos = computed(() => {
@@ -324,6 +346,20 @@ const handleGenerationSuccess = async (result) => {
   if (result.status === 'processing' || result.status === 'pending') {
     console.log('Starting polling for processing video')
     startPolling()
+  }
+}
+
+const handleVideoClick = (video) => {
+  if (isMobile.value) {
+    // 모바일에서는 첫 클릭은 선택, 이미 선택된 비디오를 다시 클릭하면 상세보기
+    if (selectedVideo.value?.id === video.id) {
+      openDetailModal(video)
+    } else {
+      selectedVideo.value = video
+    }
+  } else {
+    // 데스크톱에서는 바로 상세보기
+    openDetailModal(video)
   }
 }
 
@@ -901,6 +937,18 @@ defineExpose({
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
   transform: scale(1.02);
   z-index: 10;
+}
+
+/* 모바일 선택 상태 */
+@media (max-width: 768px) {
+  .gallery-item.video-card.selected {
+    border-color: var(--primary-color);
+    box-shadow: 0 4px 12px rgba(74, 222, 128, 0.3);
+  }
+  
+  .gallery-item.video-card.selected .video-overlay-info {
+    opacity: 1;
+  }
 }
 
 .video-wrapper {

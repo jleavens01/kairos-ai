@@ -1223,13 +1223,20 @@ const downloadBatchVideos = async () => {
   
   // 선택된 씬들 중 비디오가 있는 씬만 필터링
   const scenesWithVideos = props.scenes.filter(scene => {
-    return props.selectedScenes.includes(scene.id) && scene.scene_video_url
+    // 선택된 씬이고 비디오 URL이 존재하며 유효한 경우만 포함
+    return props.selectedScenes.includes(scene.id) && 
+           scene.scene_video_url && 
+           scene.scene_video_url.trim() !== ''
   })
   
   if (scenesWithVideos.length === 0) {
-    alert('선택된 씬에 다운로드 가능한 비디오가 없습니다.')
+    // 선택된 씬들을 확인하여 더 구체적인 메시지 제공
+    const selectedCount = props.selectedScenes.length
+    alert(`선택된 ${selectedCount}개 씬에 다운로드 가능한 비디오가 없습니다.\n비디오가 생성된 씬을 선택해주세요.`)
     return
   }
+  
+  console.log(`Processing ${scenesWithVideos.length} scenes with videos out of ${props.selectedScenes.length} selected`)
   
   try {
     // 프로젝트 정보 가져오기
@@ -1246,13 +1253,30 @@ const downloadBatchVideos = async () => {
     // 각 비디오 파일 다운로드 및 ZIP에 추가
     const downloadPromises = scenesWithVideos.map(async (scene) => {
       try {
-        const response = await fetch(scene.scene_video_url)
+        // 비디오 URL이 없거나 유효하지 않은 경우 건너뛰기
+        if (!scene.scene_video_url) {
+          console.log(`Scene ${scene.scene_number}: No video URL available`)
+          return { success: false, sceneNumber: scene.scene_number, error: 'No video URL' }
+        }
+
+        // CORS 문제를 피하기 위한 fetch 옵션 설정
+        const response = await fetch(scene.scene_video_url, {
+          mode: 'cors',
+          credentials: 'omit',
+          cache: 'no-cache'
+        })
         
         if (!response.ok) {
-          throw new Error(`Failed to download video for scene ${scene.scene_number}`)
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`)
         }
         
         const blob = await response.blob()
+        
+        // blob이 유효한지 확인
+        if (!blob || blob.size === 0) {
+          throw new Error('Empty or invalid video file')
+        }
+        
         const fileName = `video_${projectName}_${scene.scene_number}.mp4`
         
         // ZIP에 파일 추가
@@ -1260,7 +1284,8 @@ const downloadBatchVideos = async () => {
         
         return { success: true, sceneNumber: scene.scene_number }
       } catch (error) {
-        console.error(`Scene ${scene.scene_number} video download failed:`, error)
+        // 에러를 경고로 변경하여 다른 비디오 다운로드는 계속 진행
+        console.warn(`Scene ${scene.scene_number} video download skipped:`, error.message)
         return { success: false, sceneNumber: scene.scene_number, error: error.message }
       }
     })

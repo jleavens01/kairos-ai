@@ -115,7 +115,7 @@ export const handler = async (event) => {
     
     // Veo3 Fast Preview 모델 가져오기
     const model = genAI.getGenerativeModel({ 
-      model: "veo-3.0-fast-generate-preview"  // 올바른 Veo3 Fast Preview 모델명
+      model: "imagen-3.0-fast-generate-001"  // Veo3 Fast는 Imagen 3.0 Fast로 실행됨
     });
 
     // Veo3 Fast API에 맞는 비디오 생성 요청 구성
@@ -165,7 +165,7 @@ ${finalNegativePrompt ? `Negative Prompt (things to avoid): ${finalNegativePromp
         negative_prompt: finalNegativePrompt,
         aspect_ratio: aspectRatio,
         person_generation: personGeneration,
-        model_version: 'veo-3.0-fast-preview-001',
+        model_version: 'imagen-3.0-fast-generate-001',
         api_response: { text: response.text() },
         metadata: {
           ...requestBody,

@@ -851,6 +851,12 @@ const handleFileSelect = (e) => {
 const handleFiles = async (files) => {
   for (const file of files) {
     if (file.type.startsWith('image/')) {
+      // SeedDance Lite는 최대 2개 이미지만 허용
+      if (selectedModel.value === 'seedance-lite' && referenceImages.value.length >= 2) {
+        console.log('SeedDance Lite는 최대 2개 이미지만 지원합니다')
+        break
+      }
+      
       // 파일명을 영문과 숫자로 변경
       const sanitizedFile = await sanitizeFileName(file)
       
@@ -862,7 +868,16 @@ const handleFiles = async (files) => {
         originalName: file.name,
         sanitizedName: sanitizedFile.name
       }
-      referenceImages.value.push(item)
+      
+      // SeedDance Lite는 2개까지, 다른 모델은 1개만
+      if (selectedModel.value === 'seedance-lite') {
+        if (referenceImages.value.length < 2) {
+          referenceImages.value.push(item)
+        }
+      } else {
+        // 다른 모델은 이전 이미지 교체
+        referenceImages.value = [item]
+      }
       
       // 실제 업로드는 생성 시점에 수행
       item.uploading = false
@@ -957,22 +972,56 @@ const toggleLibraryImage = (image) => {
   if (index >= 0) {
     referenceImages.value.splice(index, 1)
   } else {
-    // 비디오는 1개의 참조 이미지만 허용
-    referenceImages.value = [{
-      id: image.id,
-      url: image.storage_image_url || image.result_image_url,
-      preview: image.storage_image_url || image.result_image_url
-    }]
+    // SeedDance Lite는 2개 이미지 허용, 다른 모델은 1개만
+    if (selectedModel.value === 'seedance-lite') {
+      if (referenceImages.value.length < 2) {
+        referenceImages.value.push({
+          id: image.id,
+          url: image.storage_image_url || image.result_image_url,
+          preview: image.storage_image_url || image.result_image_url
+        })
+      } else {
+        // 2개가 이미 선택된 경우, 마지막 이미지를 교체
+        referenceImages.value[1] = {
+          id: image.id,
+          url: image.storage_image_url || image.result_image_url,
+          preview: image.storage_image_url || image.result_image_url
+        }
+      }
+    } else {
+      // 일반 비디오는 1개의 참조 이미지만 허용
+      referenceImages.value = [{
+        id: image.id,
+        url: image.storage_image_url || image.result_image_url,
+        preview: image.storage_image_url || image.result_image_url
+      }]
+    }
   }
 }
 
 const addImageFromUrl = () => {
   if (urlInput.value) {
-    // 비디오는 1개의 참조 이미지만 허용
-    referenceImages.value = [{
-      url: urlInput.value,
-      preview: urlInput.value
-    }]
+    // SeedDance Lite는 2개 이미지 허용, 다른 모델은 1개만
+    if (selectedModel.value === 'seedance-lite') {
+      if (referenceImages.value.length < 2) {
+        referenceImages.value.push({
+          url: urlInput.value,
+          preview: urlInput.value
+        })
+      } else {
+        // 2개가 이미 선택된 경우, 마지막 이미지를 교체
+        referenceImages.value[1] = {
+          url: urlInput.value,
+          preview: urlInput.value
+        }
+      }
+    } else {
+      // 일반 비디오는 1개의 참조 이미지만 허용
+      referenceImages.value = [{
+        url: urlInput.value,
+        preview: urlInput.value
+      }]
+    }
     urlInput.value = ''
   }
 }
@@ -1050,13 +1099,33 @@ const selectStoryboardImage = (scene) => {
   if (index >= 0) {
     referenceImages.value.splice(index, 1)
   } else {
-    // 비디오는 1개의 참조 이미지만 허용
-    referenceImages.value = [{
-      sceneId: scene.id,
-      url: scene.scene_image_url,
-      preview: scene.scene_image_url,
-      sceneNumber: scene.scene_number
-    }]
+    // SeedDance Lite는 2개 이미지 허용, 다른 모델은 1개만
+    if (selectedModel.value === 'seedance-lite') {
+      if (referenceImages.value.length < 2) {
+        referenceImages.value.push({
+          sceneId: scene.id,
+          url: scene.scene_image_url,
+          preview: scene.scene_image_url,
+          sceneNumber: scene.scene_number
+        })
+      } else {
+        // 2개가 이미 선택된 경우, 마지막 이미지를 교체
+        referenceImages.value[1] = {
+          sceneId: scene.id,
+          url: scene.scene_image_url,
+          preview: scene.scene_image_url,
+          sceneNumber: scene.scene_number
+        }
+      }
+    } else {
+      // 일반 비디오는 1개의 참조 이미지만 허용
+      referenceImages.value = [{
+        sceneId: scene.id,
+        url: scene.scene_image_url,
+        preview: scene.scene_image_url,
+        sceneNumber: scene.scene_number
+      }]
+    }
     // 프롬프트가 비어있으면 씬 텍스트를 기본 프롬프트로 설정
     if (!prompt.value && scene.original_script_text) {
       prompt.value = scene.original_script_text

@@ -27,7 +27,7 @@
               @click="changeTab(tab.id)"
               :class="['tab-button', { active: activeTab === tab.id }]"
             >
-              {{ tab.label }}
+              {{ isMobile ? tab.mobileLabel : tab.label }}
             </button>
           </div>
           <div class="tabs-right">
@@ -199,12 +199,18 @@ const getInitialTab = () => {
 
 const activeTab = ref(getInitialTab())
 const tabs = [
-  { id: 'production', label: '스토리보드' },
-  { id: 'reference', label: '자료' },
-  { id: 'generate', label: '이미지' },
-  { id: 'media', label: '비디오' },
-  { id: 'settings', label: '설정' }
+  { id: 'production', label: '스토리보드', mobileLabel: '스토리보드' },
+  { id: 'reference', label: '자료', mobileLabel: '자료' },
+  { id: 'generate', label: '이미지', mobileLabel: '이미지' },
+  { id: 'media', label: '비디오', mobileLabel: '비디오' },
+  { id: 'settings', label: '설정', mobileLabel: '⚙️' }
 ]
+
+// 모바일 여부 감지
+const isMobile = ref(window.innerWidth <= 768)
+window.addEventListener('resize', () => {
+  isMobile.value = window.innerWidth <= 768
+})
 
 // 탭 변경 함수
 const changeTab = (tabId) => {
@@ -446,26 +452,26 @@ const toggleVideoKeptView = () => {
 
 .tab-button {
   padding: 18px 30px;
-  background: none;
+  background: transparent;
   border: none;
+  border-bottom: 3px solid transparent;
   font-size: 1.05rem;
   font-weight: 600;
-  color: #ffffff;
+  color: rgba(255, 255, 255, 0.8);
   cursor: pointer;
   transition: all 0.3s;
   position: relative;
 }
 
 .tab-button:hover {
-  color: #f0f0f0;
-  background-color: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .tab-button.active {
-  background: linear-gradient(to right, #4ade80, #34d399);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
+  background: transparent;
+  color: #4ade80;
+  border-bottom-color: #4ade80;
 }
 
 .tab-action-btn {
@@ -667,17 +673,103 @@ const toggleVideoKeptView = () => {
 
 /* 모바일 반응형 */
 @media (max-width: 768px) {
+  .project-main {
+    position: relative;
+    padding-top: 0;
+  }
+
   .tabs {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    flex-direction: column;
+    gap: 0;
+    padding: 0;
+    padding-bottom: 0;
+    overflow-x: visible;
+    background-color: transparent;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .tabs-left {
+    display: flex;
+    gap: 0;
+    width: 100%;
+    justify-content: space-between;
+    background-color: #2d3748;
+  }
+
+  .dark .tabs-left {
+    background-color: #1a1a1a;
+  }
+
+  .tabs-right {
+    display: flex;
+    gap: 6px;
+    width: 100%;
     overflow-x: auto;
+    padding: 8px;
+    background-color: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
   }
 
   .tab-button {
-    padding: 14px 20px;
-    font-size: 0.95rem;
+    padding: 12px 6px;
+    font-size: 0.75rem;
+    min-width: 0;
+    flex: 1;
+    white-space: nowrap;
+    border-radius: 0;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.7);
+    position: relative;
+  }
+
+  /* 설정 버튼만 아이콘으로 표시 */
+  .tab-button:last-child {
+    font-size: 1.2rem;
+    padding: 12px 8px;
+    max-width: 45px;
+    flex: 0 0 auto;
+  }
+
+  /* 활성 탭 스타일 - 설정 제외 */
+  .tab-button.active:not(:last-child) {
+    background: transparent;
+    color: #4ade80;
+    border-bottom-color: #4ade80;
+    font-weight: 600;
+  }
+
+  /* 설정 버튼 활성화 시 색상만 변경 */
+  .tab-button:last-child.active {
+    color: #4ade80;
+    border-bottom-color: transparent;
+  }
+
+  .tab-button:hover {
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .tab-action-btn {
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+
+  .filter-select {
+    padding: 8px 12px;
+    font-size: 0.85rem;
   }
 
   .tab-content {
-    padding: 20px;
+    padding: 15px 10px;
+    overflow-y: auto;
+    height: calc(100vh - 120px); /* 탭 높이를 고려한 컨텐츠 영역 */
   }
 }
 </style>

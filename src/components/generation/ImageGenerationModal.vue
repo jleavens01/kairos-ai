@@ -2621,14 +2621,20 @@ onMounted(async () => {
 
 /* 모바일 반응형 스타일 */
 @media (max-width: 768px) {
+  .modal-overlay {
+    padding: 20px;
+  }
+
   .modal-container {
-    width: 95%;
+    width: 100%;
     max-width: 100%;
-    margin: 10px;
-    max-height: 95vh;
+    margin: 0 auto;
+    max-height: 85vh;
+    border-radius: 12px;
   }
 
   .modal-container.expanded {
+    width: 100%;
     max-width: 100%;
   }
 
@@ -2649,21 +2655,50 @@ onMounted(async () => {
     padding: 16px;
   }
 
+  /* 드롭다운 화면 밖으로 나가지 않도록 수정 */
+  .form-select {
+    width: 100%;
+    max-width: 100%;
+    font-size: 14px;
+  }
+
   /* 인라인 그룹 수직 정렬 */
   .inline-group {
     flex-direction: column;
     gap: 12px;
+    align-items: stretch;
   }
 
   .inline-item {
+    flex-direction: column;
+    align-items: stretch;
     flex: 1 1 100%;
     width: 100%;
+    gap: 4px;
   }
 
   .inline-label {
     min-width: unset;
     width: 100%;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
+    display: block;
+    font-size: 0.85rem;
+  }
+
+  /* 카테고리 아이템도 전체 너비 사용 */
+  .inline-item.category-item {
+    flex: 1 1 100%;
+  }
+
+  .inline-item.category-item .form-select {
+    width: 100%;
+  }
+
+  /* 모든 select와 input을 전체 너비로 */
+  .inline-item .form-select,
+  .inline-item .form-input {
+    width: 100%;
+    flex: none;
   }
 
   /* 스타일 선택 영역 */
@@ -2681,6 +2716,12 @@ onMounted(async () => {
     max-width: calc(100vw - 40px);
     left: 0;
     right: 0;
+    position: fixed;
+    z-index: 9999;
+  }
+
+  .custom-style-select {
+    width: 100%;
   }
 
   /* 참조 이미지 탭 */
@@ -2695,11 +2736,23 @@ onMounted(async () => {
     font-size: 0.85rem;
   }
 
-  /* 참조 이미지 그리드 */
-  .reference-grid,
+  /* 참조 이미지 그리드 - 모바일에서 3열로 표시 */
+  .reference-images-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    grid-auto-rows: 80px;
+  }
+
   .library-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    max-height: 250px;
+    grid-auto-rows: 80px;
+  }
+
+  .reference-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
   }
 
   /* 업로드 영역 */
@@ -2775,12 +2828,16 @@ onMounted(async () => {
 }
 
 @media (max-width: 480px) {
+  .modal-overlay {
+    padding: 15px;
+  }
+
   .modal-container {
     width: 100%;
-    height: 100vh;
-    max-height: 100vh;
-    margin: 0;
-    border-radius: 0;
+    max-width: 100%;
+    max-height: 90vh;
+    margin: 0 auto;
+    border-radius: 10px;
   }
 
   .modal-header {
@@ -2791,9 +2848,17 @@ onMounted(async () => {
     padding: 12px;
   }
 
-  .reference-grid,
+  /* 매우 작은 화면에서도 3열 유지 */
+  .reference-images-grid,
   .library-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+    grid-auto-rows: 70px;
+  }
+
+  .reference-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
   }
 
   .form-group > label {

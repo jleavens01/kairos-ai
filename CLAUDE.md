@@ -271,6 +271,14 @@ generateVideoAsync.js (라우터)
 - ByteDance SeedDance v1 Pro: 2000 크레딧
 - ByteDance SeedDance v1 Lite: 1000 크레딧
 
+### ⚠️ 매우 중요: SeedDance Lite 이미지 선택 규칙
+**❗️ ByteDance SeedDance v1 Lite 모델은 2개 이미지 선택 가능**
+- 첫 번째 이미지: 비디오의 시작 프레임
+- 두 번째 이미지: 비디오의 끝 프레임
+- **절대 1개로 제한하지 마세요! 2개 이미지 선택은 이 모델의 핵심 기능입니다.**
+- 다른 비디오 모델들은 1개 이미지만 사용하지만, SeedDance Lite는 예외입니다.
+- 이미지 선택 방법: 라이브러리, URL, 업로드, 스토리보드 모두에서 2개 선택 가능
+
 ## 🚫 금지사항
 
 - ❌ `require()` 사용 금지

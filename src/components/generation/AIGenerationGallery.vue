@@ -21,8 +21,8 @@
 
     <!-- 통합 갤러리 섹션 -->
     <div class="gallery-section">
-      <!-- 컬럼 컨트롤 -->
-      <div v-if="galleryImages.length > 0" class="gallery-controls">
+      <!-- 컬럼 컨트롤 (모바일에서는 숨김) -->
+      <div v-if="galleryImages.length > 0 && !isMobile" class="gallery-controls">
         <ColumnControl 
           v-model="columnCount"
           :min-columns="2"
@@ -53,7 +53,7 @@
             'processing-card': item.type === 'processing',
             'selected': item.type === 'image' && selectedImage?.id === item.id 
           }"
-          @click="item.type === 'image' ? openDetailModal(item) : null"
+          @click="item.type === 'image' ? handleImageClick(item) : null"
         >
           <!-- 처리 중인 이미지 카드 -->
           <template v-if="item.type === 'processing'">
@@ -276,14 +276,32 @@ watch(showVideoModal, (isOpen) => {
   productionStore.setModalOpen(isOpen)
 })
 
+// 모바일 여부 감지
+const isMobile = ref(window.innerWidth <= 768)
+const handleResize = () => {
+  isMobile.value = window.innerWidth <= 768
+  // 모바일에서는 컬럼 수를 2로 고정
+  if (isMobile.value) {
+    columnCount.value = 2
+  }
+}
+
 // 컬럼 수 상태 (localStorage에 저장)
 const savedColumns = localStorage.getItem('aiGenerationGalleryColumns')
-const columnCount = ref(savedColumns ? parseInt(savedColumns) : 4)
+const columnCount = ref(isMobile.value ? 2 : (savedColumns ? parseInt(savedColumns) : 4))
 
 const updateColumnCount = (count) => {
-  columnCount.value = count
-  localStorage.setItem('aiGenerationGalleryColumns', count.toString())
+  if (!isMobile.value) {
+    columnCount.value = count
+    localStorage.setItem('aiGenerationGalleryColumns', count.toString())
+  }
 }
+
+// 리사이즈 이벤트 리스너
+window.addEventListener('resize', handleResize)
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+})
 
 // Computed
 // 스토리보드에서 추출한 유니크한 캐릭터 목록
@@ -837,6 +855,21 @@ const handleTagUpdate = (newTags) => {
     images.value[index].tags = newTags
   }
   showTagModal.value = false
+}
+
+// 이미지 클릭 핸들러 - 모바일에서는 더블 클릭으로 상세보기
+const handleImageClick = (image) => {
+  if (isMobile.value) {
+    // 모바일에서는 첫 클릭은 선택, 이미 선택된 이미지를 다시 클릭하면 상세보기
+    if (selectedImage.value?.id === image.id) {
+      openDetailModal(image)
+    } else {
+      selectedImage.value = image
+    }
+  } else {
+    // 데스크톱에서는 바로 상세보기
+    openDetailModal(image)
+  }
 }
 
 // 이미지 상세보기 모달 관련
