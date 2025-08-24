@@ -100,7 +100,7 @@
             @mouseover="setHoveredItem(scene.id)"
             @mouseleave="clearHoveredItem()"
           >
-            <td class="scene-number-col">
+            <td class="scene-number-col" data-label="씬 번호">
               <div class="scene-number-wrapper">
                 <input 
                   type="checkbox" 
@@ -110,7 +110,7 @@
                 <span class="scene-number">{{ scene.scene_number }}</span>
               </div>
             </td>
-            <td class="scene-image-col">
+            <td class="scene-image-col" data-label="이미지/비디오">
               <SceneImageUploader
                 :scene-id="scene.id"
                 :scene-number="scene.scene_number"
@@ -122,7 +122,7 @@
                 @view-image="showFullImage"
               />
             </td>
-            <td class="script-col editable-cell" @click="startEditing(scene.id, 'original_script_text', scene.original_script_text)">
+            <td class="script-col editable-cell" data-label="오리지널 스크립트" @click="startEditing(scene.id, 'original_script_text', scene.original_script_text)">
               <template v-if="isEditing(scene.id, 'original_script_text')">
                 <textarea 
                   :id="`edit-${scene.id}-original_script_text`"
@@ -138,7 +138,7 @@
                 {{ scene.original_script_text }}
               </template>
             </td>
-            <td class="characters-col editable-cell" @click="startEditingCharacters(scene.id, scene.characters)">
+            <td class="characters-col editable-cell" data-label="등장인물/자료" @click="startEditingCharacters(scene.id, scene.characters)">
               <template v-if="isEditing(scene.id, 'characters')">
                 <input 
                   :id="`edit-${scene.id}-characters`"
@@ -173,7 +173,7 @@
                 </div>
               </template>
             </td>
-            <td class="tts-col">
+            <td class="tts-col" data-label="TTS 컨트롤">
               <div class="tts-controls">
                 <!-- TTS가 없을 때 -->
                 <button 
@@ -1517,7 +1517,7 @@ defineExpose({ deleteSelectedScenes })
   position: relative;
   height: 100%;
   overflow-y: auto;
-  padding: 20px;
+  padding: 10px 5px; /* 좌우 여백 최소화 */
   padding-top: 10px;
 }
 
@@ -2280,8 +2280,96 @@ input[type="checkbox"] {
 
 /* Mobile responsive */
 @media (max-width: 768px) {
+  .production-table-wrapper {
+    padding: 5px 2px;
+  }
+  
+  .production-table-container {
+    overflow-x: visible;
+    overflow-y: auto;
+  }
+  
   .production-table {
     font-size: 0.9rem;
+    display: block;
+    width: 100%;
+  }
+  
+  .production-table thead {
+    display: none;
+  }
+  
+  .production-table tbody {
+    display: block;
+  }
+  
+  .production-table tr {
+    display: block;
+    margin-bottom: 20px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 10px;
+    background: var(--bg-secondary);
+  }
+  
+  .production-table td {
+    display: block;
+    width: 100%;
+    padding: 8px;
+    border: none;
+    text-align: left;
+  }
+  
+  /* 각 섹션 라벨 추가 */
+  .production-table td:before {
+    content: attr(data-label);
+    font-weight: bold;
+    display: block;
+    margin-bottom: 5px;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+  }
+  
+  .scene-number-col {
+    padding: 5px !important;
+    margin-bottom: 10px;
+  }
+  
+  .scene-image-col {
+    margin-bottom: 15px;
+  }
+  
+  .scene-image-col img,
+  .scene-image-col video {
+    width: 100%;
+    height: auto;
+    max-height: 200px;
+    object-fit: contain;
+  }
+  
+  .script-col,
+  .characters-col,
+  .tts-col {
+    margin-bottom: 10px;
+  }
+  
+  .selection-actions {
+    flex-direction: column;
+    gap: 10px;
+    padding: 10px;
+  }
+  
+  .selection-buttons {
+    flex-wrap: wrap;
+    gap: 5px;
+    width: 100%;
+  }
+  
+  .selection-buttons button {
+    flex: 1 1 calc(50% - 5px);
+    min-width: 100px;
+    padding: 8px 10px;
+    font-size: 0.85rem;
   }
   
   .production-table th,

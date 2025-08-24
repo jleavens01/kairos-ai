@@ -369,15 +369,18 @@ const {
   refresh: refreshVideos
 } = usePagination(fetchVideosWithPagination, { pageSize: pageSize.value })
 
-// paginatedVideos를 videos와 동기화
+// paginatedVideos를 videos와 동기화 (누적)
 watch(paginatedVideos, (newVideos) => {
-  videos.value = newVideos
+  // 무한 스크롤을 위해 기존 비디오와 병합
+  const existingIds = new Set(videos.value.map(vid => vid.id))
+  const uniqueNewVideos = newVideos.filter(vid => !existingIds.has(vid.id))
+  videos.value = [...videos.value, ...uniqueNewVideos]
 }, { deep: true })
 
 // 기존 fetchVideos 함수를 페이지네이션 refresh로 대체
 const fetchVideos = async () => {
+  videos.value = [] // 초기 로드 시 비우기
   await refreshVideos()
-  videos.value = paginatedVideos.value
 }
 
 const openGenerationModal = () => {

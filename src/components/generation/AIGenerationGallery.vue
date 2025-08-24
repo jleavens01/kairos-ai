@@ -11,9 +11,12 @@
             class="suggestion-card-small"
             @click="openGenerationModal(character)"
           >
-            <User :size="24" class="suggestion-icon-small" />
+            <div v-if="characterImageMap.get(character)" class="character-thumbnail">
+              <img :src="characterImageMap.get(character)" :alt="character" />
+            </div>
+            <User v-else :size="24" class="suggestion-icon-small" />
             <h6>{{ character }}</h6>
-            <button class="btn-generate-small">생성</button>
+            <button class="btn-generate-small">{{ characterImageMap.has(character) ? '재생성' : '생성' }}</button>
           </div>
         </div>
       </div>
@@ -346,8 +349,22 @@ const characters = computed(() => {
       .map(img => img.element_name)
   )
   
-  // 아직 생성되지 않은 캐릭터만 제안
-  return Array.from(allCharacters).filter(char => !generatedCharacters.has(char))
+  // 모든 캐릭터 반환 (생성된 것과 생성되지 않은 것 모두)
+  return Array.from(allCharacters)
+})
+
+// 캐릭터별 최신 이미지 맵
+const characterImageMap = computed(() => {
+  const map = new Map()
+  images.value
+    .filter(img => img.image_type === 'character' && img.element_name && img.generation_status === 'completed')
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .forEach(img => {
+      if (!map.has(img.element_name)) {
+        map.set(img.element_name, img.thumbnail_url || img.storage_image_url || img.result_image_url)
+      }
+    })
+  return map
 })
 
 // 필터링된 이미지 목록
@@ -473,17 +490,18 @@ const {
   refresh: refreshImages
 } = usePagination(fetchImagesWithPagination, { pageSize: pageSize.value })
 
-// paginatedImages를 images와 동기화
+// paginatedImages를 images와 동기화 (누적)
 watch(paginatedImages, (newImages) => {
-  images.value = newImages
+  // 무한 스크롤을 위해 기존 이미지와 병합
+  const existingIds = new Set(images.value.map(img => img.id))
+  const uniqueNewImages = newImages.filter(img => !existingIds.has(img.id))
+  images.value = [...images.value, ...uniqueNewImages]
 }, { deep: true })
 
 // 기존 fetchImages 함수를 페이지네이션 refresh로 대체
 const fetchImages = async () => {
+  images.value = [] // 초기 로드 시 비우기
   await refreshImages()
-  
-  // 기존 images 배열 업데이트
-  images.value = paginatedImages.value
   
   // 첫 번째 이미지의 URL 필드들 확인
   if (paginatedImages.value && paginatedImages.value.length > 0) {
@@ -1170,6 +1188,23 @@ defineExpose({
   cursor: pointer;
   transition: all 0.2s;
   padding: 12px;
+  position: relative;
+  overflow: hidden;
+}
+
+.character-thumbnail {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  overflow: hidden;
+  margin-bottom: 8px;
+  border: 2px solid var(--primary-color);
+}
+
+.character-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .suggestion-card-small:hover {
