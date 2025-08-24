@@ -267,11 +267,6 @@ watch(showUpscaleModal, (isOpen) => {
   productionStore.setModalOpen(isOpen)
 })
 
-// paginatedVideos를 videos와 동기화
-watch(paginatedVideos, (newVideos) => {
-  videos.value = newVideos
-}, { deep: true })
-
 // 모바일 여부 감지
 const isMobile = ref(window.innerWidth <= 768)
 const handleResize = () => {
@@ -373,6 +368,11 @@ const {
   loadMore,
   refresh: refreshVideos
 } = usePagination(fetchVideosWithPagination, { pageSize: pageSize.value })
+
+// paginatedVideos를 videos와 동기화
+watch(paginatedVideos, (newVideos) => {
+  videos.value = newVideos
+}, { deep: true })
 
 // 기존 fetchVideos 함수를 페이지네이션 refresh로 대체
 const fetchVideos = async () => {

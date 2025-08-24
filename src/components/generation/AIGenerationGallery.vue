@@ -288,11 +288,6 @@ watch(showVideoModal, (isOpen) => {
   productionStore.setModalOpen(isOpen)
 })
 
-// paginatedImages를 images와 동기화
-watch(paginatedImages, (newImages) => {
-  images.value = newImages
-}, { deep: true })
-
 // 모바일 여부 감지
 const isMobile = ref(window.innerWidth <= 768)
 const handleResize = () => {
@@ -477,6 +472,11 @@ const {
   loadMore,
   refresh: refreshImages
 } = usePagination(fetchImagesWithPagination, { pageSize: pageSize.value })
+
+// paginatedImages를 images와 동기화
+watch(paginatedImages, (newImages) => {
+  images.value = newImages
+}, { deep: true })
 
 // 기존 fetchImages 함수를 페이지네이션 refresh로 대체
 const fetchImages = async () => {
