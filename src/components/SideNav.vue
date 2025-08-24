@@ -272,6 +272,7 @@ onUnmounted(() => {
   box-shadow: var(--shadow-md);
   transition: transform 0.3s ease-in-out, background-color 0.3s;
   border-right: 1px solid var(--border-color);
+  z-index: 1000; /* 가장 상위로 설정 */
 }
 
 .dark .side-nav {
@@ -598,7 +599,7 @@ onUnmounted(() => {
 /* 모바일 스타일 */
 @media (max-width: 768px) {
   .side-nav {
-    z-index: 100;
+    z-index: 1000; /* 모바일에서도 가장 상위 */
   }
 
   .mobile-nav-closed {

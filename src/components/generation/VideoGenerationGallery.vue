@@ -14,7 +14,7 @@
       
       <!-- 필터는 상위 컴포넌트로 이동 -->
 
-      <div v-if="loading" class="loading-state">
+      <div v-if="loading && videos.length === 0" class="loading-state">
         <div class="spinner"></div>
         <p>비디오를 불러오는 중...</p>
       </div>
@@ -81,10 +81,11 @@
                 @loadedmetadata="onVideoMetadataLoaded"
                 class="preview-video"
               ></video>
-              <img 
+              <LazyImage 
                 v-else-if="video.thumbnail_url"
                 :src="video.thumbnail_url"
                 :alt="video.description || 'Video thumbnail'"
+                root-margin="200px"
               />
               <div v-else class="no-preview">
                 <Video :size="48" />
@@ -152,6 +153,17 @@
           </div>
         </div>
       </div>
+      
+      <!-- 무한 스크롤 로딩 인디케이터 -->
+      <div v-if="loading && videos.length > 0" class="infinite-scroll-loader">
+        <div class="spinner"></div>
+        <p>추가 비디오를 불러오는 중...</p>
+      </div>
+      
+      <!-- 더 이상 로드할 비디오가 없을 때 -->
+      <div v-if="!hasMore && videos.length > 0" class="no-more-items">
+        <p>모든 비디오를 불러왔습니다</p>
+      </div>
     </div>
 
     <!-- 비디오 생성 모달 -->
@@ -207,6 +219,8 @@ import VideoUpscaleModal from './VideoUpscaleModal.vue'
 import { Plus, Link, Download, Trash2, Loader, Clock, AlertCircle, Video, Star, Archive } from 'lucide-vue-next'
 import SceneConnectionModal from './SceneConnectionModal.vue'
 import ColumnControl from '@/components/common/ColumnControl.vue'
+import LazyImage from '@/components/common/LazyImage.vue'
+import { usePagination } from '@/composables/usePagination'
 
 const props = defineProps({
   projectId: {
@@ -219,8 +233,8 @@ const props = defineProps({
 const productionStore = useProductionStore()
 
 // State
-const loading = ref(false)
 const videos = ref([])
+const pageSize = ref(20) // 비디오는 이미지보다 적게
 const filterModel = ref('')
 const showKeptOnly = ref(false)
 const showGenerationModal = ref(false)
@@ -253,6 +267,11 @@ watch(showUpscaleModal, (isOpen) => {
   productionStore.setModalOpen(isOpen)
 })
 
+// paginatedVideos를 videos와 동기화
+watch(paginatedVideos, (newVideos) => {
+  videos.value = newVideos
+}, { deep: true })
+
 // 모바일 여부 감지
 const isMobile = ref(window.innerWidth <= 768)
 const handleResize = () => {
@@ -274,10 +293,24 @@ const updateColumnCount = (count) => {
   }
 }
 
+// 무한 스크롤 핸들러
+const handleScroll = () => {
+  const scrollElement = document.documentElement
+  const scrollBottom = scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight
+  
+  // 하단에서 200px 이내에 도달하면 다음 페이지 로드
+  if (scrollBottom < 200 && hasMore.value && !loading.value) {
+    loadMore()
+  }
+}
+
 // 리사이즈 이벤트 리스너 추가
 window.addEventListener('resize', handleResize)
+window.addEventListener('scroll', handleScroll, { passive: true })
+
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
+  window.removeEventListener('scroll', handleScroll)
 })
 
 // Computed
@@ -306,24 +339,45 @@ const filteredVideos = computed(() => {
 })
 
 // Methods
-const fetchVideos = async () => {
-  loading.value = true
+// 페이지네이션을 위한 함수
+const fetchVideosWithPagination = async ({ page, pageSize: size }) => {
+  const from = (page - 1) * size
+  const to = from + size - 1
   
   try {
-    const { data, error } = await supabase
+    const { data, error, count } = await supabase
       .from('gen_videos')
-      .select('*')
+      .select('*', { count: 'exact' })
       .eq('project_id', props.projectId)
       .order('created_at', { ascending: false })
+      .range(from, to)
     
     if (error) throw error
     
-    videos.value = data || []
+    return {
+      data: data || [],
+      count: count || 0,
+      hasMore: to < (count - 1)
+    }
   } catch (error) {
-    console.error('비디오 로드 실패:', error)
-  } finally {
-    loading.value = false
+    console.error('Error fetching videos:', error)
+    return { data: [], count: 0, hasMore: false }
   }
+}
+
+// 페이지네이션 composable 사용
+const {
+  items: paginatedVideos,
+  loading,
+  hasMore,
+  loadMore,
+  refresh: refreshVideos
+} = usePagination(fetchVideosWithPagination, { pageSize: pageSize.value })
+
+// 기존 fetchVideos 함수를 페이지네이션 refresh로 대체
+const fetchVideos = async () => {
+  await refreshVideos()
+  videos.value = paginatedVideos.value
 }
 
 const openGenerationModal = () => {
@@ -1129,13 +1183,25 @@ defineExpose({
 
 /* 로딩 & 빈 상태 */
 .loading-state,
-.empty-state {
+.empty-state,
+.infinite-scroll-loader,
+.no-more-items {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 60px 20px;
   text-align: center;
+}
+
+.infinite-scroll-loader {
+  padding: 40px 20px;
+}
+
+.no-more-items {
+  padding: 30px 20px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
 }
 
 .spinner {

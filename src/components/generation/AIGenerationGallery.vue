@@ -31,7 +31,7 @@
         />
       </div>
 
-      <div v-if="loading" class="loading-state">
+      <div v-if="loading && images.length === 0" class="loading-state">
         <div class="spinner"></div>
         <p>이미지를 불러오는 중...</p>
       </div>
@@ -77,12 +77,11 @@
                 <p v-if="item.error_message" class="failed-reason">{{ item.error_message }}</p>
               </div>
               <!-- 성공한 이미지 표시 -->
-              <img 
+              <LazyImage 
                 v-else
                 :src="item.thumbnail_url || item.storage_image_url || item.result_image_url" 
                 :alt="item.prompt_used || 'AI Generated Image'"
-                loading="lazy"
-                @error="handleImageError"
+                root-margin="200px"
               />
               <div class="image-overlay-info">
                 <div class="info-top">
@@ -148,6 +147,17 @@
             </div>
           </template>
         </div>
+      </div>
+      
+      <!-- 무한 스크롤 로딩 인디케이터 -->
+      <div v-if="loading && images.length > 0" class="infinite-scroll-loader">
+        <div class="spinner"></div>
+        <p>추가 이미지를 불러오는 중...</p>
+      </div>
+      
+      <!-- 더 이상 로드할 이미지가 없을 때 -->
+      <div v-if="!hasMore && images.length > 0" class="no-more-items">
+        <p>모든 이미지를 불러왔습니다</p>
       </div>
     </div>
 
@@ -224,6 +234,8 @@ import { Link, Tag, Download, Trash2, Loader, Plus, User, Image, Star, Archive }
 import TagEditModal from './TagEditModal.vue'
 import ImageDetailModal from './ImageDetailModal.vue'
 import ColumnControl from '@/components/common/ColumnControl.vue'
+import LazyImage from '@/components/common/LazyImage.vue'
+import { usePagination } from '@/composables/usePagination'
 
 const props = defineProps({
   projectId: {
@@ -235,11 +247,11 @@ const props = defineProps({
 const productionStore = useProductionStore()
 
 // State
-const loading = ref(false)
 const images = ref([])
 const selectedImage = ref(null)
 const filterCategory = ref('')
 const showKeptOnly = ref(false) // 보관함 보기 상태
+const pageSize = ref(30) // 페이지당 아이템 수
 const showGenerationModal = ref(false)
 const showSceneModal = ref(false)
 const showTagModal = ref(false)
@@ -276,6 +288,11 @@ watch(showVideoModal, (isOpen) => {
   productionStore.setModalOpen(isOpen)
 })
 
+// paginatedImages를 images와 동기화
+watch(paginatedImages, (newImages) => {
+  images.value = newImages
+}, { deep: true })
+
 // 모바일 여부 감지
 const isMobile = ref(window.innerWidth <= 768)
 const handleResize = () => {
@@ -297,10 +314,24 @@ const updateColumnCount = (count) => {
   }
 }
 
+// 무한 스크롤 핸들러
+const handleScroll = () => {
+  const scrollElement = document.documentElement
+  const scrollBottom = scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight
+  
+  // 하단에서 200px 이내에 도달하면 다음 페이지 로드
+  if (scrollBottom < 200 && hasMore.value && !loading.value) {
+    loadMore()
+  }
+}
+
 // 리사이즈 이벤트 리스너
 window.addEventListener('resize', handleResize)
+window.addEventListener('scroll', handleScroll, { passive: true })
+
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
+  window.removeEventListener('scroll', handleScroll)
 })
 
 // Computed
@@ -411,38 +442,59 @@ const processingImages = computed(() => {
 })
 
 // Methods
-const fetchImages = async () => {
-  loading.value = true
+// 페이지네이션을 위한 함수
+const fetchImagesWithPagination = async ({ page, pageSize: size }) => {
+  const from = (page - 1) * size
+  const to = from + size - 1
   
   try {
-    // gen_images 테이블에서 데이터 가져오기
-    const { data, error } = await supabase
+    // 첫 번째 쿼리: 데이터 가져오기
+    const { data, error, count } = await supabase
       .from('gen_images')
-      .select('*')
+      .select('*', { count: 'exact' })
       .eq('project_id', props.projectId)
       .order('created_at', { ascending: false })
+      .range(from, to)
     
     if (error) throw error
     
-    console.log('Fetched images from gen_images:', data) // 디버깅용 로그
-    
-    // 첫 번째 이미지의 URL 필드들 확인
-    if (data && data.length > 0) {
-      console.log('First image URL fields:', {
-        id: data[0].id,
-        storage_image_url: data[0].storage_image_url,
-        result_image_url: data[0].result_image_url,
-        thumbnail_url: data[0].thumbnail_url,
-        image_url: data[0].image_url,
-        allKeys: Object.keys(data[0])
-      })
+    return {
+      data: data || [],
+      count: count || 0,
+      hasMore: to < (count - 1)
     }
-    
-    images.value = data || []
   } catch (error) {
-    console.error('이미지 로드 실패:', error)
-  } finally {
-    loading.value = false
+    console.error('Error fetching images:', error)
+    return { data: [], count: 0, hasMore: false }
+  }
+}
+
+// 페이지네이션 composable 사용
+const {
+  items: paginatedImages,
+  loading,
+  hasMore,
+  loadMore,
+  refresh: refreshImages
+} = usePagination(fetchImagesWithPagination, { pageSize: pageSize.value })
+
+// 기존 fetchImages 함수를 페이지네이션 refresh로 대체
+const fetchImages = async () => {
+  await refreshImages()
+  
+  // 기존 images 배열 업데이트
+  images.value = paginatedImages.value
+  
+  // 첫 번째 이미지의 URL 필드들 확인
+  if (paginatedImages.value && paginatedImages.value.length > 0) {
+    console.log('First image URL fields:', {
+      id: paginatedImages.value[0].id,
+      storage_image_url: paginatedImages.value[0].storage_image_url,
+      result_image_url: paginatedImages.value[0].result_image_url,
+      thumbnail_url: paginatedImages.value[0].thumbnail_url,
+      image_url: paginatedImages.value[0].image_url,
+      allKeys: Object.keys(paginatedImages.value[0])
+    })
   }
 }
 
@@ -1457,13 +1509,25 @@ defineExpose({
 
 /* 로딩 & 빈 상태 */
 .loading-state,
-.empty-state {
+.empty-state,
+.infinite-scroll-loader,
+.no-more-items {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 60px 20px;
   text-align: center;
+}
+
+.infinite-scroll-loader {
+  padding: 40px 20px;
+}
+
+.no-more-items {
+  padding: 30px 20px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
 }
 
 .spinner {
