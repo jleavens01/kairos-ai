@@ -319,6 +319,7 @@ const handleScroll = () => {
   
   // 하단에서 200px 이내에 도달하면 다음 페이지 로드
   if (scrollBottom < 200 && hasMore.value && !loading.value) {
+    console.log('Loading more images...', { hasMore: hasMore.value, loading: loading.value })
     loadMore()
   }
 }
@@ -356,14 +357,19 @@ const characters = computed(() => {
 // 캐릭터별 최신 이미지 맵
 const characterImageMap = computed(() => {
   const map = new Map()
-  images.value
+  const characterImages = images.value
     .filter(img => img.image_type === 'character' && img.element_name && img.generation_status === 'completed')
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-    .forEach(img => {
-      if (!map.has(img.element_name)) {
-        map.set(img.element_name, img.thumbnail_url || img.storage_image_url || img.result_image_url)
-      }
-    })
+  
+  console.log('Character images found:', characterImages.length, characterImages.map(img => img.element_name))
+  
+  characterImages.forEach(img => {
+    if (!map.has(img.element_name)) {
+      map.set(img.element_name, img.thumbnail_url || img.storage_image_url || img.result_image_url)
+    }
+  })
+  
+  console.log('Character image map:', Array.from(map.entries()))
   return map
 })
 
@@ -490,12 +496,10 @@ const {
   refresh: refreshImages
 } = usePagination(fetchImagesWithPagination, { pageSize: pageSize.value })
 
-// paginatedImages를 images와 동기화 (누적)
+// paginatedImages를 images와 동기화
 watch(paginatedImages, (newImages) => {
-  // 무한 스크롤을 위해 기존 이미지와 병합
-  const existingIds = new Set(images.value.map(img => img.id))
-  const uniqueNewImages = newImages.filter(img => !existingIds.has(img.id))
-  images.value = [...images.value, ...uniqueNewImages]
+  // usePagination이 이미 누적하므로 그대로 사용
+  images.value = newImages
 }, { deep: true })
 
 // 기존 fetchImages 함수를 페이지네이션 refresh로 대체
@@ -1018,7 +1022,10 @@ const handleMediaUpdate = (event) => {
 
 // Lifecycle
 onMounted(async () => {
+  console.log('AIGenerationGallery mounted, loading initial data...')
   await fetchImages()
+  console.log('Initial images loaded:', images.value.length, 'Has more:', hasMore.value)
+  
   // 스토리보드 데이터도 로드
   if (!productionStore.productionSheets.length) {
     await productionStore.fetchProductionSheets(props.projectId)

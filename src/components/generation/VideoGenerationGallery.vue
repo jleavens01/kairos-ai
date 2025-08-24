@@ -369,12 +369,10 @@ const {
   refresh: refreshVideos
 } = usePagination(fetchVideosWithPagination, { pageSize: pageSize.value })
 
-// paginatedVideos를 videos와 동기화 (누적)
+// paginatedVideos를 videos와 동기화
 watch(paginatedVideos, (newVideos) => {
-  // 무한 스크롤을 위해 기존 비디오와 병합
-  const existingIds = new Set(videos.value.map(vid => vid.id))
-  const uniqueNewVideos = newVideos.filter(vid => !existingIds.has(vid.id))
-  videos.value = [...videos.value, ...uniqueNewVideos]
+  // usePagination이 이미 누적하므로 그대로 사용
+  videos.value = newVideos
 }, { deep: true })
 
 // 기존 fetchVideos 함수를 페이지네이션 refresh로 대체
