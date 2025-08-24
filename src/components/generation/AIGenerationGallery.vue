@@ -9,14 +9,23 @@
             v-for="character in characters"
             :key="`suggestion-${character}`"
             class="suggestion-card-small"
-            @click="openGenerationModal(character)"
+            :class="{ 'has-image': characterImageMap.has(character) }"
+            @click="handleCharacterClick(character)"
           >
-            <div v-if="characterImageMap.get(character)" class="character-thumbnail">
+            <!-- 생성된 캐릭터는 전체 이미지 표시 -->
+            <div v-if="characterImageMap.has(character)" class="character-full-image">
               <img :src="characterImageMap.get(character)" :alt="character" />
+              <div class="character-overlay">
+                <h6>{{ character }}</h6>
+                <button @click.stop="openGenerationModal(character)" class="btn-regenerate">재생성</button>
+              </div>
             </div>
-            <User v-else :size="24" class="suggestion-icon-small" />
-            <h6>{{ character }}</h6>
-            <button class="btn-generate-small">{{ characterImageMap.has(character) ? '재생성' : '생성' }}</button>
+            <!-- 생성되지 않은 캐릭터는 기존 디자인 -->
+            <template v-else>
+              <User :size="24" class="suggestion-icon-small" />
+              <h6>{{ character }}</h6>
+              <button class="btn-generate-small">생성</button>
+            </template>
           </div>
         </div>
       </div>
@@ -313,8 +322,17 @@ const updateColumnCount = (count) => {
 }
 
 // 무한 스크롤 핸들러
-const handleScroll = () => {
-  const scrollElement = document.documentElement
+const handleScroll = (event) => {
+  let scrollElement = event?.target || document.documentElement
+  
+  // 데스크톱에서는 tab-content가 스크롤 컨테이너
+  if (!isMobile.value) {
+    const tabContent = document.querySelector('.tab-content')
+    if (tabContent) {
+      scrollElement = tabContent
+    }
+  }
+  
   const scrollBottom = scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight
   
   // 하단에서 200px 이내에 도달하면 다음 페이지 로드
@@ -324,13 +342,37 @@ const handleScroll = () => {
   }
 }
 
+// 스크롤 이벤트 리스너 설정
+const setupScrollListener = () => {
+  // 데스크톱에서는 tab-content에 리스너 추가
+  if (!isMobile.value) {
+    const tabContent = document.querySelector('.tab-content')
+    if (tabContent) {
+      tabContent.addEventListener('scroll', handleScroll, { passive: true })
+      return
+    }
+  }
+  // 모바일이나 tab-content가 없으면 window에 리스너 추가
+  window.addEventListener('scroll', handleScroll, { passive: true })
+}
+
 // 리사이즈 이벤트 리스너
 window.addEventListener('resize', handleResize)
-window.addEventListener('scroll', handleScroll, { passive: true })
+
+onMounted(() => {
+  // 스크롤 리스너 설정을 약간 지연시켜 DOM이 준비되도록 함
+  setTimeout(setupScrollListener, 100)
+})
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
   window.removeEventListener('scroll', handleScroll)
+  
+  // tab-content 리스너도 제거
+  const tabContent = document.querySelector('.tab-content')
+  if (tabContent) {
+    tabContent.removeEventListener('scroll', handleScroll)
+  }
 })
 
 // Computed
@@ -373,11 +415,29 @@ const characterImageMap = computed(() => {
   return map
 })
 
-// 필터링된 이미지 목록
+// 캐릭터별 전체 이미지 객체 맵
+const characterObjectMap = computed(() => {
+  const map = new Map()
+  const characterImages = images.value
+    .filter(img => img.image_type === 'character' && img.element_name && img.generation_status === 'completed')
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+  
+  characterImages.forEach(img => {
+    if (!map.has(img.element_name)) {
+      map.set(img.element_name, img)
+    }
+  })
+  
+  return map
+})
+
+// 필터링된 이미지 목록 (캐릭터 제외)
 const filteredImages = computed(() => {
-  // completed 또는 failed 상태의 이미지 표시
+  // completed 또는 failed 상태의 이미지 표시 (캐릭터 타입 제외)
   let filtered = images.value.filter(img => {
-    return img.generation_status === 'completed' || img.generation_status === 'failed'
+    const isVisibleStatus = img.generation_status === 'completed' || img.generation_status === 'failed'
+    const isNotCharacter = img.image_type !== 'character' // 캐릭터는 상단에 별도 표시하므로 제외
+    return isVisibleStatus && isNotCharacter
   })
   
   // 보관함 필터
@@ -517,6 +577,16 @@ const fetchImages = async () => {
       image_url: paginatedImages.value[0].image_url,
       allKeys: Object.keys(paginatedImages.value[0])
     })
+  }
+}
+
+const handleCharacterClick = (character) => {
+  // 생성된 캐릭터는 상세보기, 생성되지 않은 캐릭터는 생성 모달
+  if (characterObjectMap.value.has(character)) {
+    const characterImage = characterObjectMap.value.get(character)
+    openDetailModal(characterImage)
+  } else {
+    openGenerationModal(character)
   }
 }
 
@@ -1199,19 +1269,66 @@ defineExpose({
   overflow: hidden;
 }
 
-.character-thumbnail {
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
-  overflow: hidden;
-  margin-bottom: 8px;
-  border: 2px solid var(--primary-color);
+.suggestion-card-small.has-image {
+  padding: 0;
+  border: none;
+  background: transparent;
 }
 
-.character-thumbnail img {
+.character-full-image {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-secondary);
+}
+
+.character-full-image img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.character-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 8px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.suggestion-card-small.has-image:hover .character-overlay {
+  opacity: 1;
+}
+
+.character-overlay h6 {
+  color: white;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.btn-regenerate {
+  padding: 4px 12px;
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-regenerate:hover {
+  background: var(--primary-hover);
+  transform: scale(1.05);
 }
 
 .suggestion-card-small:hover {

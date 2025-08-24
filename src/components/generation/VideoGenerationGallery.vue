@@ -289,8 +289,17 @@ const updateColumnCount = (count) => {
 }
 
 // 무한 스크롤 핸들러
-const handleScroll = () => {
-  const scrollElement = document.documentElement
+const handleScroll = (event) => {
+  let scrollElement = event?.target || document.documentElement
+  
+  // 데스크톱에서는 tab-content가 스크롤 컨테이너
+  if (!isMobile.value) {
+    const tabContent = document.querySelector('.tab-content')
+    if (tabContent) {
+      scrollElement = tabContent
+    }
+  }
+  
   const scrollBottom = scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight
   
   // 하단에서 200px 이내에 도달하면 다음 페이지 로드
@@ -299,13 +308,37 @@ const handleScroll = () => {
   }
 }
 
+// 스크롤 이벤트 리스너 설정
+const setupScrollListener = () => {
+  // 데스크톱에서는 tab-content에 리스너 추가
+  if (!isMobile.value) {
+    const tabContent = document.querySelector('.tab-content')
+    if (tabContent) {
+      tabContent.addEventListener('scroll', handleScroll, { passive: true })
+      return
+    }
+  }
+  // 모바일이나 tab-content가 없으면 window에 리스너 추가
+  window.addEventListener('scroll', handleScroll, { passive: true })
+}
+
 // 리사이즈 이벤트 리스너 추가
 window.addEventListener('resize', handleResize)
-window.addEventListener('scroll', handleScroll, { passive: true })
+
+onMounted(() => {
+  // 스크롤 리스너 설정을 약간 지연시켜 DOM이 준비되도록 함
+  setTimeout(setupScrollListener, 100)
+})
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
   window.removeEventListener('scroll', handleScroll)
+  
+  // tab-content 리스너도 제거
+  const tabContent = document.querySelector('.tab-content')
+  if (tabContent) {
+    tabContent.removeEventListener('scroll', handleScroll)
+  }
 })
 
 // Computed
