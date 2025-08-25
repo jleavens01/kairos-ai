@@ -1714,7 +1714,9 @@ const generateVideo = async () => {
 
 .library-item {
   position: relative;
-  aspect-ratio: 1;
+  width: 100%;
+  padding-bottom: 100%; /* 1:1 비율 유지 (aspect-ratio 대체) */
+  height: 0;
   border-radius: 4px;
   overflow: hidden;
   cursor: pointer;
@@ -1723,6 +1725,9 @@ const generateVideo = async () => {
 }
 
 .library-item img {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -1747,6 +1752,7 @@ const generateVideo = async () => {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  z-index: 2;
 }
 
 .scene-number {
@@ -2271,8 +2277,39 @@ const generateVideo = async () => {
   }
   
   .library-item {
+    position: relative !important;
+    width: 100% !important;
+    padding-bottom: 100% !important;
+    height: 0 !important;
     min-width: 0;
-    width: 100%;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  
+  .library-item img {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+  }
+  
+  .library-item-info {
+    position: absolute !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    z-index: 2 !important;
+  }
+  
+  .library-item-overlay {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    z-index: 1 !important;
   }
 }
 
@@ -2325,17 +2362,46 @@ const generateVideo = async () => {
   .library-grid {
     display: -webkit-grid !important;
     display: grid !important;
-    -webkit-grid-template-columns: repeat(4, 1fr) !important;
-    grid-template-columns: repeat(4, 1fr) !important;
+    -webkit-grid-template-columns: repeat(3, 1fr) !important;
+    grid-template-columns: repeat(3, 1fr) !important;
     gap: 4px !important;
     grid-gap: 4px !important;
     max-height: 160px;
     padding: 4px;
+    -webkit-overflow-scrolling: touch;
   }
   
   .library-item {
-    width: 100%;
+    position: relative !important;
+    width: 100% !important;
+    padding-bottom: 100% !important;
+    height: 0 !important;
     min-width: 0;
+    border: 1px solid transparent;
+  }
+  
+  .library-item img {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+  }
+  
+  .library-item-info,
+  .library-item-overlay {
+    position: absolute !important;
+  }
+  
+  .scene-number {
+    font-size: 0.6rem !important;
+  }
+  
+  .scene-text {
+    font-size: 0.55rem !important;
+    display: none; /* 작은 화면에서는 텍스트 숨김 */
   }
 }
 </style>
