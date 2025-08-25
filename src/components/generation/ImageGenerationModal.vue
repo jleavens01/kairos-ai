@@ -566,8 +566,9 @@ const isStyleDropdownOpen = ref(false)
 const guidanceScale = ref(3.5)
 const safetyTolerance = ref(2)
 
-// Side panel state
-const showSidePanel = ref(false)
+// Side panel state - 데스크톱에서는 기본적으로 열림
+const isMobile = window.innerWidth <= 768
+const showSidePanel = ref(!isMobile)
 const allScenes = ref([])
 const seed = ref(null)
 
@@ -1098,10 +1099,18 @@ const convertScriptToVisualDescription = (scene) => {
 // 프리셋 관련 함수들
 const loadPresets = async () => {
   try {
+    // 현재 사용자 가져오기
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      console.error('User not found')
+      return
+    }
+    
+    // 사용자의 모든 프로젝트에서 프리셋 가져오기
     const { data, error } = await supabase
       .from('prompt_presets')
       .select('*')
-      .eq('project_id', props.projectId)
+      .eq('user_id', user.id)  // 프로젝트 ID 대신 사용자 ID로 필터링
       .in('media_type', ['image', 'both'])
       .eq('is_active', true)
       .order('sort_order', { ascending: true })

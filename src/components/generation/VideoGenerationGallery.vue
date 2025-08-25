@@ -210,7 +210,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { supabase } from '@/utils/supabase'
 import { useProductionStore } from '@/stores/production'
 import VideoGenerationModal from './VideoGenerationModal.vue'
@@ -292,52 +292,120 @@ const updateColumnCount = (count) => {
 const handleScroll = (event) => {
   let scrollElement = event?.target || document.documentElement
   
-  // 데스크톱에서는 tab-content가 스크롤 컨테이너
+  // 데스크톱에서는 video-generation-gallery 자체가 스크롤 컨테이너
   if (!isMobile.value) {
-    const tabContent = document.querySelector('.tab-content')
-    if (tabContent) {
-      scrollElement = tabContent
+    // 이벤트 타겟이 있으면 그것을 사용
+    if (event?.target) {
+      scrollElement = event.target
+    } else {
+      // 없으면 video-generation-gallery를 찾음
+      const gallery = document.querySelector('.video-generation-gallery')
+      if (gallery) {
+        scrollElement = gallery
+      }
     }
   }
   
   const scrollBottom = scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight
   
+  console.log('Video scroll check:', {
+    scrollBottom,
+    hasMore: hasMore.value,
+    loading: loading.value,
+    videosCount: videos.value.length,
+    scrollHeight: scrollElement.scrollHeight,
+    scrollTop: scrollElement.scrollTop,
+    clientHeight: scrollElement.clientHeight,
+    element: scrollElement.className || 'document'
+  })
+  
   // 하단에서 200px 이내에 도달하면 다음 페이지 로드
   if (scrollBottom < 200 && hasMore.value && !loading.value) {
+    console.log('Triggering loadMore() for videos...')
     loadMore()
   }
 }
 
 // 스크롤 이벤트 리스너 설정
 const setupScrollListener = () => {
-  // 데스크톱에서는 tab-content에 리스너 추가
-  if (!isMobile.value) {
-    const tabContent = document.querySelector('.tab-content')
-    if (tabContent) {
-      tabContent.addEventListener('scroll', handleScroll, { passive: true })
-      return
-    }
+  // 기존 리스너 제거
+  window.removeEventListener('scroll', handleScroll)
+  document.removeEventListener('scroll', handleScroll)
+  
+  // 기존 갤러리 리스너 제거
+  const oldGallery = document.querySelector('.video-generation-gallery')
+  if (oldGallery) {
+    oldGallery.removeEventListener('scroll', handleScroll)
   }
-  // 모바일이나 tab-content가 없으면 window에 리스너 추가
-  window.addEventListener('scroll', handleScroll, { passive: true })
+  
+  // Vue.nextTick을 사용하여 DOM 업데이트 후 실행
+  nextTick(() => {
+    // 데스크톱에서는 video-generation-gallery에 리스너 추가
+    if (!isMobile.value) {
+      const gallery = document.querySelector('.video-generation-gallery')
+      if (gallery) {
+        console.log('Desktop: Setting up scroll listener on .video-generation-gallery', {
+          scrollHeight: gallery.scrollHeight,
+          clientHeight: gallery.clientHeight,
+          scrollTop: gallery.scrollTop,
+          hasScrollbar: gallery.scrollHeight > gallery.clientHeight
+        })
+        gallery.addEventListener('scroll', handleScroll, { passive: true })
+        // 초기 스크롤 체크
+        setTimeout(() => {
+          console.log('Initial scroll check for desktop videos')
+          handleScroll({ target: gallery })
+        }, 100)
+        return
+      } else {
+        console.log('Desktop: .video-generation-gallery not found!')
+      }
+    }
+    
+    // 모바일에서는 window에 리스너 추가
+    console.log('Mobile: Setting up scroll listener on window for videos')
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    // 초기 스크롤 체크
+    setTimeout(() => {
+      console.log('Initial scroll check for mobile videos')
+      handleScroll()
+    }, 100)
+  })
 }
 
 // 리사이즈 이벤트 리스너 추가
 window.addEventListener('resize', handleResize)
 
-onMounted(() => {
-  // 스크롤 리스너 설정을 약간 지연시켜 DOM이 준비되도록 함
-  setTimeout(setupScrollListener, 100)
+onMounted(async () => {
+  // 초기 데이터 로드
+  await fetchVideos()
+  console.log('Initial videos loaded:', videos.value.length, 'Has more:', hasMore.value)
+  
+  // 스크롤 리스너 설정
+  await nextTick()
+  setupScrollListener()
+  
+  // Tab 변경 감지를 위한 MutationObserver 설정
+  const observer = new MutationObserver(() => {
+    console.log('DOM changed, re-setting up scroll listener for videos')
+    setupScrollListener()
+  })
+  
+  // tab-content의 부모 요소 감시
+  const tabsContainer = document.querySelector('.tabs-container')
+  if (tabsContainer) {
+    observer.observe(tabsContainer, { childList: true, subtree: true })
+  }
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
   window.removeEventListener('scroll', handleScroll)
   
-  // tab-content 리스너도 제거
-  const tabContent = document.querySelector('.tab-content')
-  if (tabContent) {
-    tabContent.removeEventListener('scroll', handleScroll)
+  // 갤러리 리스너도 제거
+  const gallery = document.querySelector('.video-generation-gallery')
+  if (gallery) {
+    gallery.removeEventListener('scroll', handleScroll)
   }
 })
 
@@ -385,7 +453,7 @@ const fetchVideosWithPagination = async ({ page, pageSize: size }) => {
     return {
       data: data || [],
       count: count || 0,
-      hasMore: to < (count - 1)
+      hasMore: (to + 1) < count
     }
   } catch (error) {
     console.error('Error fetching videos:', error)
@@ -915,7 +983,8 @@ defineExpose({
   openGenerationModal,
   setFilterModel,
   filterModel,
-  toggleKeptView
+  toggleKeptView,
+  refreshScrollListener: setupScrollListener
 })
 </script>
 

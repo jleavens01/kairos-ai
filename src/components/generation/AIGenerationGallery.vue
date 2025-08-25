@@ -20,12 +20,14 @@
                 <button @click.stop="openGenerationModal(character)" class="btn-regenerate">재생성</button>
               </div>
             </div>
-            <!-- 생성되지 않은 캐릭터는 기존 디자인 -->
-            <template v-else>
-              <User :size="24" class="suggestion-icon-small" />
-              <h6>{{ character }}</h6>
-              <button class="btn-generate-small">생성</button>
-            </template>
+            <!-- 생성되지 않은 캐릭터도 오버레이 스타일 -->
+            <div v-else class="character-placeholder">
+              <User :size="32" class="suggestion-icon-small" />
+              <div class="character-overlay">
+                <h6>{{ character }}</h6>
+                <button @click.stop="openGenerationModal(character)" class="btn-generate-small">생성</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -33,14 +35,40 @@
 
     <!-- 통합 갤러리 섹션 -->
     <div class="gallery-section">
-      <!-- 컬럼 컨트롤 (모바일에서는 숨김) -->
-      <div v-if="galleryImages.length > 0 && !isMobile" class="gallery-controls">
-        <ColumnControl 
-          v-model="columnCount"
-          :min-columns="2"
-          :max-columns="8"
-          @change="updateColumnCount"
-        />
+      <!-- 갤러리 컨트롤 (데스크톱) -->
+      <div v-if="!isMobile" class="gallery-controls">
+        <!-- 카테고리 필터 버튼들 -->
+        <div class="filter-buttons">
+          <button 
+            v-for="filter in categoryFilters" 
+            :key="filter.value"
+            @click="filterCategory = filter.value"
+            :class="['filter-btn', { active: filterCategory === filter.value }]"
+          >
+            {{ filter.label }}
+          </button>
+        </div>
+        
+        <!-- 컬럼 컨트롤 -->
+        <div v-if="galleryImages.length > 0" class="column-control-wrapper">
+          <ColumnControl 
+            v-model="columnCount"
+            :min-columns="2"
+            :max-columns="8"
+            @change="updateColumnCount"
+          />
+        </div>
+      </div>
+      
+      <!-- 모바일 카테고리 드롭다운 (기존 유지) -->
+      <div v-if="isMobile && galleryImages.length > 0" class="mobile-filter">
+        <select v-model="filterCategory" class="filter-select">
+          <option value="">전체</option>
+          <option value="scene">씬</option>
+          <option value="character">캐릭터</option>
+          <option value="background">배경</option>
+          <option value="object">오브젝트</option>
+        </select>
       </div>
 
       <div v-if="loading && images.length === 0" class="loading-state">
@@ -236,7 +264,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { supabase } from '@/utils/supabase'
 import { useProductionStore } from '@/stores/production'
 import ImageGenerationModal from './ImageGenerationModal.vue'
@@ -262,6 +290,15 @@ const productionStore = useProductionStore()
 const images = ref([])
 const selectedImage = ref(null)
 const filterCategory = ref('')
+
+// 카테고리 필터 옵션
+const categoryFilters = [
+  { value: '', label: '전체' },
+  { value: 'scene', label: '씬' },
+  { value: 'character', label: '캐릭터' },
+  { value: 'background', label: '배경' },
+  { value: 'object', label: '오브젝트' }
+]
 const showKeptOnly = ref(false) // 보관함 보기 상태
 const pageSize = ref(30) // 페이지당 아이템 수
 const showGenerationModal = ref(false)
@@ -325,55 +362,86 @@ const updateColumnCount = (count) => {
 const handleScroll = (event) => {
   let scrollElement = event?.target || document.documentElement
   
-  // 데스크톱에서는 tab-content가 스크롤 컨테이너
+  // 데스크톱에서는 ai-generation-gallery 자체가 스크롤 컨테이너
   if (!isMobile.value) {
-    const tabContent = document.querySelector('.tab-content')
-    if (tabContent) {
-      scrollElement = tabContent
+    // 이벤트 타겟이 있으면 그것을 사용
+    if (event?.target) {
+      scrollElement = event.target
+    } else {
+      // 없으면 ai-generation-gallery를 찾음
+      const gallery = document.querySelector('.ai-generation-gallery')
+      if (gallery) {
+        scrollElement = gallery
+      }
     }
   }
   
   const scrollBottom = scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight
   
+  console.log('Scroll check:', {
+    scrollBottom,
+    hasMore: hasMore.value,
+    loading: loading.value,
+    imagesCount: images.value.length,
+    scrollHeight: scrollElement.scrollHeight,
+    scrollTop: scrollElement.scrollTop,
+    clientHeight: scrollElement.clientHeight,
+    element: scrollElement.className || 'document'
+  })
+  
   // 하단에서 200px 이내에 도달하면 다음 페이지 로드
   if (scrollBottom < 200 && hasMore.value && !loading.value) {
-    console.log('Loading more images...', { hasMore: hasMore.value, loading: loading.value })
+    console.log('Triggering loadMore()...')
     loadMore()
   }
 }
 
 // 스크롤 이벤트 리스너 설정
 const setupScrollListener = () => {
-  // 데스크톱에서는 tab-content에 리스너 추가
-  if (!isMobile.value) {
-    const tabContent = document.querySelector('.tab-content')
-    if (tabContent) {
-      tabContent.addEventListener('scroll', handleScroll, { passive: true })
-      return
-    }
-  }
-  // 모바일이나 tab-content가 없으면 window에 리스너 추가
-  window.addEventListener('scroll', handleScroll, { passive: true })
-}
-
-// 리사이즈 이벤트 리스너
-window.addEventListener('resize', handleResize)
-
-onMounted(() => {
-  // 스크롤 리스너 설정을 약간 지연시켜 DOM이 준비되도록 함
-  setTimeout(setupScrollListener, 100)
-})
-
-onUnmounted(() => {
-  window.removeEventListener('resize', handleResize)
+  // 기존 리스너 제거
   window.removeEventListener('scroll', handleScroll)
+  document.removeEventListener('scroll', handleScroll)
   
-  // tab-content 리스너도 제거
-  const tabContent = document.querySelector('.tab-content')
-  if (tabContent) {
-    tabContent.removeEventListener('scroll', handleScroll)
+  // 기존 갤러리 리스너 제거
+  const oldGallery = document.querySelector('.ai-generation-gallery')
+  if (oldGallery) {
+    oldGallery.removeEventListener('scroll', handleScroll)
   }
-})
+  
+  // Vue.nextTick을 사용하여 DOM 업데이트 후 실행
+  nextTick(() => {
+    // 데스크톱에서는 ai-generation-gallery에 리스너 추가
+    if (!isMobile.value) {
+      const gallery = document.querySelector('.ai-generation-gallery')
+      if (gallery) {
+        console.log('Desktop: Setting up scroll listener on .ai-generation-gallery', {
+          scrollHeight: gallery.scrollHeight,
+          clientHeight: gallery.clientHeight,
+          scrollTop: gallery.scrollTop,
+          hasScrollbar: gallery.scrollHeight > gallery.clientHeight
+        })
+        gallery.addEventListener('scroll', handleScroll, { passive: true })
+        // 초기 스크롤 체크
+        setTimeout(() => {
+          console.log('Initial scroll check for desktop')
+          handleScroll({ target: gallery })
+        }, 100)
+        return
+      } else {
+        console.log('Desktop: .ai-generation-gallery not found!')
+      }
+    }
+    
+    // 모바일에서는 window에 리스너 추가
+    console.log('Mobile: Setting up scroll listener on window')
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    // 초기 스크롤 체크
+    setTimeout(() => {
+      console.log('Initial scroll check for mobile')
+      handleScroll()
+    }, 100)
+  })
+}
 
 // Computed
 // 스토리보드에서 추출한 유니크한 캐릭터 목록
@@ -399,30 +467,37 @@ const characters = computed(() => {
 // 캐릭터별 최신 이미지 맵
 const characterImageMap = computed(() => {
   const map = new Map()
-  const characterImages = images.value
+  // images.value에서 캐릭터 타입만 필터링
+  const completedCharacters = images.value
     .filter(img => img.image_type === 'character' && img.element_name && img.generation_status === 'completed')
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
   
-  console.log('Character images found:', characterImages.length, characterImages.map(img => img.element_name))
+  console.log('[CharacterImageMap] Completed character images:', completedCharacters.length)
+  if (completedCharacters.length > 0) {
+    console.log('[CharacterImageMap] Character names:', completedCharacters.map(img => img.element_name))
+  }
   
-  characterImages.forEach(img => {
+  completedCharacters.forEach(img => {
     if (!map.has(img.element_name)) {
-      map.set(img.element_name, img.thumbnail_url || img.storage_image_url || img.result_image_url)
+      const imageUrl = img.thumbnail_url || img.storage_image_url || img.result_image_url
+      map.set(img.element_name, imageUrl)
+      console.log(`[CharacterImageMap] Mapped ${img.element_name} to ${imageUrl ? 'URL found' : 'NO URL'}`)
     }
   })
   
-  console.log('Character image map:', Array.from(map.entries()))
+  console.log('[CharacterImageMap] Final map size:', map.size, 'entries:', Array.from(map.keys()))
   return map
 })
 
 // 캐릭터별 전체 이미지 객체 맵
 const characterObjectMap = computed(() => {
   const map = new Map()
-  const characterImages = images.value
+  // images.value에서 캐릭터 타입만 필터링
+  const completedCharacters = images.value
     .filter(img => img.image_type === 'character' && img.element_name && img.generation_status === 'completed')
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
   
-  characterImages.forEach(img => {
+  completedCharacters.forEach(img => {
     if (!map.has(img.element_name)) {
       map.set(img.element_name, img)
     }
@@ -431,13 +506,12 @@ const characterObjectMap = computed(() => {
   return map
 })
 
-// 필터링된 이미지 목록 (캐릭터 제외)
+// 필터링된 이미지 목록 (모든 이미지 포함)
 const filteredImages = computed(() => {
-  // completed 또는 failed 상태의 이미지 표시 (캐릭터 타입 제외)
+  // completed 또는 failed 상태의 모든 이미지 표시 (캐릭터 포함)
   let filtered = images.value.filter(img => {
     const isVisibleStatus = img.generation_status === 'completed' || img.generation_status === 'failed'
-    const isNotCharacter = img.image_type !== 'character' // 캐릭터는 상단에 별도 표시하므로 제외
-    return isVisibleStatus && isNotCharacter
+    return isVisibleStatus
   })
   
   // 보관함 필터
@@ -520,13 +594,14 @@ const processingImages = computed(() => {
 })
 
 // Methods
-// 페이지네이션을 위한 함수
+
+// 페이지네이션을 위한 함수 (모든 이미지 포함)
 const fetchImagesWithPagination = async ({ page, pageSize: size }) => {
   const from = (page - 1) * size
   const to = from + size - 1
   
   try {
-    // 첫 번째 쿼리: 데이터 가져오기
+    // 모든 이미지 가져오기 (캐릭터 포함)
     const { data, error, count } = await supabase
       .from('gen_images')
       .select('*', { count: 'exact' })
@@ -539,7 +614,7 @@ const fetchImagesWithPagination = async ({ page, pageSize: size }) => {
     return {
       data: data || [],
       count: count || 0,
-      hasMore: to < (count - 1)
+      hasMore: (to + 1) < count
     }
   } catch (error) {
     console.error('Error fetching images:', error)
@@ -558,26 +633,25 @@ const {
 
 // paginatedImages를 images와 동기화
 watch(paginatedImages, (newImages) => {
-  // usePagination이 이미 누적하므로 그대로 사용
   images.value = newImages
 }, { deep: true })
 
 // 기존 fetchImages 함수를 페이지네이션 refresh로 대체
 const fetchImages = async () => {
   images.value = [] // 초기 로드 시 비우기
+  
+  // 모든 이미지 로드 (캐릭터 포함)
   await refreshImages()
   
-  // 첫 번째 이미지의 URL 필드들 확인
-  if (paginatedImages.value && paginatedImages.value.length > 0) {
-    console.log('First image URL fields:', {
-      id: paginatedImages.value[0].id,
-      storage_image_url: paginatedImages.value[0].storage_image_url,
-      result_image_url: paginatedImages.value[0].result_image_url,
-      thumbnail_url: paginatedImages.value[0].thumbnail_url,
-      image_url: paginatedImages.value[0].image_url,
-      allKeys: Object.keys(paginatedImages.value[0])
-    })
-  }
+  // 프로덕션 시트에서 캐릭터 확인
+  console.log('Production sheets:', productionStore.productionSheets.length)
+  const allCharacters = new Set()
+  productionStore.productionSheets.forEach(sheet => {
+    if (sheet.characters && Array.isArray(sheet.characters)) {
+      sheet.characters.forEach(char => allCharacters.add(char))
+    }
+  })
+  console.log('Characters from production sheets:', Array.from(allCharacters))
 }
 
 const handleCharacterClick = (character) => {
@@ -1093,12 +1167,33 @@ const handleMediaUpdate = (event) => {
 // Lifecycle
 onMounted(async () => {
   console.log('AIGenerationGallery mounted, loading initial data...')
+  
+  // 리사이즈 이벤트 리스너 설정
+  window.addEventListener('resize', handleResize)
+  
+  // 초기 데이터 로드
   await fetchImages()
   console.log('Initial images loaded:', images.value.length, 'Has more:', hasMore.value)
   
   // 스토리보드 데이터도 로드
   if (!productionStore.productionSheets.length) {
     await productionStore.fetchProductionSheets(props.projectId)
+  }
+  
+  // 스크롤 리스너 설정
+  await nextTick()
+  setupScrollListener()
+  
+  // Tab 변경 감지를 위한 MutationObserver 설정
+  const observer = new MutationObserver(() => {
+    console.log('DOM changed, re-setting up scroll listener')
+    setupScrollListener()
+  })
+  
+  // tab-content의 부모 요소 감시
+  const tabsContainer = document.querySelector('.tabs-container')
+  if (tabsContainer) {
+    observer.observe(tabsContainer, { childList: true, subtree: true })
   }
   
   // 개발 환경에서는 폴링 사용
@@ -1136,6 +1231,14 @@ onUnmounted(() => {
   
   // 이벤트 리스너 제거
   window.removeEventListener('media-update', handleMediaUpdate)
+  window.removeEventListener('resize', handleResize)
+  window.removeEventListener('scroll', handleScroll)
+  
+  // 갤러리 리스너도 제거
+  const gallery = document.querySelector('.ai-generation-gallery')
+  if (gallery) {
+    gallery.removeEventListener('scroll', handleScroll)
+  }
 })
 
 // Supabase Realtime 설정 (웹훅 결과 수신용)
@@ -1212,7 +1315,8 @@ defineExpose({
   openGenerationModal,
   setFilterCategory,
   filterCategory,
-  toggleKeptView
+  toggleKeptView,
+  refreshScrollListener: setupScrollListener
 })
 </script>
 
@@ -1305,14 +1409,26 @@ defineExpose({
   transition: opacity 0.2s;
 }
 
-.suggestion-card-small.has-image:hover .character-overlay {
-  opacity: 1;
+/* 데스크톱에서는 호버 시에만 표시 */
+@media (hover: hover) {
+  .suggestion-card-small:hover .character-overlay {
+    opacity: 1;
+  }
+}
+
+/* 모바일에서는 항상 표시 및 배경 더 연하게 */
+@media (hover: none) {
+  .character-overlay {
+    opacity: 1;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.6), transparent);
+  }
 }
 
 .character-overlay h6 {
   color: white;
   margin: 0;
   font-size: 0.9rem;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
 .btn-regenerate {
@@ -1331,11 +1447,50 @@ defineExpose({
   transform: scale(1.05);
 }
 
-.suggestion-card-small:hover {
+.character-placeholder {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--border-color);
+}
+
+.character-placeholder .suggestion-icon-small {
+  color: var(--text-tertiary);
+  opacity: 0.5;
+}
+
+.btn-generate-small {
+  padding: 4px 12px;
+  background: var(--success-color, #10B981);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-generate-small:hover {
+  background: var(--success-hover, #059669);
+  transform: scale(1.05);
+}
+
+.suggestion-card-small:not(.has-image):hover {
   border-color: var(--primary-color);
   background: var(--bg-tertiary);
   transform: translateY(-2px);
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.suggestion-card-small.has-image:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
 .suggestion-icon-small {
@@ -1344,34 +1499,7 @@ defineExpose({
   color: var(--text-secondary);
 }
 
-.suggestion-card-small h6 {
-  font-size: 0.85rem;
-  font-weight: 600;
-  margin: 0 0 8px 0;
-  color: var(--text-primary);
-  text-align: center;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  width: 100%;
-}
-
-.btn-generate-small {
-  padding: 4px 12px;
-  background: var(--primary-color);
-  color: white;
-  border: none;
-  border-radius: 4px;
-  font-size: 0.8rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-generate-small:hover {
-  background: var(--primary-dark);
-  transform: scale(1.05);
-}
+/* 캐릭터 카드의 h6는 오버레이 안에 있으므로 이 스타일 삭제 */
 
 /* 스크롤바 스타일링 */
 .suggestions-scroll-container::-webkit-scrollbar {
@@ -1436,7 +1564,62 @@ defineExpose({
 .gallery-controls {
   margin-bottom: 1rem;
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.filter-buttons {
+  display: flex;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.filter-btn {
+  padding: 0.5rem 1rem;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.filter-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--primary-color-light);
+}
+
+.filter-btn.active {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.column-control-wrapper {
+  display: flex;
+  align-items: center;
+}
+
+.mobile-filter {
+  margin-bottom: 1rem;
+  display: flex;
+  justify-content: center;
+}
+
+.filter-select {
+  padding: 0.5rem 1rem;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  min-width: 150px;
 }
 
 .section-header {

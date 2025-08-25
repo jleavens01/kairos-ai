@@ -1,14 +1,29 @@
 <template>
-  <div 
-    class="scene-image-uploader"
-    :class="{ 'drag-over': isDragOver, 'has-media': hasMedia }"
-    @drop="handleDrop"
-    @dragover.prevent="handleDragOver"
-    @dragleave="handleDragLeave"
-    @click="!hasMedia && selectFile"
-    @mouseenter="hovering = true"
-    @mouseleave="hovering = false"
-  >
+  <div class="scene-image-wrapper">
+    <!-- 모바일에서만 표시되는 미디어 스위치 (hideSwitch가 false일 때만 표시) -->
+    <div v-if="isMobile && !hideSwitch" class="mobile-media-switch">
+      <span class="media-label" :class="{ active: localMediaType === 'image' }">이미지</span>
+      <label class="media-switch">
+        <input 
+          type="checkbox" 
+          :checked="localMediaType === 'video'"
+          @change="switchLocalMediaType"
+        >
+        <span class="switch-slider"></span>
+      </label>
+      <span class="media-label" :class="{ active: localMediaType === 'video' }">비디오</span>
+    </div>
+    
+    <div 
+      class="scene-image-uploader"
+      :class="{ 'drag-over': isDragOver, 'has-media': hasMedia }"
+      @drop="handleDrop"
+      @dragover.prevent="handleDragOver"
+      @dragleave="handleDragLeave"
+      @click="!hasMedia && selectFile"
+      @mouseenter="hovering = true"
+      @mouseleave="hovering = false"
+    >
     <!-- 이미지 표시 -->
     <img 
       v-if="currentMediaType === 'image' && imageUrl" 
@@ -61,6 +76,7 @@
       style="display: none"
       @change="handleFileSelect"
     />
+    </div>
   </div>
 </template>
 
@@ -92,6 +108,10 @@ const props = defineProps({
   projectId: {
     type: String,
     required: true
+  },
+  hideSwitch: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -105,10 +125,27 @@ const videoElement = ref(null)
 const currentMediaType = ref(props.mediaType || 'image')
 const hovering = ref(false)
 
-// Watch props changes
+// 모바일 감지
+const isMobile = ref(window.innerWidth <= 768)
+const handleResize = () => {
+  isMobile.value = window.innerWidth <= 768
+}
+window.addEventListener('resize', handleResize)
+
+// 모바일에서는 개별 미디어 타입 사용
+const localMediaType = ref(props.mediaType || 'image')
+
+// Watch props changes - 모바일과 데스크탑 모두 적용
 watch(() => props.mediaType, (newType) => {
   currentMediaType.value = newType
-})
+  localMediaType.value = newType
+  console.log(`SceneImageUploader: mediaType changed to ${newType}`)
+}, { immediate: true })
+
+// 모바일에서 미디어 타입 전환
+const switchLocalMediaType = () => {
+  localMediaType.value = localMediaType.value === 'image' ? 'video' : 'image'
+}
 
 // Methods
 const handleDragOver = (event) => {
@@ -287,6 +324,108 @@ const removeMedia = async () => {
 </script>
 
 <style scoped>
+.scene-image-wrapper {
+  width: 100%;
+}
+
+/* 모바일 미디어 스위치 */
+.mobile-media-switch {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+@media (max-width: 768px) {
+  .mobile-media-switch {
+    display: flex;
+  }
+  
+  .scene-image-wrapper {
+    width: 100% !important;
+  }
+  
+  .scene-image-uploader {
+    width: 100% !important;
+    height: auto;
+    min-height: 150px; /* 200px에서 150px로 감소 */
+    max-width: none !important;
+    margin: 0 !important;
+  }
+  
+  .scene-thumbnail,
+  .scene-video {
+    width: 100% !important;
+    height: auto;
+    max-height: 300px; /* 400px에서 300px로 감소 */
+    object-fit: contain;
+  }
+  
+  .empty-placeholder {
+    min-height: 150px; /* 빈 상태도 높이 감소 */
+    width: 100% !important;
+  }
+}
+
+.media-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  transition: color 0.2s;
+}
+
+.media-label.active {
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+.media-switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 22px;
+}
+
+.media-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.switch-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--border-color);
+  transition: 0.3s;
+  border-radius: 22px;
+}
+
+.switch-slider:before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.3s;
+  border-radius: 50%;
+}
+
+.media-switch input:checked + .switch-slider {
+  background-color: var(--primary-color);
+}
+
+.media-switch input:checked + .switch-slider:before {
+  transform: translateX(18px);
+}
 .scene-image-uploader {
   position: relative;
   display: flex;

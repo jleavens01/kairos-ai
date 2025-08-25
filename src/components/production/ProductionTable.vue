@@ -100,17 +100,17 @@
             @mouseover="setHoveredItem(scene.id)"
             @mouseleave="clearHoveredItem()"
           >
-            <td class="scene-number-col" data-label="씬 번호">
+            <td v-if="!isMobile" class="scene-number-col" :data-label="'씬 번호'">
               <div class="scene-number-wrapper">
                 <input 
                   type="checkbox" 
                   :checked="isSelected(scene.id)"
                   @change="toggleSelect(scene.id)"
                 >
-                <span class="scene-number">{{ scene.scene_number }}</span>
+                <span class="scene-number">#S{{ scene.scene_number }}</span>
               </div>
             </td>
-            <td class="scene-image-col" data-label="이미지/비디오">
+            <td v-if="!isMobile" class="scene-image-col" :data-label="'이미지/비디오'">
               <SceneImageUploader
                 :scene-id="scene.id"
                 :scene-number="scene.scene_number"
@@ -122,7 +122,43 @@
                 @view-image="showFullImage"
               />
             </td>
-            <td class="script-col editable-cell" data-label="오리지널 스크립트" @click="startEditing(scene.id, 'original_script_text', scene.original_script_text)">
+            <!-- 모바일에서는 씬 번호와 이미지를 하나의 셀로 합침 -->
+            <td v-if="isMobile" class="mobile-scene-header" colspan="2">
+              <div class="mobile-header-row">
+                <input 
+                  type="checkbox" 
+                  :checked="isSelected(scene.id)"
+                  @change="toggleSelect(scene.id)"
+                >
+                <span class="scene-number">#S{{ scene.scene_number }}</span>
+                <div class="mobile-media-switch-inline">
+                  <span class="media-label-small" :class="{ active: sceneMediaTypes[scene.id] === 'image' }">이미지</span>
+                  <label class="media-switch-small">
+                    <input 
+                      type="checkbox" 
+                      :checked="sceneMediaTypes[scene.id] === 'video'"
+                      @change="toggleSceneMediaType(scene.id)"
+                    >
+                    <span class="switch-slider-small"></span>
+                  </label>
+                  <span class="media-label-small" :class="{ active: sceneMediaTypes[scene.id] === 'video' }">비디오</span>
+                </div>
+              </div>
+              <div class="mobile-media-container">
+                <SceneImageUploader
+                  :scene-id="scene.id"
+                  :scene-number="scene.scene_number"
+                  :image-url="scene.scene_image_url"
+                  :video-url="scene.scene_video_url"
+                  :media-type="sceneMediaTypes[scene.id] || 'image'"
+                  :project-id="projectId"
+                  :hide-switch="true"
+                  @update="handleImageUpdate(scene.id, $event)"
+                  @view-image="showFullImage"
+                />
+              </div>
+            </td>
+            <td class="script-col editable-cell" :data-label="isMobile ? '오리지널 스크립트' : ''" @click="startEditing(scene.id, 'original_script_text', scene.original_script_text)">
               <template v-if="isEditing(scene.id, 'original_script_text')">
                 <textarea 
                   :id="`edit-${scene.id}-original_script_text`"
@@ -138,7 +174,7 @@
                 {{ scene.original_script_text }}
               </template>
             </td>
-            <td class="characters-col editable-cell" data-label="등장인물/자료" @click="startEditingCharacters(scene.id, scene.characters)">
+            <td class="characters-col editable-cell" :data-label="isMobile ? '등장인물/자료' : ''" @click="startEditingCharacters(scene.id, scene.characters)">
               <template v-if="isEditing(scene.id, 'characters')">
                 <input 
                   :id="`edit-${scene.id}-characters`"
@@ -173,7 +209,7 @@
                 </div>
               </template>
             </td>
-            <td class="tts-col" data-label="TTS 컨트롤">
+            <td class="tts-col" :data-label="isMobile ? '' : 'TTS 컨트롤'">
               <div class="tts-controls">
                 <!-- TTS가 없을 때 -->
                 <button 
@@ -222,8 +258,14 @@
               </div>
             </td>
           </tr>
-          <!-- 씬 추가 버튼 오버레이 -->
-          <tr v-if="index < scenes.length - 1" class="scene-divider-row">
+          <!-- 모바일에서 씬 추가 버튼 (씬 사이에 겹쳐짐) -->
+          <div v-if="isMobile && index < scenes.length - 1" class="mobile-scene-divider">
+            <button @click="addRow(scene.scene_number)" class="mobile-add-scene-floating-btn">
+              + 씬 추가
+            </button>
+          </div>
+          <!-- 데스크탑 씬 추가 버튼 오버레이 -->
+          <tr v-if="!isMobile && index < scenes.length - 1" class="scene-divider-row">
             <td colspan="6" class="scene-divider-cell">
               <div 
                 class="add-scene-overlay"
@@ -250,7 +292,7 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useProductionStore } from '@/stores/production'
 import { useProjectsStore } from '@/stores/projects'
 import { supabase } from '@/utils/supabase'
@@ -285,6 +327,25 @@ const hoveredItemId = ref(null)
 const isSaving = ref(false)
 const globalMediaType = ref('image') // 전체 미디어 타입 (image/video)
 const pollingInterval = ref(null) // 자동 새로고침용 interval
+
+// 모바일 감지
+const isMobile = ref(window.innerWidth <= 768)
+const handleResize = () => {
+  isMobile.value = window.innerWidth <= 768
+}
+window.addEventListener('resize', handleResize)
+
+// 모바일에서 각 씬별 미디어 타입 관리 (기본값: image)
+const sceneMediaTypes = ref({})
+
+// 씬별 미디어 타입 초기화
+const initSceneMediaTypes = () => {
+  props.scenes.forEach(scene => {
+    if (!sceneMediaTypes.value[scene.id]) {
+      sceneMediaTypes.value[scene.id] = 'image'
+    }
+  })
+}
 
 
 // TTS 관련 상태
@@ -1432,6 +1493,14 @@ const switchGlobalMediaType = (newType) => {
   console.log(`전체 미디어 타입이 ${newType}로 변경되었습니다.`)
 }
 
+// 모바일에서 개별 씬 미디어 타입 토글
+const toggleSceneMediaType = (sceneId) => {
+  const currentType = sceneMediaTypes.value[sceneId] || 'image'
+  const newType = currentType === 'image' ? 'video' : 'image'
+  sceneMediaTypes.value[sceneId] = newType
+  console.log(`Scene ${sceneId} media type changed to: ${newType}`)
+}
+
 // TTS 파일 존재 여부 확인 (컴포넌트 마운트 시)
 const checkExistingTTS = async () => {
   if (!props.scenes.length) return
@@ -1489,8 +1558,14 @@ const stopPolling = () => {
   }
 }
 
+// scenes 변경 감지
+watch(() => props.scenes, () => {
+  initSceneMediaTypes()
+}, { deep: true })
+
 // 컴포넌트 마운트 시 TTS 확인 및 폴링 시작
 onMounted(() => {
+  initSceneMediaTypes() // 씬 미디어 타입 초기화
   checkExistingTTS()
   startPolling() // 자동 새로고침 시작
 })
@@ -1504,6 +1579,7 @@ onUnmounted(() => {
     }
   })
   stopPolling() // 자동 새로고침 중지
+  window.removeEventListener('resize', handleResize) // 리사이즈 리스너 제거
 })
 
 
@@ -2208,15 +2284,15 @@ defineExpose({ deleteSelectedScenes })
 
 /* 씬 이미지 스타일은 SceneImageUploader 컴포넌트로 이동 */
 
-/* 씬 구분선 행 */
+/* 씬 구분선 행 - 높이 최소화 */
 .scene-divider-row {
-  height: 0;
+  height: 5px;
   position: relative;
 }
 
 .scene-divider-cell {
   padding: 0 !important;
-  height: 0;
+  height: 5px;
   position: relative;
   border: none !important;
 }
@@ -2224,10 +2300,10 @@ defineExpose({ deleteSelectedScenes })
 /* 씬 추가 버튼 오버레이 */
 .add-scene-overlay {
   position: absolute;
-  top: -20px;
+  top: -10px;
   left: 0;
   right: 0;
-  height: 40px;
+  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2303,36 +2379,234 @@ input[type="checkbox"] {
     display: block;
   }
   
-  .production-table tr {
+  .production-table tr.production-sheet-data-row {
     display: block;
-    margin-bottom: 20px;
+    margin-bottom: 5px; /* 씬 간 아주 미세한 간격 */
     border: 1px solid var(--border-color);
     border-radius: 8px;
-    padding: 10px;
+    padding: 8px;
     background: var(--bg-secondary);
   }
   
   .production-table td {
     display: block;
     width: 100%;
-    padding: 8px;
+    padding: 6px; /* 8px에서 6px로 감소 */
     border: none;
     text-align: left;
   }
   
-  /* 각 섹션 라벨 추가 */
-  .production-table td:before {
+  /* 모바일 씬 헤더 (체크박스, 씬번호, 스위치 한 줄) */
+  .mobile-scene-header {
+    padding: 6px !important;
+  }
+  
+  .mobile-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  
+  .mobile-header-row .scene-number {
+    font-weight: 600;
+    color: var(--primary-color);
+    font-size: 0.95rem;
+    margin-right: auto;
+  }
+  
+  /* 인라인 미디어 스위치 (작은 버전) */
+  .mobile-media-switch-inline {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  
+  .media-label-small {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    transition: color 0.2s;
+  }
+  
+  .media-label-small.active {
+    color: var(--primary-color);
+    font-weight: 600;
+  }
+  
+  .media-switch-small {
+    position: relative;
+    display: inline-block;
+    width: 32px;
+    height: 18px;
+  }
+  
+  .media-switch-small input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  
+  .switch-slider-small {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--border-color);
+    transition: 0.3s;
+    border-radius: 18px;
+  }
+  
+  .switch-slider-small:before {
+    position: absolute;
+    content: "";
+    height: 14px;
+    width: 14px;
+    left: 2px;
+    bottom: 2px;
+    background-color: white;
+    transition: 0.3s;
+    border-radius: 50%;
+  }
+  
+  .media-switch-small input:checked + .switch-slider-small {
+    background-color: var(--primary-color);
+  }
+  
+  .media-switch-small input:checked + .switch-slider-small:before {
+    transform: translateX(14px);
+  }
+  
+  /* 모바일 미디어 컨테이너 (너비 100%) */
+  .mobile-media-container {
+    width: 100% !important;
+    margin-bottom: 8px;
+    padding: 0 !important;
+  }
+  
+  .mobile-media-container .scene-image-wrapper {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  
+  .mobile-media-container .scene-image-uploader {
+    width: 100% !important;
+    margin: 0 !important;
+  }
+  
+  /* 오리지널 스크립트 섹션 */
+  .production-table td.script-col {
+    padding: 10px 6px; /* 패딩 감소 */
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+    margin: 6px 0; /* 마진 감소 */
+  }
+  
+  .production-table td.script-col:before {
     content: attr(data-label);
     font-weight: bold;
     display: block;
-    margin-bottom: 5px;
+    margin-bottom: 6px; /* 마진 감소 */
     color: var(--text-secondary);
     font-size: 0.85rem;
   }
   
-  .scene-number-col {
-    padding: 5px !important;
-    margin-bottom: 10px;
+  /* 등장인물/자료 섹션 */
+  .production-table td.characters-col {
+    padding: 8px 6px; /* 패딩 감소 */
+  }
+  
+  .production-table td.characters-col:before {
+    content: attr(data-label);
+    font-weight: bold;
+    display: inline-block;
+    margin-bottom: 6px; /* 마진 감소 */
+    margin-right: 8px;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+  }
+  
+  .production-table td.characters-col .tag-list {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px; /* 갭 감소 */
+  }
+  
+  /* TTS 컨트롤 섹션 */
+  .production-table td.tts-col {
+    padding: 10px 6px; /* 패딩 감소 */
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+    margin-top: 6px; /* 마진 감소 */
+  }
+  
+  .production-table td.tts-col .tts-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px; /* 갭 감소 */
+  }
+  
+  /* 씬 구분자 행 - 모바일에서는 숨기기 */
+  .scene-divider-row {
+    display: none !important;
+  }
+  
+  /* 모바일 씬 추가 플로팅 버튼 */
+  .mobile-scene-divider {
+    position: relative;
+    height: 0;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    z-index: 10;
+    margin-top: -1px;
+    margin-bottom: -1px;
+  }
+  
+  .mobile-add-scene-floating-btn {
+    position: absolute;
+    top: -10px;
+    padding: 1px 10px;
+    font-size: 0.65rem;
+    background: var(--primary-color);
+    color: white;
+    border: 2px solid var(--bg-primary);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    white-space: nowrap;
+    height: 20px;
+    line-height: 16px;
+  }
+  
+  .mobile-add-scene-floating-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.15);
+  }
+  
+  /* 선택 액션 바 모바일 스타일 */
+  .selection-actions {
+    flex-direction: column;
+    gap: 12px;
+    padding: 10px;
+  }
+  
+  .selection-buttons {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    width: 100%;
+  }
+  
+  .selection-buttons button {
+    flex: 1 1 calc(50% - 4px);
+    min-width: 120px;
+    font-size: 0.85rem;
+    padding: 8px 10px;
   }
   
   .scene-image-col {

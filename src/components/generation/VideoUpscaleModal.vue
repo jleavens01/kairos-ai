@@ -195,7 +195,7 @@ const processing = ref(false)
 const upscaleFactor = ref(2.0)
 const enableInterpolation = ref(false)
 const targetFps = ref(30)
-const useH264 = ref(false)
+const useH264 = ref(true) // H.264를 기본값으로 설정 (호환성 우선)
 
 // 계산된 속성
 const estimatedResolution = computed(() => {

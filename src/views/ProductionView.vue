@@ -33,19 +33,19 @@
       
       <!-- AI 생성 갤러리 -->
       <div v-else-if="activeTab === 'gallery'" class="gallery-container">
-        <AIGenerationGallery />
+        <AIGenerationGallery ref="imageGalleryRef" />
       </div>
       
       <!-- 비디오 생성 -->
       <div v-else-if="activeTab === 'video'" class="video-container">
-        <VideoGenerationGallery />
+        <VideoGenerationGallery ref="videoGalleryRef" />
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, watch, nextTick } from 'vue'
 import { 
   Layers, FileText, BookOpen, 
   Image, Video, Sparkles 
@@ -58,6 +58,25 @@ import AIGenerationGallery from '@/components/generation/AIGenerationGallery.vue
 import VideoGenerationGallery from '@/components/generation/VideoGenerationGallery.vue'
 
 const activeTab = ref('trends')
+const imageGalleryRef = ref(null)
+const videoGalleryRef = ref(null)
+
+// 탭 변경 시 스크롤 리스너 재설정
+watch(activeTab, async (newTab) => {
+  await nextTick()
+  
+  if (newTab === 'gallery' && imageGalleryRef.value) {
+    setTimeout(() => {
+      console.log('Tab changed to gallery, refreshing scroll listener')
+      imageGalleryRef.value.refreshScrollListener()
+    }, 100)
+  } else if (newTab === 'video' && videoGalleryRef.value) {
+    setTimeout(() => {
+      console.log('Tab changed to video, refreshing scroll listener')
+      videoGalleryRef.value.refreshScrollListener()
+    }, 100)
+  }
+})
 
 const tabs = ref([
   {
