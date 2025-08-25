@@ -183,7 +183,6 @@ export const handler = async (event) => {
     const { error: requestUpdateError } = await supabaseAdmin
       .from('gen_videos')
       .update({
-        upscale_status: 'processing',
         metadata: {
           ...upscaleRecord.metadata,
           upscale_request_id: requestId,
@@ -237,6 +236,13 @@ async function pollUpscaleStatus(videoId, requestId) {
     process.env.VITE_SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY
   );
+
+  // 현재 비디오 정보 가져오기
+  const { data: existingVideo } = await supabaseAdmin
+    .from('gen_videos')
+    .select('*')
+    .eq('id', videoId)
+    .single();
 
   const maxAttempts = 12; // 최대 12번 시도 (120초)
   const pollInterval = 10000; // 10초마다
@@ -320,17 +326,17 @@ async function pollUpscaleStatus(videoId, requestId) {
           console.log(`File too large (${fileSizeInMB.toFixed(2)} MB > 50 MB), using FAL AI URL directly`);
         }
 
-        // DB 업데이트
+        // DB 업데이트 - 업스케일 필드만 업데이트
         const updateData = {
-          generation_status: 'completed',
-          result_video_url: videoUrl,
-          storage_video_url: storageUrl || videoUrl, // Storage 업로드 실패시 FAL URL 사용
-          completed_at: new Date().toISOString(),
+          upscale_status: 'completed',
+          upscale_video_url: videoUrl,
+          upscaled_at: new Date().toISOString(),
           metadata: {
-            completed_response: result.data || result,
-            processing_time: attempt * pollInterval,
-            file_size_mb: fileSizeInMB,
-            storage_uploaded: !!storageUrl
+            ...existingVideo?.metadata,
+            upscale_completed_response: result.data || result,
+            upscale_processing_time: attempt * pollInterval,
+            upscale_file_size_mb: fileSizeInMB,
+            upscale_storage_uploaded: !!storageUrl
           }
         };
         
@@ -351,10 +357,11 @@ async function pollUpscaleStatus(videoId, requestId) {
         await supabaseAdmin
           .from('gen_videos')
           .update({
-            generation_status: 'failed',
+            upscale_status: 'failed',
             metadata: {
-              error: status.error || 'Upscale failed',
-              failed_at: new Date().toISOString()
+              ...existingVideo?.metadata,
+              upscale_error: status.error || 'Upscale failed',
+              upscale_failed_at: new Date().toISOString()
             }
           })
           .eq('id', videoId);
@@ -370,10 +377,11 @@ async function pollUpscaleStatus(videoId, requestId) {
         await supabaseAdmin
           .from('gen_videos')
           .update({
-            generation_status: 'failed',
+            upscale_status: 'failed',
             metadata: {
-              error: 'Polling timeout',
-              failed_at: new Date().toISOString()
+              ...existingVideo?.metadata,
+              upscale_error: 'Polling timeout',
+              upscale_failed_at: new Date().toISOString()
             }
           })
           .eq('id', videoId);
