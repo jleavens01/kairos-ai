@@ -357,6 +357,7 @@ const projectsStore = useProjectsStore()
 
 // State
 const images = ref([])
+const characterImagesForSuggestions = ref([]) // 상단 제안 섹션용 캐릭터 이미지
 const selectedImage = ref(null)
 const filterCategory = ref('')
 
@@ -558,12 +559,12 @@ const characters = computed(() => {
   return Array.from(allCharacters)
 })
 
-// 캐릭터별 최신 이미지 맵
+// 캐릭터별 최신 이미지 맵 (상단 제안 섹션용)
 const characterImageMap = computed(() => {
   const map = new Map()
-  // images.value에서 캐릭터 타입만 필터링
-  const completedCharacters = images.value
-    .filter(img => img.image_type === 'character' && img.element_name && img.generation_status === 'completed')
+  // characterImagesForSuggestions에서 캐릭터 이미지 매핑
+  const completedCharacters = characterImagesForSuggestions.value
+    .filter(img => img.element_name && img.generation_status === 'completed')
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
   
   console.log('[CharacterImageMap] Completed character images:', completedCharacters.length)
@@ -583,12 +584,12 @@ const characterImageMap = computed(() => {
   return map
 })
 
-// 캐릭터별 전체 이미지 객체 맵
+// 캐릭터별 전체 이미지 객체 맵 (상단 제안 섹션용)
 const characterObjectMap = computed(() => {
   const map = new Map()
-  // images.value에서 캐릭터 타입만 필터링
-  const completedCharacters = images.value
-    .filter(img => img.image_type === 'character' && img.element_name && img.generation_status === 'completed')
+  // characterImagesForSuggestions에서 캐릭터 이미지 매핑
+  const completedCharacters = characterImagesForSuggestions.value
+    .filter(img => img.element_name && img.generation_status === 'completed')
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
   
   completedCharacters.forEach(img => {
@@ -762,7 +763,31 @@ watch(paginatedImages, (newImages) => {
   images.value = newImages
 }, { deep: true })
 
-// 페이지별 이미지 로드
+// 캐릭터 이미지만 별도로 로드 (상단 제안 섹션용)
+const fetchCharacterImages = async () => {
+  try {
+    // 모든 캐릭터 이미지 가져오기 (페이지네이션 없이)
+    const { data, error } = await supabase
+      .from('gen_images')
+      .select('*')
+      .eq('project_id', props.projectId)
+      .eq('image_type', 'character')
+      .eq('generation_status', 'completed')
+      .order('created_at', { ascending: false })
+    
+    if (error) throw error
+    
+    // 캐릭터 이미지만 별도로 저장
+    characterImagesForSuggestions.value = data || []
+    
+    console.log('Loaded character images for suggestions:', characterImagesForSuggestions.value.length)
+  } catch (error) {
+    console.error('Error fetching character images:', error)
+    characterImagesForSuggestions.value = []
+  }
+}
+
+// 페이지별 이미지 로드 (갤러리용)
 const fetchImages = async () => {
   loading.value = true
   
@@ -867,6 +892,11 @@ const closeGenerationModal = () => {
 
 const handleGenerationSuccess = async (result) => {
   closeGenerationModal()
+  
+  // 캐릭터 이미지인 경우 캐릭터 이미지 먼저 새로고침
+  if (result.image_type === 'character' || result.category === 'character') {
+    await fetchCharacterImages()
+  }
   
   // 이미지 목록 새로고침
   await fetchImages()
@@ -1445,14 +1475,18 @@ onMounted(async () => {
   // 리사이즈 이벤트 리스너 설정
   window.addEventListener('resize', handleResize)
   
-  // 초기 데이터 로드
-  await fetchImages()
-  console.log('Initial images loaded:', images.value.length, 'Has more:', hasMore.value)
-  
-  // 스토리보드 데이터도 로드
+  // 1. 먼저 스토리보드 데이터 로드
   if (!productionStore.productionSheets.length) {
     await productionStore.fetchProductionSheets(props.projectId)
   }
+  
+  // 2. 캐릭터 이미지 먼저 로드 (상단 제안 섹션용)
+  await fetchCharacterImages()
+  console.log('Character images loaded for suggestions')
+  
+  // 3. 그 다음 갤러리 이미지 로드
+  await fetchImages()
+  console.log('Initial gallery images loaded:', images.value.length)
   
   // 스크롤 리스너 설정
   await nextTick()
