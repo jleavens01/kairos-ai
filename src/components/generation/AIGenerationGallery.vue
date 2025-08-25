@@ -83,7 +83,26 @@
       </div>
 
       <div v-else class="image-grid" :style="{ columnCount: columnCount }">
-        <!-- 이미지만 표시 (제안 카드 제외) -->
+        <!-- 캐릭터 생성 제안 카드들 -->
+        <div
+          v-for="character in characterSuggestions"
+          :key="`suggestion-${character.name}`"
+          class="gallery-item suggestion-card"
+          @click="openGenerationModalForCharacter(character.name)"
+        >
+          <div class="suggestion-wrapper">
+            <div class="suggestion-content">
+              <User :size="48" class="suggestion-icon" />
+              <p class="suggestion-text">캐릭터 생성</p>
+              <p class="suggestion-name">{{ character.name }}</p>
+              <div v-if="character.existingImage" class="suggestion-existing">
+                <img :src="character.existingImage.thumbnail_url || character.existingImage.storage_image_url" alt="" />
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 이미지들 -->
         <div 
           v-for="item in galleryImages" 
           :key="item.id"
@@ -581,6 +600,38 @@ const characterObjectMap = computed(() => {
   return map
 })
 
+// 캐릭터 생성 제안 목록
+const characterSuggestions = computed(() => {
+  // 캐릭터 필터가 적용되어 있지 않으면 제안 카드를 표시하지 않음
+  if (filterCategory.value && filterCategory.value !== 'character') {
+    return []
+  }
+  
+  // 보관함일 때는 제안 카드를 표시하지 않음
+  if (showKeptOnly.value) {
+    return []
+  }
+  
+  const suggestions = []
+  
+  // 스토리보드의 모든 캐릭터를 순회
+  characters.value.forEach(characterName => {
+    // 이미 생성된 캐릭터인지 확인
+    const existingImage = characterObjectMap.value.get(characterName)
+    
+    // 아직 생성되지 않은 캐릭터만 제안 카드로 표시
+    if (!existingImage) {
+      suggestions.push({
+        name: characterName,
+        existingImage: null
+      })
+    }
+  })
+  
+  console.log('[CharacterSuggestions] Suggestions:', suggestions.length, suggestions.map(s => s.name))
+  return suggestions
+})
+
 // 필터링된 이미지 목록 (모든 이미지 포함)
 const filteredImages = computed(() => {
   // completed 또는 failed 상태의 모든 이미지 표시 (캐릭터 포함)
@@ -719,11 +770,26 @@ const fetchImages = async () => {
     const from = (currentPage.value - 1) * pageSize.value
     const to = from + pageSize.value - 1
     
-    // 모든 이미지 가져오기 (캐릭터 포함)
-    const { data, error, count } = await supabase
+    // 쿼리 빌드
+    let query = supabase
       .from('gen_images')
       .select('*', { count: 'exact' })
       .eq('project_id', props.projectId)
+    
+    // 보관함 필터 적용
+    if (showKeptOnly.value) {
+      query = query.eq('is_kept', true)
+    } else {
+      query = query.or('is_kept.is.null,is_kept.eq.false')
+    }
+    
+    // 카테고리 필터 적용
+    if (filterCategory.value) {
+      query = query.eq('image_type', filterCategory.value)
+    }
+    
+    // 정렬 및 페이지네이션
+    const { data, error, count } = await query
       .order('created_at', { ascending: false })
       .range(from, to)
     
@@ -781,6 +847,14 @@ const openGenerationModal = (character = '') => {
   } else {
     currentPrompt.value = ''
   }
+  showGenerationModal.value = true
+}
+
+const openGenerationModalForCharacter = (characterName) => {
+  currentCharacter.value = characterName
+  currentPrompt.value = `${characterName} 캐릭터`
+  selectedCategory.value = 'character'
+  selectedElement.value = characterName
   showGenerationModal.value = true
 }
 
@@ -1352,6 +1426,17 @@ const handleMediaUpdate = (event) => {
     fetchImages()
   }
 }
+
+// 필터 변경 감지
+watch(showKeptOnly, () => {
+  currentPage.value = 1
+  fetchImages()
+})
+
+watch(filterCategory, () => {
+  currentPage.value = 1
+  fetchImages()
+})
 
 // Lifecycle
 onMounted(async () => {
@@ -2323,5 +2408,64 @@ defineExpose({
   .gallery-section {
     padding: 0 5px;
   }
+}
+
+/* 캐릭터 생성 제안 카드 스타일 */
+.suggestion-card {
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.suggestion-card:hover {
+  transform: translateY(-2px);
+}
+
+.suggestion-wrapper {
+  background: var(--bg-secondary);
+  border: 2px dashed var(--border-color);
+  border-radius: 12px;
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.suggestion-content {
+  text-align: center;
+  padding: 20px;
+}
+
+.suggestion-icon {
+  color: var(--text-tertiary);
+  margin-bottom: 12px;
+}
+
+.suggestion-text {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.suggestion-name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.suggestion-existing {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  opacity: 0.1;
+}
+
+.suggestion-existing img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 </style>
