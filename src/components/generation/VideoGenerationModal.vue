@@ -945,16 +945,26 @@ const loadLibraryImages = async () => {
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('gen_images')
       .select('*')
       .eq('project_id', props.projectId)
       .eq('generation_status', 'completed')
+    
+    // is_kept 필터 제거 - 모든 완성된 이미지 표시
+    // 보관함 기능이 필요하면 별도 체크박스로 구현
+    
+    const { data, error } = await query
       .order('created_at', { ascending: false })
-      .limit(50)
+      .limit(200) // 제한을 200개로 늘림
 
-    if (error) throw error
+    if (error) {
+      console.error('라이브러리 이미지 쿼리 에러:', error)
+      throw error
+    }
+    
     libraryImages.value = data || []
+    console.log(`라이브러리 이미지 ${data?.length || 0}개 로드됨`)
   } catch (error) {
     console.error('라이브러리 이미지 로드 실패:', error)
     libraryImages.value = []

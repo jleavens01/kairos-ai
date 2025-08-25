@@ -824,8 +824,6 @@ const loadLibraryImages = async () => {
       .from('gen_images')
       .select('*')
       .eq('generation_status', 'completed')
-      .order('created_at', { ascending: false })
-      .limit(50)
     
     // 내 이미지만
     if (librarySource.value === 'my-images') {
@@ -838,10 +836,10 @@ const loadLibraryImages = async () => {
       //   query = query.eq('user_id', session.user.id)
       // }
       
-      // 보관함 포함 여부
+      // 보관함 포함 여부 - 단순화
       if (!includeKept.value) {
-        // 보관함 이미지 제외 (is_kept가 null이거나 false인 것만)
-        query = query.or('is_kept.is.null,is_kept.eq.false')
+        // is_kept가 true가 아닌 것만 (null 또는 false)
+        query = query.neq('is_kept', true)
       }
     }
     // 공유 이미지 (구현 예정)
@@ -850,12 +848,19 @@ const loadLibraryImages = async () => {
     // }
     
     const { data, error } = await query
+      .order('created_at', { ascending: false })
+      .limit(200) // 제한을 200개로 늘림
     
-    if (error) throw error
+    if (error) {
+      console.error('라이브러리 이미지 쿼리 에러:', error)
+      throw error
+    }
     
     libraryImages.value = data || []
+    console.log(`라이브러리 이미지 ${data?.length || 0}개 로드됨`)
   } catch (error) {
     console.error('라이브러리 이미지 로드 실패:', error)
+    libraryImages.value = []
   } finally {
     loadingLibrary.value = false
   }
