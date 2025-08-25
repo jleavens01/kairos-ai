@@ -116,7 +116,7 @@ export const handler = async (event) => {
     
     // 프로덕션 환경에서만 웹훅 사용
     if (!isDevelopment) {
-      const baseUrl = process.env.URL || process.env.DEPLOY_URL || 'https://kairos-ai.netlify.app';
+      const baseUrl = process.env.URL || process.env.DEPLOY_URL || 'https://kairos-ai-pd.netlify.app';
       submitOptions.webhookUrl = `${baseUrl}/.netlify/functions/fal-webhook-handler`;
       console.log('=== WEBHOOK CONFIGURATION ===');
       console.log('Base URL:', baseUrl);

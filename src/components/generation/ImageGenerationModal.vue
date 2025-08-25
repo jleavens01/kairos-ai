@@ -1106,11 +1106,29 @@ const loadPresets = async () => {
       return
     }
     
+    // 먼저 사용자의 모든 프로젝트 ID 가져오기
+    const { data: userProjects, error: projectsError } = await supabase
+      .from('projects')
+      .select('id')
+      .eq('user_id', user.id)
+    
+    if (projectsError) {
+      console.error('프로젝트 조회 실패:', projectsError)
+      return
+    }
+    
+    const projectIds = userProjects?.map(p => p.id) || []
+    
+    if (projectIds.length === 0) {
+      presets.value = []
+      return
+    }
+    
     // 사용자의 모든 프로젝트에서 프리셋 가져오기
     const { data, error } = await supabase
       .from('prompt_presets')
       .select('*')
-      .eq('user_id', user.id)  // 프로젝트 ID 대신 사용자 ID로 필터링
+      .in('project_id', projectIds)  // 사용자의 모든 프로젝트에서 프리셋 가져오기
       .in('media_type', ['image', 'both'])
       .eq('is_active', true)
       .order('sort_order', { ascending: true })

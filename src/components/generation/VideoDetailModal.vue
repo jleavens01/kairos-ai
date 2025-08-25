@@ -180,7 +180,25 @@
 
             <!-- 액션 버튼들 -->
             <div class="action-buttons">
-              <button @click="downloadVideo" class="icon-btn" title="비디오 다운로드">
+              <!-- 다운로드 버튼 (업스케일 버전이 있으면 드롭다운) -->
+              <div v-if="video.upscale_status === 'completed'" class="download-dropdown">
+                <button @click="toggleDownloadMenu" class="icon-btn" title="비디오 다운로드">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                </button>
+                <div v-if="showDownloadMenu" class="download-menu">
+                  <button @click="downloadVideo('original')" class="menu-item">
+                    원본 다운로드
+                  </button>
+                  <button @click="downloadVideo('upscaled')" class="menu-item">
+                    업스케일 {{ video.upscale_factor }}x 다운로드
+                  </button>
+                </div>
+              </div>
+              <button v-else @click="downloadVideo('original')" class="icon-btn" title="비디오 다운로드">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                   <polyline points="7 10 12 15 17 10"/>
@@ -247,6 +265,7 @@ const capturingFrame = ref(false)
 const frameExtractor = ref(null)
 const videoElement = ref(null)
 const showUpscaleModal = ref(false)
+const showDownloadMenu = ref(false)
 
 // Computed
 const hasChanges = computed(() => {
@@ -354,8 +373,19 @@ const openUpscaleModal = () => {
   emit('close')
 }
 
-const downloadVideo = async () => {
-  if (props.video.storage_video_url) {
+const toggleDownloadMenu = () => {
+  showDownloadMenu.value = !showDownloadMenu.value
+}
+
+const downloadVideo = async (version = 'original') => {
+  showDownloadMenu.value = false // 메뉴 닫기
+  
+  // 다운로드할 URL 선택
+  const videoUrl = version === 'upscaled' && props.video.upscale_video_url 
+    ? props.video.upscale_video_url 
+    : props.video.storage_video_url
+  
+  if (videoUrl) {
     // 프로젝트 이름 가져오기
     let projectName = 'project'
     if (props.video.project_id) {
@@ -393,13 +423,37 @@ const downloadVideo = async () => {
       sceneNumber = `_${props.video.linked_scene_number}`
     }
     
-    const link = document.createElement('a')
-    link.href = props.video.storage_video_url
-    link.download = `video_${projectName}${sceneNumber}.mp4`
-    link.target = '_blank'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    try {
+      // 타임스탬프와 버전 정보 추가
+      const timestamp = new Date().getTime()
+      const versionSuffix = version === 'upscaled' ? `_${props.video.upscale_factor}x` : ''
+      const fileName = `video_${projectName}${sceneNumber}${versionSuffix}_${timestamp}.mp4`
+      
+      // 비디오 다운로드 (CORS 문제 회피를 위해 fetch 사용)
+      const response = await fetch(videoUrl)
+      const blob = await response.blob()
+      const url = URL.createObjectURL(blob)
+      
+      const link = document.createElement('a')
+      link.href = url
+      link.download = fileName
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      
+      // 메모리 정리
+      URL.revokeObjectURL(url)
+    } catch (error) {
+      console.error('비디오 다운로드 오류:', error)
+      // CORS 오류 시 기본 다운로드 시도
+      const link = document.createElement('a')
+      link.href = props.video.storage_video_url
+      link.download = `video_${projectName}${sceneNumber}.mp4`
+      link.target = '_blank'
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    }
   }
 }
 
@@ -991,6 +1045,49 @@ watch(() => props.show, (newShow) => {
   padding-top: 24px;
   border-top: 1px solid var(--border-color);
   justify-content: flex-start;
+}
+
+/* 다운로드 드롭다운 */
+.download-dropdown {
+  position: relative;
+}
+
+.download-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  min-width: 160px;
+}
+
+.download-menu .menu-item {
+  display: block;
+  width: 100%;
+  padding: 10px 16px;
+  background: none;
+  border: none;
+  text-align: left;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.2s;
+  font-size: 14px;
+}
+
+.download-menu .menu-item:hover {
+  background: var(--bg-secondary);
+}
+
+.download-menu .menu-item:first-child {
+  border-radius: 7px 7px 0 0;
+}
+
+.download-menu .menu-item:last-child {
+  border-radius: 0 0 7px 7px;
 }
 
 .icon-btn {

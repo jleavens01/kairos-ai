@@ -95,52 +95,51 @@ export const handler = async (event) => {
       throw new Error('Original video not found');
     }
 
-    // 2. 업스케일 레코드 생성
-    const insertData = {
-      project_id: projectId,
-      video_type: 'upscaled',
-      element_name: `${originalVideo.element_name || 'Video'} - Upscaled ${upscaleFactor}x`,
-      generation_status: 'pending',
-      generation_model: 'topaz-upscale',
-      prompt_used: `Upscale ${upscaleFactor}x${targetFps ? ` @ ${targetFps}fps` : ''}`,
-      is_upscaled: true,
-      original_video_id: originalVideoId,
-      upscale_factor: upscaleFactor,
-      upscale_target_fps: targetFps,
-      upscale_settings: {
-        h264_output: h264Output,
-        original_metadata: metadata,
-        model: 'Proteus v4',
-        interpolation_model: targetFps ? 'Apollo v8' : null
-      },
-      metadata: {
-        ...metadata,
-        upscale_params: {
-          factor: upscaleFactor,
-          target_fps: targetFps,
-          h264: h264Output
-        }
-      }
+    // 2. 원본 비디오에 업스케일 정보 업데이트
+    const upscaleSettings = {
+      h264_output: h264Output,
+      model: 'Proteus v4',
+      interpolation_model: targetFps ? 'Apollo v8' : null,
+      original_metadata: metadata
     };
 
-    console.log('Attempting to insert upscale record:', insertData);
+    // 업스케일 작업 ID 생성
+    const upscaleId = `upscale_${originalVideoId}_${Date.now()}`;
 
-    const { data: upscaleRecord, error: insertError } = await supabaseAdmin
+    console.log('Updating original video with upscale settings:', {
+      upscaleId,
+      upscaleFactor,
+      targetFps,
+      upscaleSettings
+    });
+
+    // 원본 비디오 레코드에 업스케일 정보 추가
+    const { data: updatedVideo, error: updateError } = await supabaseAdmin
       .from('gen_videos')
-      .insert(insertData)
+      .update({
+        upscale_id: upscaleId,
+        upscale_factor: upscaleFactor, // 숫자로 저장 (데이터베이스가 double precision 타입)
+        upscale_target_fps: targetFps,
+        upscale_settings: upscaleSettings,
+        upscale_status: 'processing',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', originalVideoId)
       .select()
       .single();
 
-    if (insertError) {
-      console.error('Database insert error details:', {
-        error: insertError,
-        message: insertError.message,
-        details: insertError.details,
-        hint: insertError.hint,
-        code: insertError.code
+    if (updateError) {
+      console.error('Database update error details:', {
+        error: updateError,
+        message: updateError.message,
+        details: updateError.details,
+        hint: updateError.hint,
+        code: updateError.code
       });
-      throw new Error(`Failed to create upscale record: ${insertError.message || 'Unknown database error'}`);
+      throw new Error(`Failed to update video record: ${updateError.message || 'Unknown database error'}`);
     }
+
+    const upscaleRecord = updatedVideo  // 원본 비디오 레코드 그대로 사용
 
     // 3. FAL AI 업스케일 요청
     const falParams = {
@@ -164,7 +163,7 @@ export const handler = async (event) => {
     
     if (!isDevelopment) {
       // 프로덕션: 웹훅 사용
-      const baseUrl = process.env.URL || process.env.DEPLOY_URL || 'https://kairos-ai.netlify.app';
+      const baseUrl = process.env.URL || process.env.DEPLOY_URL || 'https://kairos-ai-pd.netlify.app';
       const { request_id } = await fal.queue.submit('fal-ai/topaz/upscale/video', {
         input: falParams,
         webhookUrl: `${baseUrl}/.netlify/functions/fal-webhook-handler`
@@ -181,7 +180,7 @@ export const handler = async (event) => {
     }
 
     // 4. request_id 업데이트
-    const { error: updateError } = await supabaseAdmin
+    const { error: requestUpdateError } = await supabaseAdmin
       .from('gen_videos')
       .update({
         request_id: requestId,
@@ -192,10 +191,10 @@ export const handler = async (event) => {
           submitted_at: new Date().toISOString()
         }
       })
-      .eq('id', upscaleRecord.id);
+      .eq('id', originalVideoId);
 
-    if (updateError) {
-      console.error('Failed to update request_id:', updateError);
+    if (requestUpdateError) {
+      console.error('Failed to update request_id:', requestUpdateError);
     }
 
     // 5. 개발 환경에서 폴링 시작 (선택적)

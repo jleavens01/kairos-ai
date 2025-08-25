@@ -92,6 +92,12 @@
               </div>
             </div>
 
+            <!-- 업스케일 표시 -->
+            <div v-if="video.upscale_status === 'completed'" class="upscale-badge">
+              <span class="upscale-icon">⬆</span>
+              {{ video.upscale_factor }}x
+            </div>
+            
             <!-- 오버레이 정보 -->
             <div class="video-overlay-info">
               <div class="info-top">
@@ -154,15 +160,51 @@
         </div>
       </div>
       
-      <!-- 무한 스크롤 로딩 인디케이터 -->
-      <div v-if="loading && videos.length > 0" class="infinite-scroll-loader">
-        <div class="spinner"></div>
-        <p>추가 비디오를 불러오는 중...</p>
-      </div>
-      
-      <!-- 더 이상 로드할 비디오가 없을 때 -->
-      <div v-if="!hasMore && videos.length > 0" class="no-more-items">
-        <p>모든 비디오를 불러왔습니다</p>
+      <!-- 페이지네이션 컨트롤 -->
+      <div v-if="totalPages > 1" class="pagination-controls">
+        <button 
+          @click="firstPage"
+          :disabled="currentPage === 1"
+          class="page-btn"
+        >
+          <ChevronFirst :size="16" />
+        </button>
+        <button 
+          @click="previousPage"
+          :disabled="currentPage === 1"
+          class="page-btn"
+        >
+          <ChevronLeft :size="16" />
+        </button>
+        
+        <button
+          v-for="page in pageButtons"
+          :key="page"
+          @click="goToPage(page)"
+          :class="['page-btn', { active: page === currentPage }]"
+        >
+          {{ page }}
+        </button>
+        
+        <button 
+          @click="nextPage"
+          :disabled="currentPage === totalPages"
+          class="page-btn"
+        >
+          <ChevronRight :size="16" />
+        </button>
+        <button 
+          @click="lastPage"
+          :disabled="currentPage === totalPages"
+          class="page-btn"
+        >
+          <ChevronLast :size="16" />
+        </button>
+        
+        <div class="page-info">
+          <span>{{ currentPage }} / {{ totalPages }} 페이지</span>
+          <span class="total-count">(총 {{ totalCount }}개)</span>
+        </div>
       </div>
     </div>
 
@@ -216,11 +258,10 @@ import { useProductionStore } from '@/stores/production'
 import VideoGenerationModal from './VideoGenerationModal.vue'
 import VideoDetailModal from './VideoDetailModal.vue'
 import VideoUpscaleModal from './VideoUpscaleModal.vue'
-import { Plus, Link, Download, Trash2, Loader, Clock, AlertCircle, Video, Star, Archive } from 'lucide-vue-next'
+import { Plus, Link, Download, Trash2, Loader, Clock, AlertCircle, Video, Star, Archive, ChevronLeft, ChevronRight, ChevronFirst, ChevronLast } from 'lucide-vue-next'
 import SceneConnectionModal from './SceneConnectionModal.vue'
 import ColumnControl from '@/components/common/ColumnControl.vue'
 import LazyImage from '@/components/common/LazyImage.vue'
-import { usePagination } from '@/composables/usePagination'
 
 const props = defineProps({
   projectId: {
@@ -234,7 +275,10 @@ const productionStore = useProductionStore()
 
 // State
 const videos = ref([])
-const pageSize = ref(20) // 비디오는 이미지보다 적게
+const loading = ref(false)
+const currentPage = ref(1)
+const pageSize = ref(10) // 페이지당 10개
+const totalCount = ref(0)
 const filterModel = ref('')
 const showKeptOnly = ref(false)
 const showGenerationModal = ref(false)
@@ -246,7 +290,6 @@ const videoToView = ref(null)
 const videoToConnect = ref(null)
 const videoToUpscale = ref(null)
 const selectedVideo = ref(null) // 모바일에서 선택된 비디오 추적
-// const realtimeChannel = ref(null) - Realtime 제거
 const videoRefs = ref({})
 let pollingInterval = null
 
@@ -288,125 +331,71 @@ const updateColumnCount = (count) => {
   }
 }
 
-// 무한 스크롤 핸들러
-const handleScroll = (event) => {
-  let scrollElement = event?.target || document.documentElement
-  
-  // 데스크톱에서는 video-generation-gallery 자체가 스크롤 컨테이너
-  if (!isMobile.value) {
-    // 이벤트 타겟이 있으면 그것을 사용
-    if (event?.target) {
-      scrollElement = event.target
-    } else {
-      // 없으면 video-generation-gallery를 찾음
-      const gallery = document.querySelector('.video-generation-gallery')
-      if (gallery) {
-        scrollElement = gallery
-      }
-    }
-  }
-  
-  const scrollBottom = scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight
-  
-  console.log('Video scroll check:', {
-    scrollBottom,
-    hasMore: hasMore.value,
-    loading: loading.value,
-    videosCount: videos.value.length,
-    scrollHeight: scrollElement.scrollHeight,
-    scrollTop: scrollElement.scrollTop,
-    clientHeight: scrollElement.clientHeight,
-    element: scrollElement.className || 'document'
-  })
-  
-  // 하단에서 200px 이내에 도달하면 다음 페이지 로드
-  if (scrollBottom < 200 && hasMore.value && !loading.value) {
-    console.log('Triggering loadMore() for videos...')
-    loadMore()
+// 페이지 총 개수 계산
+const totalPages = computed(() => {
+  return Math.ceil(totalCount.value / pageSize.value)
+})
+
+// 페이지 이동
+const goToPage = async (page) => {
+  if (page < 1 || page > totalPages.value || loading.value) return
+  currentPage.value = page
+  await fetchVideos()
+}
+
+// 이전 페이지
+const previousPage = () => {
+  if (currentPage.value > 1) {
+    goToPage(currentPage.value - 1)
   }
 }
 
-// 스크롤 이벤트 리스너 설정
-const setupScrollListener = () => {
-  // 기존 리스너 제거
-  window.removeEventListener('scroll', handleScroll)
-  document.removeEventListener('scroll', handleScroll)
+// 다음 페이지
+const nextPage = () => {
+  if (currentPage.value < totalPages.value) {
+    goToPage(currentPage.value + 1)
+  }
+}
+
+// 첫 페이지
+const firstPage = () => {
+  goToPage(1)
+}
+
+// 마지막 페이지
+const lastPage = () => {
+  goToPage(totalPages.value)
+}
+
+// 페이지 버튼 생성 (현재 페이지 주변 5개)
+const pageButtons = computed(() => {
+  const buttons = []
+  const maxButtons = 5
+  const halfButtons = Math.floor(maxButtons / 2)
   
-  // 기존 갤러리 리스너 제거
-  const oldGallery = document.querySelector('.video-generation-gallery')
-  if (oldGallery) {
-    oldGallery.removeEventListener('scroll', handleScroll)
+  let startPage = Math.max(1, currentPage.value - halfButtons)
+  let endPage = Math.min(totalPages.value, startPage + maxButtons - 1)
+  
+  if (endPage - startPage < maxButtons - 1) {
+    startPage = Math.max(1, endPage - maxButtons + 1)
   }
   
-  // Vue.nextTick을 사용하여 DOM 업데이트 후 실행
-  nextTick(() => {
-    // 데스크톱에서는 video-generation-gallery에 리스너 추가
-    if (!isMobile.value) {
-      const gallery = document.querySelector('.video-generation-gallery')
-      if (gallery) {
-        console.log('Desktop: Setting up scroll listener on .video-generation-gallery', {
-          scrollHeight: gallery.scrollHeight,
-          clientHeight: gallery.clientHeight,
-          scrollTop: gallery.scrollTop,
-          hasScrollbar: gallery.scrollHeight > gallery.clientHeight
-        })
-        gallery.addEventListener('scroll', handleScroll, { passive: true })
-        // 초기 스크롤 체크
-        setTimeout(() => {
-          console.log('Initial scroll check for desktop videos')
-          handleScroll({ target: gallery })
-        }, 100)
-        return
-      } else {
-        console.log('Desktop: .video-generation-gallery not found!')
-      }
-    }
-    
-    // 모바일에서는 window에 리스너 추가
-    console.log('Mobile: Setting up scroll listener on window for videos')
-    window.addEventListener('scroll', handleScroll, { passive: true })
-    // 초기 스크롤 체크
-    setTimeout(() => {
-      console.log('Initial scroll check for mobile videos')
-      handleScroll()
-    }, 100)
-  })
-}
+  for (let i = startPage; i <= endPage; i++) {
+    buttons.push(i)
+  }
+  
+  return buttons
+})
+
+// 삭제된 무한 스크롤 핸들러
+// const handleScroll = (event) => {
+// }
 
 // 리사이즈 이벤트 리스너 추가
 window.addEventListener('resize', handleResize)
 
-onMounted(async () => {
-  // 초기 데이터 로드
-  await fetchVideos()
-  console.log('Initial videos loaded:', videos.value.length, 'Has more:', hasMore.value)
-  
-  // 스크롤 리스너 설정
-  await nextTick()
-  setupScrollListener()
-  
-  // Tab 변경 감지를 위한 MutationObserver 설정
-  const observer = new MutationObserver(() => {
-    console.log('DOM changed, re-setting up scroll listener for videos')
-    setupScrollListener()
-  })
-  
-  // tab-content의 부모 요소 감시
-  const tabsContainer = document.querySelector('.tabs-container')
-  if (tabsContainer) {
-    observer.observe(tabsContainer, { childList: true, subtree: true })
-  }
-})
-
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
-  window.removeEventListener('scroll', handleScroll)
-  
-  // 갤러리 리스너도 제거
-  const gallery = document.querySelector('.video-generation-gallery')
-  if (gallery) {
-    gallery.removeEventListener('scroll', handleScroll)
-  }
 })
 
 // Computed
@@ -435,51 +424,45 @@ const filteredVideos = computed(() => {
 })
 
 // Methods
-// 페이지네이션을 위한 함수
-const fetchVideosWithPagination = async ({ page, pageSize: size }) => {
-  const from = (page - 1) * size
-  const to = from + size - 1
+// 비디오 가져오기
+const fetchVideos = async () => {
+  loading.value = true
+  const from = (currentPage.value - 1) * pageSize.value
+  const to = from + pageSize.value - 1
   
   try {
-    const { data, error, count } = await supabase
+    let query = supabase
       .from('gen_videos')
       .select('*', { count: 'exact' })
       .eq('project_id', props.projectId)
+    
+    // 보관함 필터링
+    if (showKeptOnly.value) {
+      query = query.eq('is_kept', true)
+    } else {
+      query = query.or('is_kept.is.null,is_kept.eq.false')
+    }
+    
+    // 모델 필터링
+    if (filterModel.value && filterModel.value !== 'all') {
+      query = query.eq('generation_model', filterModel.value)
+    }
+    
+    const { data, error, count } = await query
       .order('created_at', { ascending: false })
       .range(from, to)
     
     if (error) throw error
     
-    return {
-      data: data || [],
-      count: count || 0,
-      hasMore: (to + 1) < count
-    }
+    videos.value = data || []
+    totalCount.value = count || 0
   } catch (error) {
     console.error('Error fetching videos:', error)
-    return { data: [], count: 0, hasMore: false }
+    videos.value = []
+    totalCount.value = 0
+  } finally {
+    loading.value = false
   }
-}
-
-// 페이지네이션 composable 사용
-const {
-  items: paginatedVideos,
-  loading,
-  hasMore,
-  loadMore,
-  refresh: refreshVideos
-} = usePagination(fetchVideosWithPagination, { pageSize: pageSize.value })
-
-// paginatedVideos를 videos와 동기화
-watch(paginatedVideos, (newVideos) => {
-  // usePagination이 이미 누적하므로 그대로 사용
-  videos.value = newVideos
-}, { deep: true })
-
-// 기존 fetchVideos 함수를 페이지네이션 refresh로 대체
-const fetchVideos = async () => {
-  videos.value = [] // 초기 로드 시 비우기
-  await refreshVideos()
 }
 
 const openGenerationModal = () => {
@@ -922,7 +905,6 @@ const handleMediaUpdate = (event) => {
 // Lifecycle
 onMounted(async () => {
   await fetchVideos()
-  // setupRealtimeSubscription() - Realtime 제거, 폴링 사용
   
   // 개발 환경에서는 폴링 사용
   if (import.meta.env.MODE === 'development') {
@@ -970,12 +952,16 @@ watch(() => props.projectId, async (newId, oldId) => {
 })
 
 // Method to set filter model from parent
-const setFilterModel = (model) => {
+const setFilterModel = async (model) => {
   filterModel.value = model
+  currentPage.value = 1 // 필터 변경 시 첫 페이지로
+  await fetchVideos()
 }
 
-const toggleKeptView = (showKept) => {
+const toggleKeptView = async (showKept) => {
   showKeptOnly.value = showKept
+  currentPage.value = 1 // 필터 변경 시 첫 페이지로
+  await fetchVideos()
 }
 
 // Expose method for parent component
@@ -984,7 +970,7 @@ defineExpose({
   setFilterModel,
   filterModel,
   toggleKeptView,
-  refreshScrollListener: setupScrollListener
+  refresh: fetchVideos
 })
 </script>
 
@@ -1094,6 +1080,28 @@ defineExpose({
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
   transform: scale(1.02);
   z-index: 10;
+}
+
+/* 업스케일 배지 */
+.upscale-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  z-index: 2;
+}
+
+.upscale-icon {
+  font-size: 0.85rem;
 }
 
 /* 모바일 선택 상태 */
@@ -1347,6 +1355,88 @@ defineExpose({
 .hint {
   font-size: 0.9rem;
   color: var(--text-tertiary);
+}
+
+/* 페이지네이션 스타일 */
+.pagination-controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  padding: 20px;
+  margin-top: 40px;
+  border-top: 1px solid var(--border-color);
+  flex-wrap: wrap;
+}
+
+.page-btn {
+  min-width: 36px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+}
+
+.page-btn:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.page-btn.active {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+  font-weight: 600;
+}
+
+.page-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.page-info {
+  margin-left: 16px;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.total-count {
+  font-size: 0.85rem;
+  color: var(--text-tertiary);
+}
+
+@media (max-width: 768px) {
+  .pagination-controls {
+    padding: 15px 10px;
+    gap: 4px;
+  }
+  
+  .page-btn {
+    min-width: 32px;
+    height: 32px;
+    padding: 0 8px;
+    font-size: 0.85rem;
+  }
+  
+  .page-info {
+    margin-left: 8px;
+    font-size: 0.85rem;
+    flex-direction: column;
+    gap: 2px;
+    align-items: flex-start;
+  }
 }
 
 /* 실패한 비디오 스타일 */

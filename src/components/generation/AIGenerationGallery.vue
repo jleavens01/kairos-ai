@@ -158,6 +158,13 @@
                     <Tag :size="16" />
                   </button>
                   <button 
+                    @click.stop="downloadImage(item)"
+                    class="btn-download"
+                    title="다운로드"
+                  >
+                    <Download :size="16" />
+                  </button>
+                  <button 
                     @click.stop="deleteImage(item)"
                     class="btn-delete"
                     title="삭제"
@@ -189,15 +196,56 @@
         </div>
       </div>
       
-      <!-- 무한 스크롤 로딩 인디케이터 -->
-      <div v-if="loading && images.length > 0" class="infinite-scroll-loader">
-        <div class="spinner"></div>
-        <p>추가 이미지를 불러오는 중...</p>
-      </div>
-      
-      <!-- 더 이상 로드할 이미지가 없을 때 -->
-      <div v-if="!hasMore && images.length > 0" class="no-more-items">
-        <p>모든 이미지를 불러왔습니다</p>
+      <!-- 페이지네이션 컨트롤 -->
+      <div v-if="totalPages > 1" class="pagination-controls">
+        <button 
+          @click="changePage(1)"
+          :disabled="currentPage === 1"
+          class="page-btn"
+          title="처음 페이지"
+        >
+          «
+        </button>
+        <button 
+          @click="changePage(currentPage - 1)"
+          :disabled="currentPage === 1"
+          class="page-btn"
+          title="이전 페이지"
+        >
+          ‹
+        </button>
+        
+        <div class="page-numbers">
+          <button
+            v-for="page in visiblePages"
+            :key="page"
+            @click="changePage(page)"
+            :class="['page-btn', { active: page === currentPage }]"
+          >
+            {{ page }}
+          </button>
+        </div>
+        
+        <button 
+          @click="changePage(currentPage + 1)"
+          :disabled="currentPage === totalPages"
+          class="page-btn"
+          title="다음 페이지"
+        >
+          ›
+        </button>
+        <button 
+          @click="changePage(totalPages)"
+          :disabled="currentPage === totalPages"
+          class="page-btn"
+          title="마지막 페이지"
+        >
+          »
+        </button>
+        
+        <div class="page-info">
+          {{ currentPage }} / {{ totalPages }} 페이지 (총 {{ totalCount }}개)
+        </div>
       </div>
     </div>
 
@@ -267,6 +315,7 @@
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { supabase } from '@/utils/supabase'
 import { useProductionStore } from '@/stores/production'
+import { useProjectsStore } from '@/stores/projects'
 import ImageGenerationModal from './ImageGenerationModal.vue'
 import VideoGenerationModal from './VideoGenerationModal.vue'
 import SceneConnectionModal from './SceneConnectionModal.vue'
@@ -285,6 +334,7 @@ const props = defineProps({
 })
 
 const productionStore = useProductionStore()
+const projectsStore = useProjectsStore()
 
 // State
 const images = ref([])
@@ -300,7 +350,12 @@ const categoryFilters = [
   { value: 'object', label: '오브젝트' }
 ]
 const showKeptOnly = ref(false) // 보관함 보기 상태
-const pageSize = ref(30) // 페이지당 아이템 수
+
+// 페이지네이션 상태
+const currentPage = ref(1)
+const pageSize = ref(10) // 페이지당 10개로 변경
+const totalCount = ref(0)
+const totalPages = computed(() => Math.ceil(totalCount.value / pageSize.value))
 const showGenerationModal = ref(false)
 const showSceneModal = ref(false)
 const showTagModal = ref(false)
@@ -444,6 +499,26 @@ const setupScrollListener = () => {
 }
 
 // Computed
+// 페이지네이션에서 보여줄 페이지 번호들
+const visiblePages = computed(() => {
+  const pages = []
+  const maxVisible = 5 // 최대 5개 페이지 번호 표시
+  
+  let start = Math.max(1, currentPage.value - Math.floor(maxVisible / 2))
+  let end = Math.min(totalPages.value, start + maxVisible - 1)
+  
+  // 끝에서 시작 조정
+  if (end - start < maxVisible - 1) {
+    start = Math.max(1, end - maxVisible + 1)
+  }
+  
+  for (let i = start; i <= end; i++) {
+    pages.push(i)
+  }
+  
+  return pages
+})
+
 // 스토리보드에서 추출한 유니크한 캐릭터 목록
 const characters = computed(() => {
   const allCharacters = new Set()
@@ -636,22 +711,57 @@ watch(paginatedImages, (newImages) => {
   images.value = newImages
 }, { deep: true })
 
-// 기존 fetchImages 함수를 페이지네이션 refresh로 대체
+// 페이지별 이미지 로드
 const fetchImages = async () => {
-  images.value = [] // 초기 로드 시 비우기
+  loading.value = true
   
-  // 모든 이미지 로드 (캐릭터 포함)
-  await refreshImages()
+  try {
+    const from = (currentPage.value - 1) * pageSize.value
+    const to = from + pageSize.value - 1
+    
+    // 모든 이미지 가져오기 (캐릭터 포함)
+    const { data, error, count } = await supabase
+      .from('gen_images')
+      .select('*', { count: 'exact' })
+      .eq('project_id', props.projectId)
+      .order('created_at', { ascending: false })
+      .range(from, to)
+    
+    if (error) throw error
+    
+    images.value = data || []
+    totalCount.value = count || 0
+    
+    // 프로덕션 시트에서 캐릭터 확인
+    console.log('Production sheets:', productionStore.productionSheets.length)
+    const allCharacters = new Set()
+    productionStore.productionSheets.forEach(sheet => {
+      if (sheet.characters && Array.isArray(sheet.characters)) {
+        sheet.characters.forEach(char => allCharacters.add(char))
+      }
+    })
+    console.log('Characters from production sheets:', Array.from(allCharacters))
+  } catch (error) {
+    console.error('Error fetching images:', error)
+    images.value = []
+    totalCount.value = 0
+  } finally {
+    loading.value = false
+  }
+}
+
+// 페이지 변경 핸들러
+const changePage = (page) => {
+  currentPage.value = page
+  fetchImages()
   
-  // 프로덕션 시트에서 캐릭터 확인
-  console.log('Production sheets:', productionStore.productionSheets.length)
-  const allCharacters = new Set()
-  productionStore.productionSheets.forEach(sheet => {
-    if (sheet.characters && Array.isArray(sheet.characters)) {
-      sheet.characters.forEach(char => allCharacters.add(char))
-    }
-  })
-  console.log('Characters from production sheets:', Array.from(allCharacters))
+  // 스크롤을 맨 위로
+  const gallery = document.querySelector('.ai-generation-gallery')
+  if (gallery) {
+    gallery.scrollTop = 0
+  } else {
+    window.scrollTo(0, 0)
+  }
 }
 
 const handleCharacterClick = (character) => {
@@ -843,6 +953,85 @@ const toggleKeep = async (image) => {
     await fetchImages()
   } catch (error) {
     console.error('보관함 토글 실패:', error)
+  }
+}
+
+const downloadImage = async (image) => {
+  try {
+    // 프로젝트 이름 가져오기
+    const projectName = projectsStore.currentProject?.name || 'untitled'
+    
+    // 씬 번호 가져오기 (연결된 씬이 있는 경우)
+    let sceneNumber = ''
+    if (image.production_sheet_id || image.linked_scene_id) {
+      const sheetId = image.production_sheet_id || image.linked_scene_id
+      try {
+        const { data } = await supabase
+          .from('production_sheets')
+          .select('scene_number')
+          .eq('id', sheetId)
+          .single()
+        if (data && data.scene_number) {
+          sceneNumber = `_${data.scene_number}`
+        }
+      } catch (error) {
+        console.error('씬 번호 가져오기 실패:', error)
+      }
+    } else if (image.linked_scene_number) {
+      sceneNumber = `_${image.linked_scene_number}`
+    }
+    
+    // 카테고리 정보 추가
+    let category = ''
+    if (image.is_character || image.image_type === 'character') {
+      category = '_character'
+    } else if (image.is_background || image.image_type === 'background') {
+      category = '_background'
+    } else if (image.is_object || image.image_type === 'object') {
+      category = '_object'
+    } else if (sceneNumber) {
+      category = '_scene'
+    }
+    
+    // 캐릭터 이름 추가 (있는 경우)
+    let characterName = ''
+    if (image.element_name) {
+      characterName = `_${image.element_name.replace(/[^a-zA-Z0-9가-힣]/g, '_')}`
+    }
+    
+    // 파일명 생성 (특수문자 제거)
+    const sanitizedProjectName = projectName.replace(/[^a-zA-Z0-9가-힣]/g, '_')
+    const timestamp = new Date().getTime()
+    const fileName = `image_${sanitizedProjectName}${category}${characterName}${sceneNumber}_${timestamp}.png`
+    
+    // 이미지 URL 선택 (우선순위: storage_image_url > result_image_url > image_url)
+    const imageUrl = image.storage_image_url || image.result_image_url || image.image_url
+    
+    // 이미지 다운로드 (CORS 문제 회피를 위해 fetch 사용)
+    const response = await fetch(imageUrl)
+    const blob = await response.blob()
+    const url = URL.createObjectURL(blob)
+    
+    const link = document.createElement('a')
+    link.href = url
+    link.download = fileName
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    
+    // 메모리 정리
+    URL.revokeObjectURL(url)
+  } catch (error) {
+    console.error('이미지 다운로드 오류:', error)
+    // CORS 오류 시 기본 다운로드 시도
+    const imageUrl = image.storage_image_url || image.result_image_url || image.image_url
+    const link = document.createElement('a')
+    link.href = imageUrl
+    link.download = `image_${new Date().getTime()}.png`
+    link.target = '_blank'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   }
 }
 
@@ -1806,9 +1995,31 @@ defineExpose({
 .btn-keep:hover,
 .btn-connect:hover,
 .btn-tags:hover,
+.btn-download:hover,
 .btn-delete:hover {
   background: rgba(255, 255, 255, 0.3);
   transform: scale(1.1);
+}
+
+.btn-download {
+  background: rgba(34, 197, 94, 0.2);
+  backdrop-filter: blur(10px);
+  color: #22c55e;
+  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.btn-download:hover {
+  background: rgba(34, 197, 94, 0.4);
+  color: white;
 }
 
 .btn-delete {
@@ -1851,25 +2062,83 @@ defineExpose({
 
 /* 로딩 & 빈 상태 */
 .loading-state,
-.empty-state,
-.infinite-scroll-loader,
-.no-more-items {
+.empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 60px 20px;
   text-align: center;
-}
-
-.infinite-scroll-loader {
-  padding: 40px 20px;
-}
-
-.no-more-items {
-  padding: 30px 20px;
   color: var(--text-secondary);
   font-size: 0.9rem;
+}
+
+/* 페이지네이션 컨트롤 */
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  flex-wrap: wrap;
+}
+
+.page-numbers {
+  display: flex;
+  gap: 4px;
+}
+
+.page-btn {
+  min-width: 36px;
+  height: 36px;
+  padding: 0 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.page-btn:hover:not(:disabled) {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.page-btn.active {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.page-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.page-info {
+  margin-left: 16px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+@media (max-width: 768px) {
+  .pagination-controls {
+    padding: 16px;
+  }
+  
+  .page-info {
+    width: 100%;
+    text-align: center;
+    margin-left: 0;
+    margin-top: 8px;
+  }
 }
 
 .spinner {

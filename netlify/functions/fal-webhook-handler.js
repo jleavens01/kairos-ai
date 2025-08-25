@@ -78,14 +78,45 @@ export const handler = async (event) => {
 
         console.log(`Updating gen_videos for request_id: ${request_id}`);
         
-        const { data: updateData, error: dbError } = await supabase
+        // 먼저 request_id로 비디오를 찾아서 업스케일인지 확인
+        const { data: existingVideo, error: fetchError } = await supabase
           .from('gen_videos')
-          .update({
+          .select('*')
+          .eq('request_id', request_id)
+          .single();
+
+        if (fetchError || !existingVideo) {
+          console.error(`No video found with request_id: ${request_id}`);
+          throw new Error(`No video record found with request_id: ${request_id}`);
+        }
+
+        // 업스케일 작업인지 일반 비디오 생성인지 확인
+        const isUpscale = existingVideo.upscale_status === 'processing' || existingVideo.upscale_id;
+        
+        let updatePayload;
+        if (isUpscale) {
+          // 업스케일 완료 처리
+          console.log(`Processing upscale completion for video ${existingVideo.id}`);
+          updatePayload = {
+            upscale_status: 'completed',
+            upscale_video_url: videoUrl,
+            upscaled_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+        } else {
+          // 일반 비디오 생성 완료 처리
+          console.log(`Processing video generation completion for ${request_id}`);
+          updatePayload = {
             generation_status: 'completed',
             result_video_url: videoUrl,
             storage_video_url: videoUrl,
             updated_at: new Date().toISOString()
-          })
+          };
+        }
+
+        const { data: updateData, error: dbError } = await supabase
+          .from('gen_videos')
+          .update(updatePayload)
           .eq('request_id', request_id)
           .select();
 
@@ -94,12 +125,7 @@ export const handler = async (event) => {
           throw dbError;
         }
 
-        if (!updateData || updateData.length === 0) {
-          console.error(`No records found with request_id: ${request_id}`);
-          throw new Error(`No video record found with request_id: ${request_id}`);
-        }
-
-        console.log(`Video ${request_id} marked as completed:`, updateData);
+        console.log(`Video ${request_id} marked as completed (${isUpscale ? 'upscale' : 'generation'}):`, updateData);
       } else {
         // 이미지 처리
         const imageUrl = output?.images?.[0]?.url || output?.image_url || output?.url;
@@ -132,27 +158,78 @@ export const handler = async (event) => {
 
       console.log(`Marking ${table} ${request_id} as failed with error:`, errorMessage);
 
-      const { error: dbError } = await supabase
-        .from(table)
-        .update({
-          generation_status: 'failed',
-          error_message: errorMessage,
-          metadata: {
-            ...(isVideo ? {} : {}), // 기존 메타데이터 유지를 위한 처리 필요시 추가
-            error: errorMessage,
-            failed_at: new Date().toISOString(),
-            webhook_data: webhookData
-          },
-          updated_at: new Date().toISOString()
-        })
-        .eq('request_id', request_id);
+      if (isVideo) {
+        // 비디오의 경우 업스케일인지 확인
+        const { data: existingVideo, error: fetchError } = await supabase
+          .from('gen_videos')
+          .select('*')
+          .eq('request_id', request_id)
+          .single();
 
-      if (dbError) {
-        console.error(`DB update error (${table} failed):`, dbError);
-        throw dbError;
+        const isUpscale = existingVideo?.upscale_status === 'processing' || existingVideo?.upscale_id;
+        
+        let updatePayload;
+        if (isUpscale) {
+          // 업스케일 실패 처리
+          updatePayload = {
+            upscale_status: 'failed',
+            metadata: {
+              ...existingVideo?.metadata,
+              upscale_error: errorMessage,
+              upscale_failed_at: new Date().toISOString(),
+              webhook_data: webhookData
+            },
+            updated_at: new Date().toISOString()
+          };
+        } else {
+          // 일반 비디오 생성 실패 처리
+          updatePayload = {
+            generation_status: 'failed',
+            error_message: errorMessage,
+            metadata: {
+              ...existingVideo?.metadata,
+              error: errorMessage,
+              failed_at: new Date().toISOString(),
+              webhook_data: webhookData
+            },
+            updated_at: new Date().toISOString()
+          };
+        }
+
+        const { error: dbError } = await supabase
+          .from('gen_videos')
+          .update(updatePayload)
+          .eq('request_id', request_id);
+
+        if (dbError) {
+          console.error('DB update error (video failed):', dbError);
+          throw dbError;
+        }
+
+        console.log(`Video ${request_id} marked as failed (${isUpscale ? 'upscale' : 'generation'}):`, errorMessage);
+      } else {
+        // 이미지 실패 처리
+        const { error: dbError } = await supabase
+          .from(table)
+          .update({
+            generation_status: 'failed',
+            error_message: errorMessage,
+            metadata: {
+              error: errorMessage,
+              failed_at: new Date().toISOString(),
+              webhook_data: webhookData
+            },
+            updated_at: new Date().toISOString()
+          })
+          .eq('request_id', request_id);
+
+        if (dbError) {
+          console.error(`DB update error (${table} failed):`, dbError);
+          throw dbError;
+        }
+
+        console.log(`Image ${request_id} marked as failed:`, errorMessage);
       }
-
-      console.log(`${isVideo ? 'Video' : 'Image'} ${request_id} marked as failed:`, errorMessage);
     } else if (status === 'IN_PROGRESS' || status === 'in_progress' || status === 'processing') {
       // 진행 중 상태 업데이트 (선택사항)
       console.log(`${isVideo ? 'Video' : 'Image'} ${request_id} is still processing`);

@@ -77,6 +77,9 @@
                     <span class="badge badge-media">
                       {{ getMediaLabel(preset.media_type) }}
                     </span>
+                    <span v-if="preset.projects?.name && preset.project_id !== projectId" class="badge badge-project">
+                      {{ preset.projects.name }}
+                    </span>
                   </div>
                 </div>
                 <p class="preset-prompt">{{ preset.prompt }}</p>
@@ -194,10 +197,36 @@ const close = () => {
 
 const loadPresets = async () => {
   try {
+    // 현재 사용자 가져오기
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      console.error('User not found')
+      return
+    }
+    
+    // 먼저 사용자의 모든 프로젝트 ID 가져오기
+    const { data: userProjects, error: projectsError } = await supabase
+      .from('projects')
+      .select('id')
+      .eq('user_id', user.id)
+    
+    if (projectsError) {
+      console.error('프로젝트 조회 실패:', projectsError)
+      return
+    }
+    
+    const projectIds = userProjects?.map(p => p.id) || []
+    
+    if (projectIds.length === 0) {
+      presets.value = []
+      return
+    }
+    
+    // 사용자의 모든 프로젝트에서 프리셋 가져오기 (프로젝트 정보 포함)
     let query = supabase
       .from('prompt_presets')
-      .select('*')
-      .eq('project_id', props.projectId)
+      .select('*, projects(name)')
+      .in('project_id', projectIds)  // 사용자의 모든 프로젝트에서 프리셋 가져오기
       .eq('is_active', true)
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: false })
@@ -574,6 +603,12 @@ onMounted(() => {
 .badge-media {
   background: var(--bg-tertiary);
   color: var(--text-secondary);
+}
+
+.badge-project {
+  background: rgba(74, 222, 128, 0.2);
+  color: var(--primary-color);
+  border: 1px solid var(--primary-color);
 }
 
 .preset-prompt {

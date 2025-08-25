@@ -216,49 +216,98 @@ const toggleFavorite = async () => {
 }
 
 const downloadImage = async () => {
-  const imageUrl = props.image.storage_image_url || props.image.result_image_url || props.image.thumbnail_url
+  const imageUrl = props.image.storage_image_url || props.image.result_image_url || props.image.thumbnail_url || props.image.image_url
   
-  // 프로젝트 이름 가져오기
-  let projectName = 'project'
-  if (props.image.project_id) {
-    try {
-      const { data } = await supabase
-        .from('projects')
-        .select('name')
-        .eq('id', props.image.project_id)
-        .single()
-      if (data && data.name) {
-        projectName = data.name.replace(/[^a-zA-Z0-9가-힣]/g, '_')
-      }
-    } catch (error) {
-      console.error('프로젝트 이름 가져오기 실패:', error)
-    }
+  if (!imageUrl) {
+    alert('다운로드할 수 없는 이미지입니다.')
+    return
   }
   
-  // 씬 번호 가져오기  
-  let sceneNumber = ''
-  if (props.image.production_sheet_id) {
-    try {
-      const { data } = await supabase
-        .from('production_sheets')
-        .select('scene_number')
-        .eq('id', props.image.production_sheet_id)
-        .single()
-      if (data && data.scene_number) {
-        sceneNumber = `_${data.scene_number}`
+  try {
+    // 프로젝트 이름 가져오기
+    let projectName = 'project'
+    if (props.image.project_id) {
+      try {
+        const { data } = await supabase
+          .from('projects')
+          .select('name')
+          .eq('id', props.image.project_id)
+          .single()
+        if (data && data.name) {
+          projectName = data.name.replace(/[^a-zA-Z0-9가-힣]/g, '_')
+        }
+      } catch (error) {
+        console.error('프로젝트 이름 가져오기 실패:', error)
       }
-    } catch (error) {
-      console.error('씬 번호 가져오기 실패:', error)
     }
+    
+    // 씬 번호 가져오기  
+    let sceneNumber = ''
+    if (props.image.production_sheet_id || props.image.linked_scene_id) {
+      const sheetId = props.image.production_sheet_id || props.image.linked_scene_id
+      try {
+        const { data } = await supabase
+          .from('production_sheets')
+          .select('scene_number')
+          .eq('id', sheetId)
+          .single()
+        if (data && data.scene_number) {
+          sceneNumber = `_${data.scene_number}`
+        }
+      } catch (error) {
+        console.error('씬 번호 가져오기 실패:', error)
+      }
+    } else if (props.image.linked_scene_number) {
+      sceneNumber = `_${props.image.linked_scene_number}`
+    }
+    
+    // 카테고리 정보 추가
+    let category = ''
+    if (props.image.is_character || props.image.image_type === 'character') {
+      category = '_character'
+    } else if (props.image.is_background || props.image.image_type === 'background') {
+      category = '_background'
+    } else if (props.image.is_object || props.image.image_type === 'object') {
+      category = '_object'
+    } else if (sceneNumber) {
+      category = '_scene'
+    }
+    
+    // 캐릭터 이름 추가 (있는 경우)
+    let characterName = ''
+    if (props.image.element_name) {
+      characterName = `_${props.image.element_name.replace(/[^a-zA-Z0-9가-힣]/g, '_')}`
+    }
+    
+    // 타임스탬프 추가
+    const timestamp = new Date().getTime()
+    const fileName = `image_${projectName}${category}${characterName}${sceneNumber}_${timestamp}.png`
+    
+    // 이미지 다운로드 (CORS 문제 회피를 위해 fetch 사용)
+    const response = await fetch(imageUrl)
+    const blob = await response.blob()
+    const url = URL.createObjectURL(blob)
+    
+    const link = document.createElement('a')
+    link.href = url
+    link.download = fileName
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    
+    // 메모리 정리
+    URL.revokeObjectURL(url)
+  } catch (error) {
+    console.error('이미지 다운로드 오류:', error)
+    // CORS 오류 시 기본 다운로드 시도
+    const link = document.createElement('a')
+    link.href = imageUrl
+    link.download = `image_${new Date().getTime()}.png`
+    link.target = '_blank'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   }
-  
-  const link = document.createElement('a')
-  link.href = imageUrl
-  link.download = `image_${projectName}${sceneNumber}.png`
-  link.target = '_blank'
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
 }
 
 const copyPrompt = async () => {
