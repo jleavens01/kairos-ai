@@ -951,12 +951,13 @@ const loadLibraryImages = async () => {
       .eq('project_id', props.projectId)
       .eq('generation_status', 'completed')
     
-    // is_kept 필터 제거 - 모든 완성된 이미지 표시
-    // 보관함 기능이 필요하면 별도 체크박스로 구현
+    // 보관함에 넣은 이미지는 제외 (비디오 생성용이 아님)
+    // is_kept가 true가 아닌 것만 표시
+    query = query.neq('is_kept', true)
     
     const { data, error } = await query
       .order('created_at', { ascending: false })
-      .limit(200) // 제한을 200개로 늘림
+      .limit(200) // 제한을 200개로 유지
 
     if (error) {
       console.error('라이브러리 이미지 쿼리 에러:', error)
@@ -964,7 +965,7 @@ const loadLibraryImages = async () => {
     }
     
     libraryImages.value = data || []
-    console.log(`라이브러리 이미지 ${data?.length || 0}개 로드됨`)
+    console.log(`라이브러리 이미지 ${data?.length || 0}개 로드됨 (보관함 제외)`)
   } catch (error) {
     console.error('라이브러리 이미지 로드 실패:', error)
     libraryImages.value = []
