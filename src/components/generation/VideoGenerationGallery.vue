@@ -98,6 +98,14 @@
               {{ video.upscale_factor }}x
             </div>
             
+            <!-- 업스케일 진행 중 오버레이 -->
+            <div v-if="video.upscale_status === 'processing'" class="upscale-processing-overlay">
+              <div class="upscale-processing-content">
+                <div class="upscale-spinner"></div>
+                <p class="upscale-text">업스케일 {{ video.upscale_factor }}x 처리 중...</p>
+              </div>
+            </div>
+            
             <!-- 오버레이 정보 -->
             <div class="video-overlay-info">
               <div class="info-top">
@@ -401,7 +409,7 @@ onUnmounted(() => {
 // Computed
 const processingVideos = computed(() => {
   return videos.value.filter(
-    v => v.generation_status === 'pending' || v.generation_status === 'processing'
+    v => v.generation_status === 'pending' || v.generation_status === 'processing' || v.upscale_status === 'processing'
   )
 })
 
@@ -758,8 +766,10 @@ const openUpscaleModal = (video) => {
   showDetailModal.value = false
 }
 
-const handleUpscaleSuccess = (result) => {
+const handleUpscaleSuccess = async (result) => {
   console.log('업스케일 시작됨:', result)
+  // 즉시 비디오 목록 새로고침하여 업스케일 상태 표시
+  await fetchVideos()
   // 폴링 시작하여 업스케일 진행 상황 추적
   startPolling()
 }
@@ -1516,5 +1526,48 @@ defineExpose({
   .failed-content {
     padding: 30px 5px;
   }
+}
+
+/* 업스케일 진행 중 오버레이 */
+.upscale-processing-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  border-radius: 12px;
+}
+
+.upscale-processing-content {
+  text-align: center;
+  padding: 20px;
+}
+
+.upscale-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(59, 130, 246, 0.3);
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 12px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.upscale-text {
+  color: white;
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 </style>
