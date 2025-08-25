@@ -2227,19 +2227,32 @@ const generateVideo = async () => {
   
   /* 모바일 참조 이미지 그리드 수정 */
   .reference-images-grid {
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
+    display: grid !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 8px !important;
     padding: 4px;
   }
   
   .reference-image-item {
     max-width: 100%;
+    width: 100%;
   }
   
   .image-preview-wrapper {
-    aspect-ratio: 1;
+    position: relative;
     width: 100%;
-    height: auto;
+    padding-bottom: 100%; /* 1:1 aspect ratio fallback */
+    height: 0;
+    overflow: hidden;
+  }
+  
+  .image-preview-wrapper img {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
   
   .selected-references {
@@ -2250,13 +2263,78 @@ const generateVideo = async () => {
   
   /* 라이브러리 그리드 모바일 최적화 */
   .library-grid {
-    grid-template-columns: repeat(4, 1fr);
-    gap: 6px;
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 6px !important;
     max-height: 180px;
     padding: 6px;
   }
   
   .library-item {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+/* 아이폰 특별 처리 (더 작은 화면) */
+@media (max-width: 414px) {
+  .reference-images-grid {
+    display: -webkit-grid !important;
+    display: grid !important;
+    -webkit-grid-template-columns: repeat(3, 1fr) !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 6px !important;
+    grid-gap: 6px !important;
+    padding: 2px;
+  }
+  
+  .reference-image-item {
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+  }
+  
+  .image-preview-wrapper {
+    position: relative;
+    width: 100%;
+    padding-bottom: 100%; /* 1:1 비율 유지 */
+    height: 0;
+    border-radius: 4px;
+    overflow: hidden;
+    background: var(--bg-secondary);
+  }
+  
+  .image-preview-wrapper img {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    -o-object-fit: cover;
+    object-fit: cover;
+  }
+  
+  .btn-remove-image {
+    width: 20px;
+    height: 20px;
+    font-size: 10px;
+    top: 2px;
+    right: 2px;
+  }
+  
+  .library-grid {
+    display: -webkit-grid !important;
+    display: grid !important;
+    -webkit-grid-template-columns: repeat(4, 1fr) !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 4px !important;
+    grid-gap: 4px !important;
+    max-height: 160px;
+    padding: 4px;
+  }
+  
+  .library-item {
+    width: 100%;
     min-width: 0;
   }
 }
