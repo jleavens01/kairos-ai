@@ -179,14 +179,14 @@ export const handler = async (event) => {
       console.log('Upscale submitted for polling:', requestId);
     }
 
-    // 4. request_id 업데이트
+    // 4. upscale_request_id를 metadata에 저장 (원본 request_id는 보존)
     const { error: requestUpdateError } = await supabaseAdmin
       .from('gen_videos')
       .update({
-        request_id: requestId,
-        generation_status: 'processing',
+        upscale_status: 'processing',
         metadata: {
           ...upscaleRecord.metadata,
+          upscale_request_id: requestId,
           fal_request_id: requestId,
           submitted_at: new Date().toISOString()
         }

@@ -78,15 +78,29 @@ export const handler = async (event) => {
 
         console.log(`Updating gen_videos for request_id: ${request_id}`);
         
-        // 먼저 request_id로 비디오를 찾아서 업스케일인지 확인
-        const { data: existingVideo, error: fetchError } = await supabase
+        // 먼저 request_id로 비디오를 찾거나, upscale_request_id로 찾기
+        let existingVideo;
+        let fetchError;
+        
+        // 일반 비디오 생성인지 먼저 확인
+        ({ data: existingVideo, error: fetchError } = await supabase
           .from('gen_videos')
           .select('*')
           .eq('request_id', request_id)
-          .single();
+          .single());
+        
+        // request_id로 못 찾으면 metadata의 upscale_request_id로 검색
+        if (fetchError || !existingVideo) {
+          console.log(`No video found with request_id, checking upscale_request_id: ${request_id}`);
+          ({ data: existingVideo, error: fetchError } = await supabase
+            .from('gen_videos')
+            .select('*')
+            .filter('metadata->upscale_request_id', 'eq', request_id)
+            .single());
+        }
 
         if (fetchError || !existingVideo) {
-          console.error(`No video found with request_id: ${request_id}`);
+          console.error(`No video found with request_id or upscale_request_id: ${request_id}`);
           throw new Error(`No video record found with request_id: ${request_id}`);
         }
 
@@ -114,10 +128,15 @@ export const handler = async (event) => {
           };
         }
 
+        // 업스케일인 경우 id로 업데이트, 일반 비디오는 request_id로 업데이트
+        const updateCondition = isUpscale 
+          ? { column: 'id', value: existingVideo.id }
+          : { column: 'request_id', value: request_id };
+        
         const { data: updateData, error: dbError } = await supabase
           .from('gen_videos')
           .update(updatePayload)
-          .eq('request_id', request_id)
+          .eq(updateCondition.column, updateCondition.value)
           .select();
 
         if (dbError) {
@@ -160,11 +179,24 @@ export const handler = async (event) => {
 
       if (isVideo) {
         // 비디오의 경우 업스케일인지 확인
-        const { data: existingVideo, error: fetchError } = await supabase
+        let existingVideo;
+        let fetchError;
+        
+        // 일반 비디오 생성인지 먼저 확인
+        ({ data: existingVideo, error: fetchError } = await supabase
           .from('gen_videos')
           .select('*')
           .eq('request_id', request_id)
-          .single();
+          .single());
+        
+        // request_id로 못 찾으면 metadata의 upscale_request_id로 검색
+        if (fetchError || !existingVideo) {
+          ({ data: existingVideo, error: fetchError } = await supabase
+            .from('gen_videos')
+            .select('*')
+            .filter('metadata->upscale_request_id', 'eq', request_id)
+            .single());
+        }
 
         const isUpscale = existingVideo?.upscale_status === 'processing' || existingVideo?.upscale_id;
         
@@ -196,10 +228,15 @@ export const handler = async (event) => {
           };
         }
 
+        // 업스케일인 경우 id로 업데이트, 일반 비디오는 request_id로 업데이트
+        const updateCondition = isUpscale 
+          ? { column: 'id', value: existingVideo?.id }
+          : { column: 'request_id', value: request_id };
+        
         const { error: dbError } = await supabase
           .from('gen_videos')
           .update(updatePayload)
-          .eq('request_id', request_id);
+          .eq(updateCondition.column, updateCondition.value);
 
         if (dbError) {
           console.error('DB update error (video failed):', dbError);
