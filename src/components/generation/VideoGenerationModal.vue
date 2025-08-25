@@ -2224,5 +2224,40 @@ const generateVideo = async () => {
     font-size: 0.7rem;
     padding: 0.2rem 0.4rem;
   }
+  
+  /* 모바일 참조 이미지 그리드 수정 */
+  .reference-images-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    padding: 4px;
+  }
+  
+  .reference-image-item {
+    max-width: 100%;
+  }
+  
+  .image-preview-wrapper {
+    aspect-ratio: 1;
+    width: 100%;
+    height: auto;
+  }
+  
+  .selected-references {
+    padding: 8px;
+    margin-top: 12px;
+    margin-bottom: 12px;
+  }
+  
+  /* 라이브러리 그리드 모바일 최적화 */
+  .library-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    max-height: 180px;
+    padding: 6px;
+  }
+  
+  .library-item {
+    min-width: 0;
+  }
 }
 </style>
