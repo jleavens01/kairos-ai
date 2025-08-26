@@ -95,10 +95,23 @@ const loadImages = async () => {
     const { data: session } = await supabase.auth.getSession()
     if (!session.session) return
 
+    // 먼저 사용자가 소유한 모든 프로젝트를 가져옴
+    const { data: userProjects } = await supabase
+      .from('projects')
+      .select('id')
+      .eq('user_id', session.session.user.id)
+
+    if (!userProjects || userProjects.length === 0) {
+      images.value = []
+      return
+    }
+
+    const projectIds = userProjects.map(p => p.id)
+
     let query = supabase
       .from('gen_images')
       .select('*')
-      .eq('project_id', props.projectId)
+      .in('project_id', projectIds) // 사용자의 모든 프로젝트에서
       .eq('generation_status', 'completed')
       .eq('image_type', 'character') // 캐릭터 타입만
       .neq('is_shared', true) // is_shared가 true인 것은 제외
