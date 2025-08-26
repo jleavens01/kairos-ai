@@ -7,7 +7,7 @@
       </div>
       
       <div class="modal-body">
-        <!-- 검색 바 -->
+        <!-- 검색 바 및 필터 -->
         <div class="search-bar">
           <input 
             v-model="searchQuery"
@@ -15,6 +15,14 @@
             placeholder="이미지 검색..."
             @input="debouncedSearch"
           />
+          <label class="checkbox-label">
+            <input 
+              v-model="currentProjectOnly"
+              type="checkbox"
+              @change="loadImages"
+            />
+            현재 프로젝트만
+          </label>
         </div>
         
         <!-- 이미지 그리드 -->
@@ -77,6 +85,7 @@ const images = ref([])
 const loading = ref(false)
 const searchQuery = ref('')
 const selectedImage = ref(null)
+const currentProjectOnly = ref(false)
 let searchTimeout = null
 
 // 모달이 열릴 때 이미지 로드
@@ -95,28 +104,35 @@ const loadImages = async () => {
     const { data: session } = await supabase.auth.getSession()
     if (!session.session) return
 
-    // 먼저 사용자가 소유한 모든 프로젝트를 가져옴
-    const { data: userProjects } = await supabase
-      .from('projects')
-      .select('id')
-      .eq('user_id', session.session.user.id)
-
-    if (!userProjects || userProjects.length === 0) {
-      images.value = []
-      return
-    }
-
-    const projectIds = userProjects.map(p => p.id)
-
     let query = supabase
       .from('gen_images')
       .select('*')
-      .in('project_id', projectIds) // 사용자의 모든 프로젝트에서
       .eq('generation_status', 'completed')
       .eq('image_type', 'character') // 캐릭터 타입만
-      .neq('is_shared', true) // is_shared가 true인 것은 제외
       .order('created_at', { ascending: false })
       .limit(100)
+
+    if (currentProjectOnly.value) {
+      // 현재 프로젝트만 선택된 경우
+      query = query.eq('project_id', props.projectId)
+      // is_shared 필터링 제거 (모든 이미지 표시)
+    } else {
+      // 모든 프로젝트에서 가져오는 경우
+      const { data: userProjects } = await supabase
+        .from('projects')
+        .select('id')
+        .eq('user_id', session.session.user.id)
+
+      if (!userProjects || userProjects.length === 0) {
+        images.value = []
+        return
+      }
+
+      const projectIds = userProjects.map(p => p.id)
+      query = query
+        .in('project_id', projectIds) // 사용자의 모든 프로젝트에서
+        .neq('is_shared', true) // is_shared가 true인 것은 제외
+    }
 
     // 검색어가 있으면 필터 적용
     if (searchQuery.value) {
@@ -224,14 +240,31 @@ const close = () => {
 
 .search-bar {
   margin-bottom: 20px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
 }
 
 .search-bar input {
-  width: 100%;
+  flex: 1;
   padding: 10px;
   border: 1px solid var(--border-color);
   border-radius: 5px;
   font-size: 14px;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 14px;
+  color: var(--text-primary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.checkbox-label input[type="checkbox"] {
+  cursor: pointer;
 }
 
 .images-grid {
