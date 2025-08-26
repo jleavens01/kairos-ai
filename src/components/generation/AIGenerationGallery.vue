@@ -388,7 +388,7 @@ const showKeptOnly = ref(false) // 보관함 보기 상태
 
 // 페이지네이션 상태
 const currentPage = ref(1)
-const pageSize = ref(10) // 페이지당 10개로 변경
+const pageSize = ref(20) // 페이지당 20개로 변경
 const totalCount = ref(0)
 const totalPages = computed(() => Math.ceil(totalCount.value / pageSize.value))
 const showGenerationModal = ref(false)
