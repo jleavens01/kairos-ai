@@ -7,14 +7,18 @@ const supabase = createClient(
 );
 
 export const handler = async (event) => {
+  console.log('=== WEBHOOK HANDLER START ===');
   console.log('Webhook handler called:', {
     method: event.httpMethod,
     headers: event.headers,
-    hasBody: !!event.body
+    hasBody: !!event.body,
+    bodyLength: event.body?.length || 0,
+    timestamp: new Date().toISOString()
   });
   
   // POST 요청만 허용
   if (event.httpMethod !== 'POST') {
+    console.log('Method not allowed:', event.httpMethod);
     return { 
       statusCode: 405, 
       body: JSON.stringify({ error: 'Method Not Allowed' }) 
@@ -91,12 +95,22 @@ export const handler = async (event) => {
         
         // request_id로 못 찾으면 metadata의 upscale_request_id로 검색
         if (fetchError || !existingVideo) {
-          console.log(`No video found with request_id, checking upscale_request_id: ${request_id}`);
-          ({ data: existingVideo, error: fetchError } = await supabase
+          console.log(`No video found with request_id: ${request_id}, checking metadata->upscale_request_id`);
+          
+          // metadata 내의 upscale_request_id나 fal_request_id로 검색
+          const { data: videos, error: searchError } = await supabase
             .from('gen_videos')
             .select('*')
-            .filter('metadata->upscale_request_id', 'eq', request_id)
-            .single());
+            .or(`metadata->upscale_request_id.eq.${request_id},metadata->fal_request_id.eq.${request_id}`);
+          
+          console.log(`Found ${videos?.length || 0} videos with upscale_request_id or fal_request_id: ${request_id}`);
+          
+          if (videos && videos.length > 0) {
+            existingVideo = videos[0];
+            fetchError = null;
+          } else {
+            fetchError = searchError || new Error('No videos found');
+          }
         }
 
         if (fetchError || !existingVideo) {
@@ -144,7 +158,11 @@ export const handler = async (event) => {
           throw dbError;
         }
 
-        console.log(`Video ${request_id} marked as completed (${isUpscale ? 'upscale' : 'generation'}):`, updateData);
+        console.log(`Video ${request_id} marked as completed (${isUpscale ? 'upscale' : 'generation'})`, {
+          updateCondition,
+          updatePayload,
+          updatedRecords: updateData?.length || 0
+        });
       } else {
         // 이미지 처리
         const imageUrl = output?.images?.[0]?.url || output?.image_url || output?.url;
@@ -279,6 +297,13 @@ export const handler = async (event) => {
       // }).eq('request_id', request_id);
     }
 
+    console.log('=== WEBHOOK HANDLER SUCCESS ===', {
+      request_id,
+      status,
+      isVideo,
+      timestamp: new Date().toISOString()
+    });
+    
     return {
       statusCode: 200,
       headers: {

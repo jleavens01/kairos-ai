@@ -408,8 +408,9 @@ onUnmounted(() => {
 
 // Computed
 const processingVideos = computed(() => {
+  // 업스케일 중인 비디오는 제외 - 기존 카드에 오버레이로 표시됨
   return videos.value.filter(
-    v => v.generation_status === 'pending' || v.generation_status === 'processing' || v.upscale_status === 'processing'
+    v => v.generation_status === 'pending' || v.generation_status === 'processing'
   )
 })
 
