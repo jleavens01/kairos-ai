@@ -100,7 +100,7 @@ const loadImages = async () => {
       .select('*')
       .eq('project_id', props.projectId)
       .eq('generation_status', 'completed')
-      .eq('element_category', 'character') // 캐릭터 카테고리만
+      .eq('image_type', 'character') // 캐릭터 타입만
       .neq('is_shared', true) // is_shared가 true인 것은 제외
       .order('created_at', { ascending: false })
       .limit(100)
@@ -154,7 +154,7 @@ const confirmSelection = async () => {
         prompt_used: `[캐릭터: ${props.characterName}] ${selectedImage.value.prompt_used || ''}`,
         generation_status: 'completed',
         generation_model: selectedImage.value.generation_model,
-        element_category: 'character', // 캐릭터 카테고리로 설정
+        image_type: 'character', // 캐릭터 타입으로 설정
         element_name: props.characterName, // 캐릭터 이름 설정
         storage_image_url: selectedImage.value.storage_image_url,
         thumbnail_url: selectedImage.value.thumbnail_url,
