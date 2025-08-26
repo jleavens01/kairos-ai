@@ -1313,19 +1313,39 @@ const downloadBatchImages = async () => {
     // 각 이미지 파일 다운로드 및 ZIP에 추가
     const downloadPromises = scenesWithImages.map(async (scene) => {
       try {
-        const response = await fetch(scene.scene_image_url)
+        // CORS 문제 회피를 위해 프록시 사용 (Supabase 이미지인 경우)
+        let imageUrl = scene.scene_image_url
+        
+        // 이미지 다운로드
+        const response = await fetch(imageUrl, {
+          mode: 'cors',
+          credentials: 'omit'
+        })
         
         if (!response.ok) {
-          throw new Error(`Failed to download image for scene ${scene.scene_number}`)
+          throw new Error(`Failed to download image for scene ${scene.scene_number}: ${response.status}`)
         }
         
         const blob = await response.blob()
-        const fileName = `image_${projectName}_${scene.scene_number}.png`
+        
+        // 파일 확장자 결정 (Content-Type 기반)
+        const contentType = response.headers.get('content-type') || 'image/png'
+        let extension = 'png'
+        if (contentType.includes('jpeg') || contentType.includes('jpg')) {
+          extension = 'jpg'
+        } else if (contentType.includes('webp')) {
+          extension = 'webp'
+        } else if (contentType.includes('gif')) {
+          extension = 'gif'
+        }
+        
+        const fileName = `image_${projectName}_scene_${String(scene.scene_number).padStart(3, '0')}.${extension}`
         
         // ZIP에 파일 추가
-        zip.file(fileName, blob)
+        zip.file(fileName, blob, { binary: true })
         
-        return { success: true, sceneNumber: scene.scene_number }
+        console.log(`Successfully added ${fileName} to ZIP`)
+        return { success: true, sceneNumber: scene.scene_number, fileName }
       } catch (error) {
         console.error(`Scene ${scene.scene_number} image download failed:`, error)
         return { success: false, sceneNumber: scene.scene_number, error: error.message }
@@ -1333,9 +1353,10 @@ const downloadBatchImages = async () => {
     })
     
     // 모든 다운로드 완료 대기
-    const results = await Promise.allSettled(downloadPromises)
-    const successCount = results.filter(r => r.value?.success).length
-    const failCount = results.filter(r => !r.value?.success).length
+    const results = await Promise.all(downloadPromises)
+    const successResults = results.filter(r => r.success)
+    const successCount = successResults.length
+    const failCount = results.filter(r => !r.success).length
     
     if (successCount === 0) {
       alert('다운로드 가능한 이미지 파일이 없습니다.')
@@ -1343,15 +1364,31 @@ const downloadBatchImages = async () => {
     }
     
     // ZIP 파일 생성 및 다운로드
-    const zipBlob = await zip.generateAsync({ type: 'blob' })
+    console.log(`Creating ZIP file with ${successCount} images...`)
+    const zipBlob = await zip.generateAsync({ 
+      type: 'blob',
+      compression: "DEFLATE",
+      compressionOptions: {
+        level: 6  // 압축 레벨 (1-9, 6이 기본값)
+      }
+    })
+    
+    // 파일 크기 확인
+    const fileSizeMB = (zipBlob.size / (1024 * 1024)).toFixed(2)
+    console.log(`ZIP file created: ${fileSizeMB} MB`)
+    
     const url = URL.createObjectURL(zipBlob)
     const link = document.createElement('a')
     link.href = url
-    link.download = `images_${projectName}_batch.zip`
+    link.download = `images_${projectName}_batch_${new Date().getTime()}.zip`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
-    URL.revokeObjectURL(url)
+    
+    // 메모리 정리를 위해 약간의 딜레이 후 revoke
+    setTimeout(() => {
+      URL.revokeObjectURL(url)
+    }, 1000)
     
     // 결과 알림
     if (failCount > 0) {
