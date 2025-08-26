@@ -262,6 +262,8 @@ generateVideoAsync.js (라우터)
 4. `VideoGenerationModal.vue`에 UI 옵션 추가
 
 ### 모델별 크레딧 비용
+
+#### 비디오 생성 모델
 - Google Veo 2: 3000 크레딧
 - Google Veo 3 Preview: 3000 크레딧
 - Google Veo 3 Fast: 2000 크레딧  
@@ -270,6 +272,13 @@ generateVideoAsync.js (라우터)
 - MiniMax Hailou 02 Standard: 1000 크레딧
 - ByteDance SeedDance v1 Pro: 2000 크레딧
 - ByteDance SeedDance v1 Lite: 1000 크레딧
+
+#### 이미지 생성 모델
+- GPT Image: 100 크레딧
+- Flux Pro: 150 크레딧
+- Flux Kontext: 200 크레딧
+- Flux Kontext Multi: 250 크레딧
+- Gemini 2.5 Flash Edit: 300 크레딧 (2개 이미지 편집)
 
 ### ⚠️ 매우 중요: SeedDance Lite 이미지 선택 규칙
 **❗️ ByteDance SeedDance v1 Lite 모델은 2개 이미지 선택 가능**

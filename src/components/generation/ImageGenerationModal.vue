@@ -23,6 +23,7 @@
               <option value="flux-pro">Flux Pro</option>
               <option value="flux-kontext">Flux Kontext (참조 이미지 1개)</option>
               <option value="flux-kontext-multi">Flux Kontext Multi (참조 이미지 여러개)</option>
+              <option value="gemini-25-flash-edit">Gemini 2.5 Flash Edit (이미지 편집 2개)</option>
             </select>
           </div>
           <div class="inline-item">
@@ -34,8 +35,8 @@
                 <option value="1536x1024">가로형 (1536x1024)</option>
                 <option value="1024x1536">세로형 (1024x1536)</option>
               </template>
-              <!-- Flux 모델용 비율 -->
-              <template v-else-if="selectedModel.includes('flux')">
+              <!-- Flux 및 Gemini 모델용 비율 -->
+              <template v-else-if="selectedModel.includes('flux') || selectedModel.includes('gemini')">
                 <option value="21:9">울트라와이드 (21:9)</option>
                 <option value="16:9">와이드 (16:9)</option>
                 <option value="4:3">표준 가로 (4:3)</option>
@@ -628,8 +629,8 @@ const canGenerate = computed(() => {
 })
 
 const showReferenceImages = computed(() => {
-  // GPT Image와 Flux 모델들 모두 참조 이미지 지원
-  return selectedModel.value === 'gpt-image-1' || selectedModel.value.includes('flux')
+  // GPT Image, Flux, Gemini 모델들 모두 참조 이미지 지원
+  return selectedModel.value === 'gpt-image-1' || selectedModel.value.includes('flux') || selectedModel.value.includes('gemini')
 })
 
 const canAddMoreImages = computed(() => {
@@ -644,6 +645,8 @@ const selectedStyle = computed(() => {
 const getMaxImages = () => {
   if (selectedModel.value === 'flux-kontext') {
     return 1
+  } else if (selectedModel.value === 'gemini-25-flash-edit') {
+    return 2  // Gemini Edit는 정확히 2개의 이미지 필요
   } else if (selectedModel.value === 'flux-kontext-multi' || selectedModel.value === 'gpt-image-1') {
     return 5
   }

@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import jwt from 'jsonwebtoken';
 import { generateImage as generateGPTImage } from './generateGPTImage.js';
 import { generateImage as generateFluxImage } from './generateFluxImage.js';
+import { generateImage as generateGeminiEditImage } from './generateGeminiEditImage.js';
 
 export const handler = async (event) => {
   const headers = {
@@ -62,6 +63,14 @@ export const handler = async (event) => {
         case 'flux-kontext':
         case 'flux-kontext-multi':
           result = await generateFluxImage({
+            ...requestData,
+            user,
+            supabaseAdmin
+          });
+          break;
+          
+        case 'gemini-25-flash-edit':
+          result = await generateGeminiEditImage({
             ...requestData,
             user,
             supabaseAdmin
