@@ -173,7 +173,6 @@ const confirmSelection = async () => {
         thumbnail_url: selectedImage.value.thumbnail_url,
         is_shared: true, // 중복 방지를 위한 플래그
         is_kept: false,
-        is_favorite: false,
         metadata: {
           ...selectedImage.value.metadata,
           original_image_id: selectedImage.value.id,
