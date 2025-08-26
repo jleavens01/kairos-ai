@@ -15,10 +15,15 @@
             <!-- 생성된 캐릭터는 전체 이미지 표시 -->
             <div v-if="characterImageMap.has(character)" class="character-full-image">
               <img :src="characterImageMap.get(character)" :alt="character" />
-              <div class="character-overlay">
+              <div class="character-overlay desktop-visible">
                 <h6>{{ character }}</h6>
                 <div class="character-actions">
-                  <button @click.stop="openCharacterSelector(character)" class="btn-settings" title="이미지 선택">⚙</button>
+                  <button @click.stop="openCharacterSelector(character)" class="btn-settings" title="이미지 선택">
+                    <Settings :size="14" />
+                  </button>
+                  <button @click.stop="openLibrarySelector(character)" class="btn-library" title="라이브러리에서 선택">
+                    <FolderOpen :size="14" />
+                  </button>
                   <button @click.stop="openGenerationModal(character)" class="btn-regenerate">재생성</button>
                 </div>
               </div>
@@ -26,9 +31,14 @@
             <!-- 생성되지 않은 캐릭터도 오버레이 스타일 -->
             <div v-else class="character-placeholder">
               <User :size="32" class="suggestion-icon-small" />
-              <div class="character-overlay">
+              <div class="character-overlay desktop-visible">
                 <h6>{{ character }}</h6>
-                <button @click.stop="openGenerationModal(character)" class="btn-generate-small">생성</button>
+                <div class="character-actions">
+                  <button @click.stop="openLibrarySelector(character)" class="btn-library" title="라이브러리에서 선택">
+                    <FolderOpen :size="14" />
+                  </button>
+                  <button @click.stop="openGenerationModal(character)" class="btn-generate-small">생성</button>
+                </div>
               </div>
             </div>
           </div>
@@ -86,25 +96,6 @@
       </div>
 
       <div v-else class="image-grid" :style="{ columnCount: columnCount }">
-        <!-- 캐릭터 생성 제안 카드들 -->
-        <div
-          v-for="character in characterSuggestions"
-          :key="`suggestion-${character.name}`"
-          class="gallery-item suggestion-card"
-          @click="openGenerationModalForCharacter(character.name)"
-        >
-          <div class="suggestion-wrapper">
-            <div class="suggestion-content">
-              <User :size="48" class="suggestion-icon" />
-              <p class="suggestion-text">캐릭터 생성</p>
-              <p class="suggestion-name">{{ character.name }}</p>
-              <div v-if="character.existingImage" class="suggestion-existing">
-                <img :src="character.existingImage.thumbnail_url || character.existingImage.storage_image_url" alt="" />
-              </div>
-            </div>
-          </div>
-        </div>
-        
         <!-- 이미지들 -->
         <div 
           v-for="item in galleryImages" 
@@ -340,6 +331,15 @@
       @close="showCharacterSelector = false"
       @select="handleCharacterImageSelect"
     />
+    
+    <!-- 라이브러리 선택 모달 -->
+    <LibraryImageSelector
+      :is-open="showLibrarySelector"
+      :character-name="selectedCharacterName"
+      :project-id="projectId"
+      @close="showLibrarySelector = false"
+      @select="handleLibraryImageSelect"
+    />
   </div>
 </template>
 
@@ -352,7 +352,8 @@ import ImageGenerationModal from './ImageGenerationModal.vue'
 import VideoGenerationModal from './VideoGenerationModal.vue'
 import SceneConnectionModal from './SceneConnectionModal.vue'
 import CharacterImageSelector from './CharacterImageSelector.vue'
-import { Link, Tag, Download, Trash2, Loader, Plus, User, Image, Star, Archive } from 'lucide-vue-next'
+import LibraryImageSelector from './LibraryImageSelector.vue'
+import { Link, Tag, Download, Trash2, Loader, Plus, User, Image, Star, Archive, FolderOpen, Settings } from 'lucide-vue-next'
 import TagEditModal from './TagEditModal.vue'
 import ImageDetailModal from './ImageDetailModal.vue'
 import ColumnControl from '@/components/common/ColumnControl.vue'
@@ -392,6 +393,7 @@ const totalCount = ref(0)
 const totalPages = computed(() => Math.ceil(totalCount.value / pageSize.value))
 const showGenerationModal = ref(false)
 const showCharacterSelector = ref(false)
+const showLibrarySelector = ref(false)
 const selectedCharacterName = ref('')
 const customCharacterImageMap = ref(new Map())
 const showSceneModal = ref(false)
@@ -900,6 +902,12 @@ const openCharacterSelector = (character) => {
   showCharacterSelector.value = true
 }
 
+// 라이브러리 선택 모달 열기
+const openLibrarySelector = (character) => {
+  selectedCharacterName.value = character
+  showLibrarySelector.value = true
+}
+
 // 캐릭터 이미지 선택 처리
 const handleCharacterImageSelect = ({ characterName, imageUrl }) => {
   // 선택한 이미지를 customCharacterImageMap에 저장
@@ -911,6 +919,22 @@ const handleCharacterImageSelect = ({ characterName, imageUrl }) => {
   localStorage.setItem('characterImageSelections', JSON.stringify(savedSelections))
   
   console.log(`Selected image for ${characterName}:`, imageUrl)
+}
+
+// 라이브러리 이미지 선택 처리
+const handleLibraryImageSelect = async ({ characterName, imageUrl, imageData }) => {
+  // 선택한 이미지를 customCharacterImageMap에 저장
+  customCharacterImageMap.value.set(characterName, imageUrl)
+  
+  // localStorage에도 저장
+  const savedSelections = JSON.parse(localStorage.getItem('characterImageSelections') || '{}')
+  savedSelections[`${props.projectId}-${characterName}`] = imageUrl
+  localStorage.setItem('characterImageSelections', JSON.stringify(savedSelections))
+  
+  console.log(`Selected library image for ${characterName}:`, imageUrl)
+  
+  // 이미지 목록 새로고침 (새로 추가된 is_shared 이미지 포함)
+  await fetchImages()
 }
 
 const openGenerationModal = (character = '') => {
@@ -1759,6 +1783,28 @@ defineExpose({
   object-fit: cover;
 }
 
+.character-placeholder {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--border-color);
+}
+
+.suggestion-icon-small {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--text-secondary);
+  opacity: 0.5;
+}
+
 .character-overlay {
   position: absolute;
   bottom: 0;
@@ -1774,10 +1820,15 @@ defineExpose({
   transition: opacity 0.2s;
 }
 
-/* 데스크톱에서는 호버 시에만 표시 */
+/* 데스크톱에서 desktop-visible 클래스가 있으면 항상 표시 */
 @media (hover: hover) {
-  .suggestion-card-small:hover .character-overlay {
+  .character-overlay.desktop-visible {
     opacity: 1;
+  }
+  
+  /* 호버 시에는 배경을 더 진하게 */
+  .suggestion-card-small:hover .character-overlay.desktop-visible {
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.3));
   }
 }
 
@@ -1800,10 +1851,13 @@ defineExpose({
   display: flex;
   gap: 4px;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
-.btn-settings {
-  background: rgba(255, 255, 255, 0.1);
+.btn-settings,
+.btn-library {
+  background: rgba(0, 0, 0, 0.7);
   border: 1px solid rgba(255, 255, 255, 0.2);
   color: white;
   border-radius: 4px;
@@ -1811,10 +1865,18 @@ defineExpose({
   font-size: 12px;
   cursor: pointer;
   transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
 }
 
-.btn-settings:hover {
-  background: rgba(255, 255, 255, 0.2);
+.btn-settings:hover,
+.btn-library:hover {
+  background: rgba(0, 0, 0, 0.9);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
   border-color: rgba(255, 255, 255, 0.4);
 }
 
@@ -1827,6 +1889,10 @@ defineExpose({
   font-size: 0.75rem;
   cursor: pointer;
   transition: all 0.2s;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .btn-regenerate:hover {
@@ -1861,6 +1927,10 @@ defineExpose({
   font-size: 0.75rem;
   cursor: pointer;
   transition: all 0.2s;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .btn-generate-small:hover {

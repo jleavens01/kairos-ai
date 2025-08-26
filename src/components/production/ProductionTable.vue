@@ -166,6 +166,7 @@
                   @blur="saveEdit(scene, 'original_script_text')"
                   @keydown.esc.prevent="cancelEdit"
                   @keydown.enter.ctrl="saveEdit(scene, 'original_script_text')"
+                  @keydown.enter.shift.prevent="splitSceneAtCursor(scene)"
                   rows="3"
                   class="edit-input edit-textarea"
                 ></textarea>
@@ -638,6 +639,99 @@ const addRow = async (afterSceneNumber) => {
     console.error('씬 추가 중 오류:', err)
     alert('씬 추가 중 오류가 발생했습니다.')
   }
+}
+
+// Shift+Enter로 씬 분할
+const splitSceneAtCursor = async (scene) => {
+  const textarea = document.getElementById(`edit-${scene.id}-original_script_text`)
+  if (!textarea) return
+  
+  const cursorPosition = textarea.selectionStart
+  const fullText = editedValue.value
+  
+  // 커서 위치에서 텍스트 분할
+  const beforeText = fullText.substring(0, cursorPosition).trim()
+  const afterText = fullText.substring(cursorPosition).trim()
+  
+  if (!beforeText || !afterText) {
+    // 분할할 텍스트가 없으면 일반 저장
+    await saveEdit(scene, 'original_script_text')
+    return
+  }
+  
+  try {
+    // 현재 씬의 텍스트를 커서 앞부분으로 직접 업데이트 (saveEdit 사용하지 않음)
+    const { error: updateError } = await supabase
+      .from('production_sheets')
+      .update({ original_script_text: beforeText })
+      .eq('id', scene.id)
+    
+    if (updateError) {
+      console.error('씬 업데이트 실패:', updateError)
+      alert('씬 업데이트에 실패했습니다.')
+      return
+    }
+    
+    // 커서 뒷부분으로 새 씬 추가
+    const session = await supabase.auth.getSession()
+    if (!session.data.session) {
+      alert('로그인이 필요합니다.')
+      return
+    }
+    
+    // 새 씬 데이터 생성
+    const newSceneData = {
+      projectId: props.projectId,
+      afterSceneNumber: scene.scene_number,
+      scriptText: afterText,
+      characters: extractCharacters(afterText)
+    }
+    
+    const response = await fetch('/.netlify/functions/addProductionSheetRow', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.data.session.access_token}`
+      },
+      body: JSON.stringify(newSceneData)
+    })
+    
+    if (!response.ok) {
+      const error = await response.json()
+      console.error('씬 분할 실패:', error)
+      alert('씬 분할에 실패했습니다.')
+      return
+    }
+    
+    // 프로덕션 시트 다시 로드
+    await productionStore.fetchProductionSheets(props.projectId)
+    
+    // 편집 모드 종료
+    cancelEdit()
+    
+  } catch (err) {
+    console.error('씬 분할 중 오류:', err)
+    alert('씬 분할 중 오류가 발생했습니다.')
+  }
+}
+
+// 간단한 캐릭터 추출 함수
+const extractCharacters = (text) => {
+  const characters = []
+  
+  // "캐릭터명 |" 패턴 찾기 (대화 부분은 제외)
+  const lines = text.split('\n')
+  for (const line of lines) {
+    const match = line.match(/^([가-힣A-Za-z0-9\s]+)\s*\|/)
+    if (match) {
+      const name = match[1].trim()
+      if (name && !characters.includes(name)) {
+        characters.push(name)
+      }
+    }
+  }
+  
+  return characters
 }
 
 // 선택 해제

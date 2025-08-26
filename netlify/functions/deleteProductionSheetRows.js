@@ -36,13 +36,52 @@ export const handler = async (event) => {
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
     
-    // DB 함수(RPC) 호출
-    const { error: rpcError } = await supabaseAdmin.rpc('delete_production_sheet_rows_and_renumber', {
-      p_project_id: projectId,
-      p_ids_to_delete: idsToDelete
-    });
-
-    if (rpcError) throw rpcError;
+    // 1. 먼저 삭제할 씬들 삭제
+    const { error: deleteError } = await supabaseAdmin
+      .from('production_sheets')
+      .delete()
+      .in('id', idsToDelete);
+    
+    if (deleteError) throw deleteError;
+    
+    // 2. 남은 씬들 조회
+    const { data: remainingScenes, error: fetchError } = await supabaseAdmin
+      .from('production_sheets')
+      .select('id, scene_number')
+      .eq('project_id', projectId)
+      .order('scene_number', { ascending: true });
+    
+    if (fetchError) throw fetchError;
+    
+    // 3. 씬 번호 재정렬
+    if (remainingScenes && remainingScenes.length > 0) {
+      // 씬 번호를 1부터 순서대로 재할당
+      const updates = remainingScenes.map((scene, index) => ({
+        id: scene.id,
+        scene_number: index + 1
+      }));
+      
+      // 임시 씬 번호로 먼저 업데이트 (중복 방지)
+      for (const update of updates) {
+        const tempNumber = 10000 + update.scene_number; // 임시로 큰 숫자 사용
+        const { error: tempError } = await supabaseAdmin
+          .from('production_sheets')
+          .update({ scene_number: tempNumber })
+          .eq('id', update.id);
+        
+        if (tempError) throw tempError;
+      }
+      
+      // 실제 씬 번호로 다시 업데이트
+      for (const update of updates) {
+        const { error: updateError } = await supabaseAdmin
+          .from('production_sheets')
+          .update({ scene_number: update.scene_number })
+          .eq('id', update.id);
+        
+        if (updateError) throw updateError;
+      }
+    }
 
     // 성공 응답 반환
     return {

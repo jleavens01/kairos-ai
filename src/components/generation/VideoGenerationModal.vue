@@ -955,6 +955,9 @@ const loadLibraryImages = async () => {
     // is_kept가 true가 아닌 것만 표시
     query = query.neq('is_kept', true)
     
+    // is_shared인 이미지도 제외 (중복 방지)
+    query = query.neq('is_shared', true)
+    
     const { data, error } = await query
       .order('created_at', { ascending: false })
       .limit(200) // 제한을 200개로 유지
