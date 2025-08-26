@@ -414,6 +414,11 @@ const processingVideos = computed(() => {
   )
 })
 
+// 업스케일 중인 비디오 추적
+const upscalingVideos = computed(() => {
+  return videos.value.filter(v => v.upscale_status === 'processing')
+})
+
 const filteredVideos = computed(() => {
   let filtered = videos.value.filter(v => v.generation_status === 'completed' || v.generation_status === 'failed')
   
@@ -775,6 +780,57 @@ const handleUpscaleSuccess = async (result) => {
   startPolling()
 }
 
+// 업스케일 상태 확인
+const checkUpscaleStatuses = async () => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+    
+    for (const video of upscalingVideos.value) {
+      // metadata에서 upscale_request_id 확인
+      const upscaleRequestId = video.metadata?.upscale_request_id || video.metadata?.fal_request_id
+      if (!upscaleRequestId) {
+        console.log(`No upscale request ID for video ${video.id}`)
+        continue
+      }
+      
+      console.log(`Checking upscale status for video ${video.id}, request: ${upscaleRequestId}`)
+      
+      try {
+        const response = await fetch('/.netlify/functions/checkUpscaleStatus', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`
+          },
+          body: JSON.stringify({
+            requestId: upscaleRequestId,
+            videoId: video.id,
+            metadata: video.metadata
+          })
+        })
+        
+        if (!response.ok) {
+          console.error('Failed to check upscale status:', await response.text())
+          continue
+        }
+        
+        const result = await response.json()
+        console.log('Upscale status result:', result)
+        
+        // 상태가 변경되면 비디오 목록 새로고침
+        if (result.status === 'completed' || result.status === 'failed') {
+          await fetchVideos()
+        }
+      } catch (error) {
+        console.error(`Error checking upscale status for video ${video.id}:`, error)
+      }
+    }
+  } catch (error) {
+    console.error('Error in checkUpscaleStatuses:', error)
+  }
+}
+
 // 폴링 관련
 const startPolling = () => {
   if (pollingInterval) return
@@ -784,11 +840,17 @@ const startPolling = () => {
   
   // 5초마다 폴링
   pollingInterval = setInterval(async () => {
-    if (processingVideos.value.length === 0) {
+    // 처리 중인 비디오나 업스케일 중인 비디오가 있으면 계속
+    if (processingVideos.value.length === 0 && upscalingVideos.value.length === 0) {
       stopPolling()
       return
     }
     await callPollingWorker()
+    
+    // 업스케일 중인 비디오 상태 확인
+    if (upscalingVideos.value.length > 0) {
+      await checkUpscaleStatuses()
+    }
   }, 5000)
   
   // 5분 후 자동 중지
@@ -919,7 +981,7 @@ onMounted(async () => {
   
   // 개발 환경에서는 폴링 사용
   if (import.meta.env.MODE === 'development') {
-    if (processingVideos.value.length > 0) {
+    if (processingVideos.value.length > 0 || upscalingVideos.value.length > 0) {
       startPolling()
     }
   } else {
@@ -927,8 +989,8 @@ onMounted(async () => {
     // productionStore.setupRealtimeSubscription(props.projectId)
     
     // 프로덕션에서도 처리 중인 비디오가 있으면 폴링
-    if (processingVideos.value.length > 0) {
-      console.log(`[Production] Found ${processingVideos.value.length} processing videos, starting polling...`)
+    if (processingVideos.value.length > 0 || upscalingVideos.value.length > 0) {
+      console.log(`[Production] Found ${processingVideos.value.length} processing, ${upscalingVideos.value.length} upscaling videos, starting polling...`)
       startPolling()
     }
   }

@@ -5,7 +5,7 @@ import { fal } from '@fal-ai/client';
 // Supabase Admin Client 설정
 const supabaseAdmin = createClient(
   process.env.VITE_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY,
+  process.env.SUPABASE_SERVICE_ROLE_KEY,  // 올바른 환경변수명
   {
     auth: {
       autoRefreshToken: false,
@@ -75,23 +75,70 @@ export const handler = async (event) => {
 
     console.log('Checking upscale status:', { requestId, videoId });
 
-    // FAL AI 상태 확인
-    const result = await fal.queue.status('fal-ai/creative-upscaler', {
-      requestId,
-      logs: true
-    });
+    // FAL AI 상태 확인 - Topaz Video AI 모델 사용
+    let statusResult;
+    try {
+      statusResult = await fal.queue.status('fal-ai/topaz/upscale/video', {
+        requestId,
+        logs: true
+      });
+      console.log('FAL AI status result:', statusResult);
+    } catch (statusError) {
+      console.error('Error fetching FAL status:', statusError);
+      // 상태를 가져올 수 없으면 processing으로 처리
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          success: true,
+          status: 'processing',
+          message: '업스케일 상태 확인 중입니다.'
+        })
+      };
+    }
 
-    console.log('FAL AI status result:', result);
-
-    if (result && result.video_url) {
+    // 상태 확인
+    if (statusResult?.status === 'COMPLETED') {
+      console.log('Upscale completed, fetching result...');
+      
+      // 결과 가져오기
+      let result;
+      try {
+        result = await fal.queue.result('fal-ai/topaz/upscale/video', {
+          requestId
+        });
+        console.log('FAL AI result:', result);
+      } catch (resultError) {
+        console.error('Error fetching FAL result:', resultError);
+        throw new Error('Failed to fetch upscale result');
+      }
+      
+      // 비디오 URL 추출 (다양한 경로에서 시도)
+      const videoUrl = result?.data?.video?.url || 
+                      result?.video?.url || 
+                      result?.video_url ||
+                      result?.url;
+      
+      if (!videoUrl) {
+        console.error('No video URL in result:', result);
+        throw new Error('No video URL in upscale result');
+      }
+      
+      console.log('Extracted video URL:', videoUrl);
+      
       // 업스케일 완료 - 원본 비디오 레코드 업데이트
       const { error: updateError } = await supabaseAdmin
         .from('gen_videos')
         .update({
-          upscale_video_url: result.video_url,
+          upscale_video_url: videoUrl,
           upscale_status: 'completed',
           upscaled_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
+          metadata: {
+            ...body.metadata,
+            upscale_completed_response: result,
+            upscale_completed_at: new Date().toISOString()
+          }
         })
         .eq('id', videoId);
 
@@ -100,14 +147,47 @@ export const handler = async (event) => {
         throw new Error('Failed to update video record');
       }
 
+      console.log('Video record updated successfully');
+
       return {
         statusCode: 200,
         headers,
         body: JSON.stringify({
           success: true,
           status: 'completed',
-          videoUrl: result.video_url,
+          videoUrl: videoUrl,
           message: '업스케일이 완료되었습니다.'
+        })
+      };
+    } else if (statusResult?.status === 'FAILED' || statusResult?.status === 'ERROR') {
+      // 실패 처리
+      console.error('Upscale failed:', statusResult);
+      
+      const { error: updateError } = await supabaseAdmin
+        .from('gen_videos')
+        .update({
+          upscale_status: 'failed',
+          updated_at: new Date().toISOString(),
+          metadata: {
+            ...body.metadata,
+            upscale_error: statusResult.error || 'Upscale failed',
+            upscale_failed_at: new Date().toISOString()
+          }
+        })
+        .eq('id', videoId);
+
+      if (updateError) {
+        console.error('Failed to update video record:', updateError);
+      }
+      
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          success: false,
+          status: 'failed',
+          error: statusResult.error || 'Upscale failed',
+          message: '업스케일이 실패했습니다.'
         })
       };
     }
