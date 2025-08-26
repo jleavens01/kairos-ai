@@ -17,7 +17,10 @@
               <img :src="characterImageMap.get(character)" :alt="character" />
               <div class="character-overlay">
                 <h6>{{ character }}</h6>
-                <button @click.stop="openGenerationModal(character)" class="btn-regenerate">재생성</button>
+                <div class="character-actions">
+                  <button @click.stop="openCharacterSelector(character)" class="btn-settings" title="이미지 선택">⚙</button>
+                  <button @click.stop="openGenerationModal(character)" class="btn-regenerate">재생성</button>
+                </div>
               </div>
             </div>
             <!-- 생성되지 않은 캐릭터도 오버레이 스타일 -->
@@ -327,6 +330,16 @@
       @close="closeVideoModal"
       @generated="handleVideoGenerated"
     />
+    
+    <!-- 캐릭터 이미지 선택 모달 -->
+    <CharacterImageSelector
+      :is-open="showCharacterSelector"
+      :character-name="selectedCharacterName"
+      :project-id="projectId"
+      :current-image-url="characterImageMap.get(selectedCharacterName)"
+      @close="showCharacterSelector = false"
+      @select="handleCharacterImageSelect"
+    />
   </div>
 </template>
 
@@ -338,6 +351,7 @@ import { useProjectsStore } from '@/stores/projects'
 import ImageGenerationModal from './ImageGenerationModal.vue'
 import VideoGenerationModal from './VideoGenerationModal.vue'
 import SceneConnectionModal from './SceneConnectionModal.vue'
+import CharacterImageSelector from './CharacterImageSelector.vue'
 import { Link, Tag, Download, Trash2, Loader, Plus, User, Image, Star, Archive } from 'lucide-vue-next'
 import TagEditModal from './TagEditModal.vue'
 import ImageDetailModal from './ImageDetailModal.vue'
@@ -377,6 +391,9 @@ const pageSize = ref(10) // 페이지당 10개로 변경
 const totalCount = ref(0)
 const totalPages = computed(() => Math.ceil(totalCount.value / pageSize.value))
 const showGenerationModal = ref(false)
+const showCharacterSelector = ref(false)
+const selectedCharacterName = ref('')
+const customCharacterImageMap = ref(new Map())
 const showSceneModal = ref(false)
 const showTagModal = ref(false)
 const showDetailModal = ref(false)
@@ -562,6 +579,7 @@ const characters = computed(() => {
 // 캐릭터별 최신 이미지 맵 (상단 제안 섹션용)
 const characterImageMap = computed(() => {
   const map = new Map()
+  
   // characterImagesForSuggestions에서 캐릭터 이미지 매핑
   const completedCharacters = characterImagesForSuggestions.value
     .filter(img => img.element_name && img.generation_status === 'completed')
@@ -573,10 +591,21 @@ const characterImageMap = computed(() => {
   }
   
   completedCharacters.forEach(img => {
-    if (!map.has(img.element_name)) {
+    // 사용자가 선택한 이미지가 있으면 그것을 사용, 없으면 최신 이미지 사용
+    if (customCharacterImageMap.value.has(img.element_name)) {
+      map.set(img.element_name, customCharacterImageMap.value.get(img.element_name))
+      console.log(`[CharacterImageMap] Using custom image for ${img.element_name}`)
+    } else if (!map.has(img.element_name)) {
       const imageUrl = img.thumbnail_url || img.storage_image_url || img.result_image_url
       map.set(img.element_name, imageUrl)
       console.log(`[CharacterImageMap] Mapped ${img.element_name} to ${imageUrl ? 'URL found' : 'NO URL'}`)
+    }
+  })
+  
+  // customCharacterImageMap에만 있는 항목도 추가
+  customCharacterImageMap.value.forEach((imageUrl, characterName) => {
+    if (!map.has(characterName)) {
+      map.set(characterName, imageUrl)
     }
   })
   
@@ -863,6 +892,25 @@ const handleCharacterClick = (character) => {
   } else {
     openGenerationModal(character)
   }
+}
+
+// 캐릭터 이미지 선택 모달 열기
+const openCharacterSelector = (character) => {
+  selectedCharacterName.value = character
+  showCharacterSelector.value = true
+}
+
+// 캐릭터 이미지 선택 처리
+const handleCharacterImageSelect = ({ characterName, imageUrl }) => {
+  // 선택한 이미지를 customCharacterImageMap에 저장
+  customCharacterImageMap.value.set(characterName, imageUrl)
+  
+  // localStorage에도 저장하여 새로고침 후에도 유지
+  const savedSelections = JSON.parse(localStorage.getItem('characterImageSelections') || '{}')
+  savedSelections[`${props.projectId}-${characterName}`] = imageUrl
+  localStorage.setItem('characterImageSelections', JSON.stringify(savedSelections))
+  
+  console.log(`Selected image for ${characterName}:`, imageUrl)
 }
 
 const openGenerationModal = (character = '') => {
@@ -1475,6 +1523,15 @@ onMounted(async () => {
   // 리사이즈 이벤트 리스너 설정
   window.addEventListener('resize', handleResize)
   
+  // localStorage에서 저장된 캐릭터 이미지 선택 복원
+  const savedSelections = JSON.parse(localStorage.getItem('characterImageSelections') || '{}')
+  Object.entries(savedSelections).forEach(([key, imageUrl]) => {
+    if (key.startsWith(`${props.projectId}-`)) {
+      const characterName = key.replace(`${props.projectId}-`, '')
+      customCharacterImageMap.value.set(characterName, imageUrl)
+    }
+  })
+  
   // 1. 먼저 스토리보드 데이터 로드
   if (!productionStore.productionSheets.length) {
     await productionStore.fetchProductionSheets(props.projectId)
@@ -1737,6 +1794,28 @@ defineExpose({
   margin: 0;
   font-size: 0.9rem;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.character-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.btn-settings {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-settings:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.4);
 }
 
 .btn-regenerate {
