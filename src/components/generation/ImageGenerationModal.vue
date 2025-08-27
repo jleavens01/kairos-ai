@@ -94,6 +94,13 @@
             <!-- 참조 이미지 소스 선택 탭 -->
             <div class="reference-tabs">
             <button 
+              @click="referenceTab = 'storyboard'"
+              :class="{ active: referenceTab === 'storyboard' }"
+              class="tab-btn"
+            >
+              <Film :size="16" /> 스토리보드
+            </button>
+            <button 
               @click="referenceTab = 'upload'"
               :class="{ active: referenceTab === 'upload' }"
               class="tab-btn"
@@ -247,6 +254,38 @@
                 @keyup.enter="addImageFromUrl"
               />
               <button @click="addImageFromUrl" class="btn-add-url">추가</button>
+            </div>
+          </div>
+
+          <!-- 스토리보드 탭 -->
+          <div v-if="referenceTab === 'storyboard'" class="reference-content">
+            <div v-if="loadingStoryboard" class="library-loading">
+              <div class="spinner"></div>
+              <p>스토리보드를 불러오는 중...</p>
+            </div>
+
+            <div v-else-if="storyboardImages.length === 0" class="library-empty">
+              <p>스토리보드가 없습니다.</p>
+              <p class="hint">먼저 스토리보드를 생성해보세요!</p>
+            </div>
+
+            <div v-else class="library-grid">
+              <div 
+                v-for="scene in storyboardImages" 
+                :key="scene.id"
+                class="library-item storyboard-item"
+                :class="{ selected: isStoryboardSelected(scene) }"
+                @click="toggleStoryboardImage(scene)"
+              >
+                <img 
+                  :src="scene.scene_image_url" 
+                  :alt="`씬 ${scene.scene_number}`"
+                />
+                <div class="library-item-overlay">
+                  <span class="scene-number">씬 {{ scene.scene_number }}</span>
+                  <span class="check-icon">{{ isStoryboardSelected(scene) ? '✓' : '' }}</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -473,7 +512,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { supabase } from '@/utils/supabase'
 import { useProductionStore } from '@/stores/production'
 import { useProjectsStore } from '@/stores/projects'
-import { X, Plus, PanelRightOpen, PanelRightClose, Upload, Library, Link, FolderOpen } from 'lucide-vue-next'
+import { X, Plus, PanelRightOpen, PanelRightClose, Upload, Library, Link, FolderOpen, Film } from 'lucide-vue-next'
 import PresetManageModal from './PresetManageModal.vue'
 import ImageGenerationSidePanel from './ImageGenerationSidePanel.vue'
 
@@ -534,13 +573,17 @@ const isDragging = ref(false)
 const urlInput = ref('')
 const fileInput = ref(null)
 
-// Library tab
-const referenceTab = ref('upload')
+// Library tab - 기본값을 storyboard로 변경
+const referenceTab = ref('storyboard')
 const librarySource = ref('my-images')
 const currentProjectOnly = ref(true)
 const includeKept = ref(false) // 보관함 포함 옵션 (기본값: false)
 const libraryImages = ref([])
 const loadingLibrary = ref(false)
+
+// Storyboard tab
+const storyboardImages = ref([])
+const loadingStoryboard = ref(false)
 
 // Scene selection
 const scenes = ref([])
@@ -594,6 +637,8 @@ watch(() => props.characterName, (newVal) => {
 watch(referenceTab, (newTab) => {
   if (newTab === 'library') {
     loadLibraryImages()
+  } else if (newTab === 'storyboard') {
+    loadStoryboardImages()
   }
 })
 
@@ -815,6 +860,31 @@ const addImageFromUrl = () => {
 }
 
 // 라이브러리 이미지 로드
+// 스토리보드 이미지 로드
+const loadStoryboardImages = async () => {
+  if (!props.projectId) return
+  
+  loadingStoryboard.value = true
+  
+  try {
+    const { data, error } = await supabase
+      .from('production_sheets')
+      .select('id, scene_number, scene_image_url, original_script_text')
+      .eq('project_id', props.projectId)
+      .not('scene_image_url', 'is', null)
+      .order('scene_number', { ascending: true })
+    
+    if (error) throw error
+    
+    storyboardImages.value = data || []
+  } catch (error) {
+    console.error('스토리보드 이미지 로드 실패:', error)
+    storyboardImages.value = []
+  } finally {
+    loadingStoryboard.value = false
+  }
+}
+
 const loadLibraryImages = async () => {
   loadingLibrary.value = true
   libraryImages.value = []
@@ -893,6 +963,35 @@ const toggleLibraryImage = (image) => {
   } else {
     alert(`최대 ${getMaxImages()}개까지만 선택 가능합니다.`)
   }
+}
+
+// 스토리보드 이미지 토글
+const toggleStoryboardImage = (scene) => {
+  const index = referenceImages.value.findIndex(
+    item => item.url === scene.scene_image_url
+  )
+  
+  if (index > -1) {
+    // 이미 선택된 경우 제거
+    referenceImages.value.splice(index, 1)
+  } else if (referenceImages.value.length < getMaxImages()) {
+    // 선택 추가
+    referenceImages.value.push({
+      url: scene.scene_image_url,
+      preview: null,
+      uploading: false,
+      fromStoryboard: true,
+      sceneId: scene.id,
+      sceneNumber: scene.scene_number
+    })
+  } else {
+    alert(`최대 ${getMaxImages()}개까지만 선택 가능합니다.`)
+  }
+}
+
+// 스토리보드 이미지가 선택되어 있는지 확인
+const isStoryboardSelected = (scene) => {
+  return referenceImages.value.some(item => item.url === scene.scene_image_url)
 }
 
 // 이미지가 선택되었는지 확인
@@ -1535,12 +1634,17 @@ onMounted(async () => {
     await loadLastUsedSettings()
   }
   
+  // 스토리보드 이미지 로드 (기본 탭이 storyboard이므로)
+  loadStoryboardImages()
+  
   // 참조 이미지가 있으면 추가 (수정 모드)
   if (props.referenceImage) {
     referenceImages.value.push({
       url: props.referenceImage,
       isUrl: true
     })
+    // 참조 이미지가 있으면 upload 탭으로 변경
+    referenceTab.value = 'upload'
   }
   
   // 카테고리가 이미 scene이면 씬 목록 로드
@@ -2553,6 +2657,40 @@ onMounted(async () => {
   color: white;
   font-size: 1.5rem;
   font-weight: bold;
+}
+
+/* 스토리보드 아이템 스타일 */
+.storyboard-item .library-item-overlay {
+  background: linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.7) 100%);
+  opacity: 1;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 8px;
+}
+
+.storyboard-item.selected .library-item-overlay {
+  background: linear-gradient(to bottom, rgba(79, 70, 229, 0.3) 0%, rgba(79, 70, 229, 0.9) 100%);
+}
+
+.scene-number {
+  color: white;
+  font-size: 0.85rem;
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.storyboard-item .check-icon {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: var(--primary-color);
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
 }
 
 .spinner {
