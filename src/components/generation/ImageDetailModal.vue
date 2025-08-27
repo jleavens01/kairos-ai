@@ -15,7 +15,106 @@
         <div class="modal-content">
           <!-- 이미지 영역 -->
           <div class="image-section">
+            <!-- 편집 모드 -->
+            <div v-if="isEditMode" class="edit-container">
+              <!-- 편집 툴바 -->
+              <div class="edit-toolbar">
+                <div class="toolbar-group">
+                  <button 
+                    @click="setEditMode('crop')" 
+                    class="toolbar-btn"
+                    :class="{ active: currentEditMode === 'crop' }"
+                    title="크롭"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M6 2v14a2 2 0 0 0 2 2h14"/>
+                      <path d="M2 6h14a2 2 0 0 1 2 2v14"/>
+                    </svg>
+                  </button>
+                  <button 
+                    @click="setEditMode('layers')" 
+                    class="toolbar-btn"
+                    :class="{ active: currentEditMode === 'layers' }"
+                    title="레이어"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+                      <polyline points="2 17 12 22 22 17"/>
+                      <polyline points="2 12 12 17 22 12"/>
+                    </svg>
+                  </button>
+                </div>
+                
+                <!-- 크롭 비율 선택 -->
+                <div v-if="currentEditMode === 'crop'" class="toolbar-group">
+                  <select v-model="selectedCropRatio" @change="onCropRatioChange" class="ratio-select">
+                    <option v-for="(ratio, key) in cropRatios" :key="key" :value="key">
+                      {{ ratio.label }}
+                    </option>
+                  </select>
+                </div>
+                
+                <!-- 레이어 컨트롤 -->
+                <div v-if="currentEditMode === 'layers'" class="toolbar-group">
+                  <button @click="showLayerSelector = true" class="toolbar-btn" title="레이어 추가">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <line x1="12" y1="5" x2="12" y2="19"/>
+                      <line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                  </button>
+                </div>
+                
+                <div class="toolbar-group">
+                  <button @click="applyEdit" class="btn-apply" :disabled="isProcessing">
+                    {{ isProcessing ? '처리 중...' : '적용' }}
+                  </button>
+                  <button @click="cancelEdit" class="btn-cancel">취소</button>
+                </div>
+              </div>
+              
+              <!-- 캔버스 -->
+              <canvas 
+                ref="editorCanvas"
+                class="editor-canvas"
+                @mousedown="onCanvasMouseDown"
+                @mousemove="onCanvasMouseMove"
+                @mouseup="onCanvasMouseUp"
+                @mouseleave="onCanvasMouseUp"
+              ></canvas>
+              
+              <!-- 레이어 패널 -->
+              <div v-if="currentEditMode === 'layers' && editor?.layers.length > 0" class="layers-panel">
+                <h4>레이어</h4>
+                <div 
+                  v-for="(layer, index) in editor.layers" 
+                  :key="layer.id"
+                  class="layer-item"
+                  :class="{ active: index === activeLayerIndex }"
+                  @click="setActiveLayer(index)"
+                >
+                  <input 
+                    type="checkbox" 
+                    v-model="layer.visible"
+                    @change="editor.drawImage()"
+                  />
+                  <span>{{ layer.name }}</span>
+                  <input 
+                    type="range" 
+                    min="0" 
+                    max="1" 
+                    step="0.1"
+                    v-model.number="layer.opacity"
+                    @input="editor.drawImage()"
+                    title="투명도"
+                  />
+                  <button @click="removeLayer(index)" class="btn-remove-layer">×</button>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 일반 보기 모드 -->
             <img 
+              v-else
               :src="image.storage_image_url || image.result_image_url || image.thumbnail_url" 
               :alt="image.prompt_used || 'AI Generated Image'"
               class="detail-image"
@@ -24,7 +123,7 @@
             />
             
             <!-- 줌 인디케이터 -->
-            <div v-if="!isZoomed" class="zoom-hint">
+            <div v-if="!isZoomed && !isEditMode" class="zoom-hint">
               🔍 클릭하여 확대
             </div>
           </div>
@@ -36,11 +135,52 @@
               <h4>기본 정보</h4>
               <div class="info-item">
                 <span class="label">카테고리:</span>
-                <span class="value">{{ getCategoryLabel(image.image_type) }}</span>
+                <div v-if="!isEditingCategory" class="category-container">
+                  <span class="value">{{ getCategoryLabel(image.image_type) }}</span>
+                  <button @click="startEditCategory" class="edit-category-btn" title="카테고리 편집">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                    </svg>
+                  </button>
+                </div>
+                <div v-else class="category-edit-container">
+                  <select 
+                    v-model="editingCategoryValue"
+                    @change="saveEditCategory"
+                    class="category-select"
+                  >
+                    <option value="scene">씬</option>
+                    <option value="character">캐릭터</option>
+                    <option value="background">배경</option>
+                    <option value="object">오브젝트</option>
+                  </select>
+                  <button @click="cancelEditCategory" class="cancel-btn" title="취소">✕</button>
+                </div>
               </div>
               <div v-if="image.element_name" class="info-item">
                 <span class="label">이름:</span>
-                <span class="value">{{ image.element_name }}</span>
+                <div v-if="!isEditingName" class="name-container">
+                  <span class="value">{{ image.element_name }}</span>
+                  <button @click="startEditName" class="edit-name-btn" title="이름 편집">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                    </svg>
+                  </button>
+                </div>
+                <div v-else class="name-edit-container">
+                  <input 
+                    v-model="editingNameValue"
+                    @keyup.enter="saveEditName"
+                    @keyup.escape="cancelEditName"
+                    class="name-input"
+                    placeholder="이름 입력"
+                    maxlength="100"
+                  />
+                  <button @click="saveEditName" class="save-btn" title="저장">✓</button>
+                  <button @click="cancelEditName" class="cancel-btn" title="취소">✕</button>
+                </div>
               </div>
               <div class="info-item">
                 <span class="label">모델:</span>
@@ -123,10 +263,24 @@
                   <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
                 </svg>
               </button>
-              <button @click="handleImageEdit" class="icon-btn btn-secondary" title="이미지 수정">
+              <button @click="handleImageRegenerate" class="icon-btn btn-secondary" title="이미지 재생성">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="23 4 23 10 17 10"/>
+                  <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                </svg>
+              </button>
+              <button @click="handleImageEdit" class="icon-btn btn-edit" title="이미지 편집">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                   <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                </svg>
+              </button>
+              <button @click="openDrawCanvas" class="icon-btn btn-draw" title="그리기">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 19l7-7 3 3-7 7-3-3z"/>
+                  <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
+                  <path d="M2 2l7.586 7.586"/>
+                  <circle cx="11" cy="11" r="2"/>
                 </svg>
               </button>
               <button @click="handleVideoGeneration" class="icon-btn btn-primary" title="영상 생성">
@@ -140,12 +294,24 @@
         </div>
       </div>
     </div>
+    
+    <!-- DrawCanvas 모달 -->
+    <div v-if="showDrawCanvas" class="draw-canvas-modal">
+      <DrawCanvas
+        :imageUrl="image.storage_image_url || image.result_image_url || image.thumbnail_url"
+        @save="handleDrawCanvasSave"
+        @close="closeDrawCanvas"
+      />
+    </div>
   </Teleport>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, nextTick, watch, onMounted, onUnmounted } from 'vue'
 import { supabase } from '@/utils/supabase'
+import { createImageEditor, CROP_RATIOS, EDIT_MODES } from '@/utils/imageEditor'
+import { useAuthStore } from '@/stores/auth'
+import DrawCanvas from './DrawCanvas.vue'
 
 const props = defineProps({
   show: {
@@ -155,13 +321,35 @@ const props = defineProps({
   image: {
     type: Object,
     required: true
+  },
+  projectId: {
+    type: String,
+    default: null
   }
 })
 
 const emit = defineEmits(['close', 'update', 'edit-tags', 'connect-scene', 'edit-image', 'generate-video'])
 
+// Stores
+const authStore = useAuthStore()
+
 // State
 const isZoomed = ref(false)
+const isEditMode = ref(false)
+const currentEditMode = ref(EDIT_MODES.NONE)
+const isProcessing = ref(false)
+const editor = ref(null)
+const editorCanvas = ref(null)
+const selectedCropRatio = ref('FREE')
+const cropRatios = CROP_RATIOS
+const showLayerSelector = ref(false)
+const availableImages = ref([])
+const activeLayerIndex = ref(-1)
+const isEditingName = ref(false)
+const editingNameValue = ref('')
+const isEditingCategory = ref(false)
+const editingCategoryValue = ref('')
+const showDrawCanvas = ref(false)
 
 // Methods
 const handleOverlayClick = () => {
@@ -328,8 +516,173 @@ const copyPrompt = async () => {
   }
 }
 
-const handleImageEdit = () => {
-  // 이미지 수정을 위한 데이터 전달
+// 이름 편집 관련 함수
+const startEditName = () => {
+  isEditingName.value = true
+  editingNameValue.value = props.image.element_name || ''
+}
+
+const cancelEditName = () => {
+  isEditingName.value = false
+  editingNameValue.value = ''
+}
+
+const saveEditName = async () => {
+  if (!editingNameValue.value.trim()) {
+    alert('이름을 입력해주세요.')
+    return
+  }
+  
+  try {
+    const { error } = await supabase
+      .from('gen_images')
+      .update({ element_name: editingNameValue.value.trim() })
+      .eq('id', props.image.id)
+    
+    if (error) throw error
+    
+    // 부모 컴포넌트에 업데이트 알림
+    emit('update', { ...props.image, element_name: editingNameValue.value.trim() })
+    
+    isEditingName.value = false
+    editingNameValue.value = ''
+  } catch (error) {
+    console.error('이름 변경 실패:', error)
+    alert('이름 변경에 실패했습니다.')
+  }
+}
+
+// 카테고리 편집 관련 함수
+const startEditCategory = () => {
+  isEditingCategory.value = true
+  editingCategoryValue.value = props.image.image_type || 'scene'
+}
+
+const cancelEditCategory = () => {
+  isEditingCategory.value = false
+  editingCategoryValue.value = ''
+}
+
+const saveEditCategory = async () => {
+  if (!editingCategoryValue.value) {
+    alert('카테고리를 선택해주세요.')
+    return
+  }
+  
+  try {
+    const { error } = await supabase
+      .from('gen_images')
+      .update({ image_type: editingCategoryValue.value })
+      .eq('id', props.image.id)
+    
+    if (error) throw error
+    
+    // 부모 컴포넌트에 업데이트 알림
+    emit('update', { ...props.image, image_type: editingCategoryValue.value })
+    
+    isEditingCategory.value = false
+    editingCategoryValue.value = ''
+  } catch (error) {
+    console.error('카테고리 변경 실패:', error)
+    alert('카테고리 변경에 실패했습니다.')
+  }
+}
+
+// DrawCanvas 관련 메서드
+const openDrawCanvas = () => {
+  showDrawCanvas.value = true
+}
+
+const closeDrawCanvas = () => {
+  showDrawCanvas.value = false
+}
+
+const handleDrawCanvasSave = async (data) => {
+  try {
+    // 그리기가 추가된 이미지를 저장
+    const fileName = `drawn_${Date.now()}.png`
+    const projectId = props.projectId || props.image.project_id
+    const userId = authStore.user?.id
+    
+    if (!userId) {
+      throw new Error('로그인이 필요합니다.')
+    }
+    
+    // ref-images 버킷에 저장 (user_id/edited/projectId/fileName 형식)
+    const filePath = `${userId}/edited/${projectId}/${fileName}`
+    
+    console.log('Saving drawn image:', {
+      bucket: 'ref-images',
+      path: filePath,
+      fileSize: data.file.size
+    })
+    
+    const { error: uploadError } = await supabase.storage
+      .from('ref-images')
+      .upload(filePath, data.file, {
+        cacheControl: '3600',
+        upsert: false
+      })
+    
+    if (uploadError) {
+      console.error('Upload error:', uploadError)
+      throw uploadError
+    }
+    
+    // Storage URL 가져오기
+    const { data: { publicUrl } } = supabase.storage
+      .from('ref-images')
+      .getPublicUrl(filePath)
+    
+    // 데이터베이스에 새 이미지 레코드 생성
+    const { data: newImage, error: dbError } = await supabase
+      .from('gen_images')
+      .insert({
+        project_id: projectId,
+        production_sheet_id: props.image.production_sheet_id || null,
+        element_name: `${props.image.element_name || 'Edited'}_drawn`,
+        image_type: props.image.image_type || 'scene',
+        generation_model: 'edited',
+        prompt_used: `Drawn on: ${props.image.element_name || 'image'}`,
+        custom_prompt: `Drawing annotations added`,
+        generation_status: 'completed',
+        storage_image_url: publicUrl,
+        result_image_url: publicUrl,
+        reference_image_url: props.image.storage_image_url || props.image.result_image_url,
+        style_id: props.image.style_id || null,
+        style_name: props.image.style_name || null,
+        metadata: {
+          original_image_id: props.image.id,
+          edit_type: 'drawing',
+          annotations: data.annotations || [],
+          created_by: 'draw_canvas',
+          aspect_ratio: props.image.metadata?.aspect_ratio || '1:1'
+        },
+        tags: []
+      })
+      .select()
+      .single()
+    
+    if (dbError) {
+      console.error('Database error:', dbError)
+      throw dbError
+    }
+    
+    // 부모 컴포넌트에 알림
+    emit('update', newImage)
+    
+    // DrawCanvas 닫기
+    closeDrawCanvas()
+    
+    alert('그리기가 저장되었습니다.')
+  } catch (error) {
+    console.error('그리기 저장 실패:', error)
+    alert('그리기 저장에 실패했습니다: ' + error.message)
+  }
+}
+
+const handleImageRegenerate = () => {
+  // 이미지 재생성을 위한 데이터 전달 (기존 기능)
   const editData = {
     model: props.image.generation_model || 'gpt-4o',
     size: props.image.metadata?.image_size || '1024x1024',
@@ -341,6 +694,402 @@ const handleImageEdit = () => {
   
   emit('edit-image', editData)
   emit('close')
+}
+
+const handleImageEdit = async () => {
+  isEditMode.value = true
+  currentEditMode.value = EDIT_MODES.CROP
+  
+  // 편집기 초기화
+  await nextTick()
+  if (editorCanvas.value) {
+    const imageUrl = props.image.storage_image_url || props.image.result_image_url || props.image.thumbnail_url
+    editor.value = createImageEditor(imageUrl)
+    await editor.value.initCanvas(editorCanvas.value)
+    editor.value.setEditMode(EDIT_MODES.CROP)
+  }
+  
+  // 프로젝트의 다른 이미지들 로드 (레이어용)
+  if (props.projectId || props.image.project_id) {
+    loadAvailableImages()
+  }
+}
+
+// 편집 모드 설정
+const setEditMode = (mode) => {
+  currentEditMode.value = mode
+  if (editor.value) {
+    editor.value.setEditMode(mode)
+  }
+}
+
+// 크롭 비율 변경
+const onCropRatioChange = () => {
+  if (editor.value) {
+    const ratio = CROP_RATIOS[selectedCropRatio.value]
+    editor.value.setCropRatio(ratio?.value || null)
+  }
+}
+
+// 캔버스 마우스 이벤트
+const onCanvasMouseDown = (e) => {
+  if (editor.value) {
+    editor.value.handleMouseDown(e)
+  }
+}
+
+const onCanvasMouseMove = (e) => {
+  if (editor.value) {
+    editor.value.handleMouseMove(e)
+  }
+}
+
+const onCanvasMouseUp = () => {
+  if (editor.value) {
+    editor.value.handleMouseUp()
+  }
+}
+
+// 활성 레이어 설정
+const setActiveLayer = (index) => {
+  activeLayerIndex.value = index
+  if (editor.value) {
+    editor.value.activeLayerIndex = index
+  }
+}
+
+// 레이어 제거
+const removeLayer = (index) => {
+  if (editor.value) {
+    editor.value.removeLayer(index)
+    activeLayerIndex.value = editor.value.activeLayerIndex
+  }
+}
+
+// 사용 가능한 이미지 로드
+const loadAvailableImages = async () => {
+  try {
+    const projectId = props.projectId || props.image.project_id
+    const { data, error } = await supabase
+      .from('gen_images')
+      .select('id, element_name, storage_image_url, result_image_url, thumbnail_url, image_type')
+      .eq('project_id', projectId)
+      .eq('generation_status', 'completed')
+      .order('created_at', { ascending: false })
+      .limit(50)
+    
+    if (error) throw error
+    
+    availableImages.value = data.filter(img => 
+      img.id !== props.image.id && 
+      (img.storage_image_url || img.result_image_url || img.thumbnail_url)
+    )
+  } catch (error) {
+    console.error('이미지 로드 실패:', error)
+  }
+}
+
+// 편집 적용
+const applyEdit = async () => {
+  if (!editor.value) return
+  
+  isProcessing.value = true
+  
+  try {
+    if (currentEditMode.value === EDIT_MODES.CROP) {
+      // 크롭 적용
+      const result = await editor.value.applyCrop()
+      
+      // 새 이미지로 저장 (Supabase Storage에 업로드)
+      const fileName = `edited_${Date.now()}.png`
+      const projectId = props.projectId || props.image.project_id
+      const userId = authStore.user?.id
+      
+      // 카테고리 결정 (image_type 기반)
+      let category = 'scene' // 기본값
+      
+      // image_type 확인 및 매핑
+      if (props.image.image_type === 'character' || props.image.is_character) {
+        category = 'character'
+      } else if (props.image.image_type === 'background' || props.image.is_background) {
+        category = 'background'
+      } else if (props.image.image_type === 'object' || props.image.is_object) {
+        category = 'object'
+      } else if (props.image.image_type === 'scene') {
+        category = 'scene'
+      } else if (props.image.image_type === 'generated') {
+        // 'generated'는 유효한 카테고리가 아니므로 scene으로 매핑
+        category = 'scene'
+      }
+      
+      // RLS 정책에 맞는 경로 설정
+      // 시도 1: user_id가 첫 번째 경로여야 할 수 있음
+      let filePath = ''
+      if (userId) {
+        // user_id/projectId/category 형식 시도
+        filePath = `${userId}/${projectId}/${category}/${fileName}`
+      } else {
+        // 또는 projectId/category 형식
+        filePath = `${projectId}/${category}/${fileName}`
+      }
+      
+      // 디버깅 정보 출력
+      console.log('Storage upload attempt:', {
+        bucket: 'gen-images',
+        filePath,
+        pathComponents: {
+          userId,
+          projectId,
+          category,
+          fileName
+        },
+        imageInfo: {
+          imageType: props.image.image_type,
+          isCharacter: props.image.is_character,
+          isBackground: props.image.is_background,
+          isObject: props.image.is_object,
+        },
+        fileInfo: {
+          size: result.blob.size,
+          type: result.blob.type
+        },
+        auth: {
+          userId: authStore.user?.id,
+          email: authStore.user?.email,
+          hasSession: !!authStore.user
+        }
+      })
+      
+      // 다양한 경로 형식 시도를 위한 로그
+      console.log('Possible path formats:', [
+        `${userId}/${projectId}/${category}/${fileName}`,
+        `${projectId}/${category}/${fileName}`,
+        `${userId}/${category}/${fileName}`,
+        `${category}/${fileName}`
+      ])
+      
+      // 현재 세션 확인
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      if (sessionError || !session) {
+        console.error('Session error:', sessionError)
+        throw new Error('인증 세션이 없습니다. 다시 로그인해주세요.')
+      }
+      
+      console.log('Current session:', {
+        user: session.user?.id,
+        email: session.user?.email,
+        accessToken: session.access_token ? 'present' : 'missing'
+      })
+      
+      // ref-images 버킷 사용 (gen-images 버킷의 RLS 정책 문제 회피)
+      const refImagePath = `${userId}/edited/${projectId}/${fileName}`
+      
+      console.log('Trying ref-images bucket with path:', refImagePath)
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('ref-images')
+        .upload(refImagePath, result.blob, {
+          cacheControl: '3600',
+          upsert: false
+        })
+      
+      if (uploadError) {
+        console.error('Storage upload error details:', {
+          error: uploadError,
+          message: uploadError.message,
+          statusCode: uploadError.statusCode,
+          bucket: 'ref-images',
+          path: refImagePath,
+          hint: uploadError.hint,
+          details: uploadError.details,
+          error_description: uploadError.error_description
+        })
+        
+        // 더 자세한 에러 메시지
+        let errorMsg = '이미지 저장 실패: '
+        if (uploadError.message?.includes('row-level security')) {
+          errorMsg += 'RLS 정책 위반. 경로 형식을 확인하세요.'
+          console.error('RLS 정책 위반. 예상 경로 형식: {project_id}/{category}/{filename}')
+          console.error('시도한 경로:', filePath)
+        } else if (uploadError.message?.includes('Bucket not found')) {
+          errorMsg += '버킷을 찾을 수 없습니다.'
+        } else if (uploadError.statusCode === 401) {
+          errorMsg += '인증 오류. 다시 로그인하세요.'
+        } else {
+          errorMsg += uploadError.message || '알 수 없는 오류'
+        }
+        
+        alert(errorMsg)
+        throw uploadError
+      }
+      
+      // Storage URL 가져오기 (ref-images 버킷 사용)
+      const { data: { publicUrl } } = supabase.storage
+        .from('ref-images')
+        .getPublicUrl(refImagePath)
+      
+      // 데이터베이스에 새 이미지 레코드 생성
+      const { data: newImage, error: dbError } = await supabase
+        .from('gen_images')
+        .insert({
+          project_id: projectId,
+          production_sheet_id: props.image.production_sheet_id || null,
+          element_name: `${props.image.element_name || 'Edited'}_cropped`,
+          image_type: props.image.image_type || 'scene',
+          generation_model: 'edited',
+          prompt_used: `Cropped from: ${props.image.element_name || 'image'}`,
+          custom_prompt: `Cropped version`,
+          generation_status: 'completed',
+          storage_image_url: publicUrl,
+          result_image_url: publicUrl,
+          reference_image_url: props.image.storage_image_url || props.image.result_image_url,
+          style_id: props.image.style_id || null,
+          style_name: props.image.style_name || null,
+          metadata: {
+            original_image_id: props.image.id,
+            edit_type: 'crop',
+            dimensions: `${result.width}x${result.height}`,
+            created_by: 'image_editor',
+            aspect_ratio: props.image.metadata?.aspect_ratio || '1:1'
+          },
+          tags: []
+        })
+        .select()
+        .single()
+      
+      if (dbError) throw dbError
+      
+      // 부모 컴포넌트에 알림
+      emit('update', newImage)
+      
+      // 편집 모드 종료
+      cancelEdit()
+      
+      alert('크롭된 이미지가 저장되었습니다.')
+    } else if (currentEditMode.value === EDIT_MODES.LAYERS) {
+      // 레이어 합성 적용
+      const result = await editor.value.exportImage()
+      
+      // 새 이미지로 저장 (Supabase Storage에 업로드)
+      const fileName = `layered_${Date.now()}.png`
+      const projectId = props.projectId || props.image.project_id
+      const userId = authStore.user?.id
+      
+      // 카테고리 결정 (image_type 기반)
+      let category = 'scene' // 기본값
+      
+      // image_type 확인 및 매핑
+      if (props.image.image_type === 'character' || props.image.is_character) {
+        category = 'character'
+      } else if (props.image.image_type === 'background' || props.image.is_background) {
+        category = 'background'
+      } else if (props.image.image_type === 'object' || props.image.is_object) {
+        category = 'object'
+      } else if (props.image.image_type === 'scene') {
+        category = 'scene'
+      } else if (props.image.image_type === 'generated') {
+        // 'generated'는 유효한 카테고리가 아니므로 scene으로 매핑
+        category = 'scene'
+      }
+      
+      // RLS 정책에 맞는 경로 설정
+      // 시도 1: user_id가 첫 번째 경로여야 할 수 있음
+      let filePath = ''
+      if (userId) {
+        // user_id/projectId/category 형식 시도
+        filePath = `${userId}/${projectId}/${category}/${fileName}`
+      } else {
+        // 또는 projectId/category 형식
+        filePath = `${projectId}/${category}/${fileName}`
+      }
+      
+      console.log('Layers storage upload:', {
+        bucket: 'gen-images',
+        filePath,
+        projectId,
+        category,
+        fileSize: result.blob.size
+      })
+      
+      // ref-images 버킷 사용 (gen-images 버킷의 RLS 정책 문제 회피)
+      const refImagePath = `${userId}/edited/${projectId}/${fileName}`
+      
+      console.log('Trying ref-images bucket with path:', refImagePath)
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('ref-images')
+        .upload(refImagePath, result.blob, {
+          cacheControl: '3600',
+          upsert: false
+        })
+      
+      if (uploadError) {
+        console.error('Layers upload error:', uploadError)
+        alert('레이어 이미지 저장 실패: ' + (uploadError.message || '알 수 없는 오류'))
+        throw uploadError
+      }
+      
+      // Storage URL 가져오기 (ref-images 버킷 사용)
+      const { data: { publicUrl } } = supabase.storage
+        .from('ref-images')
+        .getPublicUrl(refImagePath)
+      
+      // 데이터베이스에 새 이미지 레코드 생성
+      const { data: newImage, error: dbError } = await supabase
+        .from('gen_images')
+        .insert({
+          project_id: projectId,
+          production_sheet_id: props.image.production_sheet_id || null,
+          element_name: `${props.image.element_name || 'Edited'}_layered`,
+          image_type: props.image.image_type || 'scene',
+          generation_model: 'edited',
+          prompt_used: `Layered from: ${props.image.element_name || 'image'}`,
+          custom_prompt: `Layered with ${editor.value.layers.length} layers`,
+          generation_status: 'completed',
+          storage_image_url: publicUrl,
+          result_image_url: publicUrl,
+          reference_image_url: props.image.storage_image_url || props.image.result_image_url,
+          style_id: props.image.style_id || null,
+          style_name: props.image.style_name || null,
+          metadata: {
+            original_image_id: props.image.id,
+            edit_type: 'layers',
+            layer_count: editor.value.layers.length,
+            created_by: 'image_editor',
+            aspect_ratio: props.image.metadata?.aspect_ratio || '1:1'
+          },
+          tags: []
+        })
+        .select()
+        .single()
+      
+      if (dbError) throw dbError
+      
+      // 부모 컴포넌트에 알림
+      emit('update', newImage)
+      
+      // 편집 모드 종료
+      cancelEdit()
+      
+      alert('레이어 합성 이미지가 저장되었습니다.')
+    }
+  } catch (error) {
+    console.error('편집 적용 실패:', error)
+    alert('이미지 저장에 실패했습니다.')
+  } finally {
+    isProcessing.value = false
+  }
+}
+
+// 편집 취소
+const cancelEdit = () => {
+  if (editor.value) {
+    editor.value.dispose()
+    editor.value = null
+  }
+  isEditMode.value = false
+  currentEditMode.value = EDIT_MODES.NONE
+  showLayerSelector.value = false
 }
 
 const handleVideoGeneration = () => {
@@ -660,9 +1409,304 @@ const handleVideoGeneration = () => {
   box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
 }
 
+.icon-btn.btn-edit {
+  background: #f59e0b;
+  color: white;
+  border-color: #f59e0b;
+}
+
+.icon-btn.btn-edit:hover {
+  background: #d97706;
+  border-color: #d97706;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+}
+
+.icon-btn.btn-draw {
+  background: #06b6d4;
+  color: white;
+  border-color: #06b6d4;
+}
+
+.icon-btn.btn-draw:hover {
+  background: #0891b2;
+  border-color: #0891b2;
+  box-shadow: 0 2px 8px rgba(6, 182, 212, 0.3);
+}
+
 .icon-btn svg {
   width: 20px;
   height: 20px;
+}
+
+/* 편집 모드 스타일 */
+.edit-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  overflow: auto;
+}
+
+.edit-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 10px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: var(--text-secondary);
+}
+
+.toolbar-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.toolbar-btn.active {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.ratio-select {
+  padding: 6px 10px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.btn-apply, .btn-cancel {
+  padding: 6px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.btn-apply {
+  background: var(--primary-color);
+  color: white;
+  border: none;
+}
+
+.btn-apply:hover:not(:disabled) {
+  background: var(--primary-dark);
+}
+
+.btn-apply:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-cancel {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.btn-cancel:hover {
+  background: var(--bg-hover);
+}
+
+.editor-canvas {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  max-height: 600px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: #f0f0f0;
+  cursor: crosshair;
+  width: auto;
+  height: auto;
+}
+
+.layers-panel {
+  position: absolute;
+  right: 10px;
+  top: 60px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px;
+  width: 250px;
+  max-height: 400px;
+  overflow-y: auto;
+  z-index: 10;
+}
+
+.layers-panel h4 {
+  margin: 0 0 10px 0;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.layer-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-bottom: 5px;
+  transition: background 0.2s;
+}
+
+.layer-item:hover {
+  background: var(--bg-hover);
+}
+
+.layer-item.active {
+  background: var(--bg-secondary);
+  border: 1px solid var(--primary-color);
+}
+
+.layer-item span {
+  flex: 1;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.layer-item input[type="range"] {
+  width: 60px;
+}
+
+.btn-remove-layer {
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  transition: color 0.2s;
+}
+
+.btn-remove-layer:hover {
+  color: #ef4444;
+}
+
+/* 이름 편집 스타일 */
+.name-container,
+.category-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.edit-name-btn,
+.edit-category-btn {
+  padding: 4px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+  border-radius: 4px;
+}
+
+.edit-name-btn:hover,
+.edit-category-btn:hover {
+  background: var(--bg-hover);
+  color: var(--primary-color);
+}
+
+.name-edit-container,
+.category-edit-container {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.name-input {
+  flex: 1;
+  padding: 4px 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.name-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.category-select {
+  flex: 1;
+  padding: 4px 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.category-select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.category-select option {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.save-btn, .cancel-btn {
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.save-btn {
+  color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+.save-btn:hover {
+  background: var(--primary-color);
+  color: white;
+}
+
+.cancel-btn {
+  color: var(--text-secondary);
+}
+
+.cancel-btn:hover {
+  background: var(--bg-hover);
 }
 
 /* 반응형 */
@@ -679,6 +1723,53 @@ const handleVideoGeneration = () => {
 
   .image-section {
     min-height: 300px;
+  }
+  
+  .layers-panel {
+    position: relative;
+    right: auto;
+    top: auto;
+    width: 100%;
+    margin-top: 10px;
+  }
+}
+
+/* DrawCanvas 모달 스타일 */
+.draw-canvas-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 20px;
+}
+
+.draw-canvas-modal > div {
+  width: 100%;
+  max-width: 1200px;
+  max-height: 90vh;
+  background: var(--bg-primary);
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 모바일 반응형 */
+@media (max-width: 768px) {
+  .draw-canvas-modal {
+    padding: 10px;
+  }
+  
+  .draw-canvas-modal > div {
+    max-width: 100%;
+    max-height: 100%;
+    border-radius: 8px;
   }
 }
 </style>

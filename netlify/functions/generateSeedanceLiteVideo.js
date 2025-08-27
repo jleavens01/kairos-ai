@@ -1,6 +1,12 @@
 // FAL AI - ByteDance SeedDance v1 Lite 비디오 생성 함수
 import { createClient } from '@supabase/supabase-js';
 import jwt from 'jsonwebtoken';
+import { fal } from '@fal-ai/client';
+
+// FAL AI 클라이언트 설정
+fal.config({
+  credentials: process.env.FAL_API_KEY
+});
 
 export const handler = async (event) => {
   const headers = {
@@ -65,10 +71,6 @@ export const handler = async (event) => {
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    // FAL AI API 호출
-    const apiKey = process.env.FAL_API_KEY;
-    if (!apiKey) throw new Error("Server configuration error: FAL API key is missing.");
-
     console.log('Calling FAL AI SeedDance Lite API with:', { 
       prompt: prompt.substring(0, 100), 
       resolution, 
@@ -82,55 +84,49 @@ export const handler = async (event) => {
                          (process.env.URL && process.env.URL.includes('localhost'));
 
     // FAL AI 엔드포인트 - SeedDance v1 Lite
-    const submitUrl = 'https://queue.fal.run/fal-ai/bytedance/seedance/v1/lite/image-to-video/submit';
+    const apiEndpoint = 'fal-ai/bytedance/seedance/v1/lite/image-to-video';
     
-    const requestBody = {
-      input: {
-        prompt,
-        image_url: imageUrl,
-        resolution,
-        duration: duration.toString(), // FAL expects string
-        camera_fixed: cameraFixed
-      }
+    // FAL AI 요청 본문 구성
+    const falRequestBody = {
+      prompt,
+      image_url: imageUrl,
+      resolution,
+      duration: duration.toString(), // FAL expects string
+      camera_fixed: cameraFixed
     };
 
     // 끝 이미지가 제공되면 추가
     if (endImageUrl) {
-      requestBody.input.end_image_url = endImageUrl;
+      falRequestBody.end_image_url = endImageUrl;
       console.log('Using end image for SeedDance Lite:', endImageUrl);
     }
 
     if (seed !== undefined) {
-      requestBody.input.seed = seed;
+      falRequestBody.seed = seed;
     }
 
+    // FAL AI 큐에 제출
+    const submitOptions = {
+      input: falRequestBody
+    };
+    
     // 프로덕션 환경에서 웹훅 URL 추가
     if (!isDevelopment) {
       const baseUrl = process.env.URL || process.env.DEPLOY_URL || 'https://kairos-ai-pd.netlify.app';
-      requestBody.webhook_url = `${baseUrl}/.netlify/functions/fal-webhook-handler`;
-      console.log('Webhook URL configured for Lite:', requestBody.webhook_url);
+      submitOptions.webhookUrl = `${baseUrl}/.netlify/functions/fal-webhook-handler`;
+      console.log('Webhook URL configured for Lite:', submitOptions.webhookUrl);
+    } else {
+      console.log('Using polling for development environment');
     }
 
-    const submitResponse = await fetch(submitUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Key ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(requestBody)
+    // FAL AI SDK를 사용하여 제출
+    console.log('Submitting to FAL AI with endpoint:', apiEndpoint);
+    const { request_id: requestId } = await fal.queue.submit(apiEndpoint, submitOptions);
+    
+    console.log('FAL AI request submitted successfully:', {
+      requestId,
+      webhookConfigured: !!submitOptions.webhookUrl
     });
-
-    if (!submitResponse.ok) {
-      const errorText = await submitResponse.text();
-      console.error('FAL AI submit error:', errorText);
-      throw new Error(`FAL AI API Error: ${errorText}`);
-    }
-
-    const submitData = await submitResponse.json();
-    const requestId = submitData.request_id;
-    const statusUrl = submitData.status_url || `https://queue.fal.run/fal-ai/bytedance/seedance/v1/lite/image-to-video/requests/${requestId}/status`;
-
-    console.log('FAL AI request submitted:', requestId, 'Status URL:', statusUrl);
 
     // 크레딧 계산 (Lite 버전은 더 저렴)
     const calculateCredits = () => {

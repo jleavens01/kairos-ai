@@ -313,9 +313,9 @@
           <div class="inline-item category-item">
             <label class="inline-label">카테고리</label>
             <select v-model="category" class="form-select">
+              <option value="scene">씬</option>
               <option value="character">캐릭터</option>
               <option value="background">배경</option>
-              <option value="scene">씬</option>
               <option value="object">오브젝트</option>
             </select>
           </div>
@@ -526,7 +526,7 @@ const prompt = ref(props.initialPrompt)
 const selectedModel = ref(props.initialModel || 'gpt-image-1')
 const referenceImages = ref([])
 const imageSize = ref(props.initialSize || '1024x1024')
-const category = ref(props.initialCategory || (props.characterName ? 'character' : 'character'))
+const category = ref(props.initialCategory || (props.characterName ? 'character' : 'scene'))
 const characterName = ref(props.initialName || props.characterName)
 const sceneNumber = ref(null)
 const generating = ref(false)

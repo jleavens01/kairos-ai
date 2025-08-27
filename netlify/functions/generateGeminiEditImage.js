@@ -14,6 +14,10 @@ export const generateImage = async ({
   style,
   projectId,
   sceneNumber,
+  sceneId,
+  sceneName,
+  category = 'scene',
+  elementName,
   user,
   supabaseAdmin,
   metadata = {}
@@ -68,12 +72,29 @@ export const generateImage = async ({
   let dbImage; // 변수를 try 블록 외부에 선언
   
   try {
+    // element_name 결정 로직
+    let finalElementName = elementName;
+    
+    // elementName이 없는 경우 카테고리에 따라 설정
+    if (!finalElementName) {
+      if (category === 'scene' && sceneName) {
+        finalElementName = sceneName;
+      } else if (category === 'scene' && sceneNumber) {
+        finalElementName = `씬 ${sceneNumber}`;
+      } else if (category === 'character' || category === 'background' || category === 'object') {
+        // 프롬프트에서 첫 부분 추출
+        finalElementName = prompt.split(',')[0].substring(0, 50);
+      } else {
+        finalElementName = prompt.substring(0, 50);
+      }
+    }
+    
     // 1. gen_images 테이블에 초기 레코드 생성
     const imageRecord = {
       project_id: projectId,
-      production_sheet_id: sceneNumber,  // scene_number가 아닌 production_sheet_id
-      element_name: prompt.substring(0, 100),
-      image_type: 'generated',  // element_type가 아닌 image_type
+      production_sheet_id: sceneId || sceneNumber,  // sceneId 우선 사용
+      element_name: finalElementName,
+      image_type: category || 'scene',  // 카테고리를 image_type으로 설정
       generation_model: 'gemini-25-flash-edit',
       prompt_used: finalPrompt,  // generation_prompt가 아닌 prompt_used
       custom_prompt: prompt,

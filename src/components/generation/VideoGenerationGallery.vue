@@ -573,6 +573,18 @@ const toggleKeep = async (video) => {
 const downloadVideo = async (video) => {
   if (video.storage_video_url) {
     try {
+      // 업스케일 버전이 있는 경우 선택 옵션 제공
+      let videoUrl = video.storage_video_url
+      let versionSuffix = ''
+      
+      if (video.upscale_video_url) {
+        const choice = confirm('업스케일 버전을 다운로드하시겠습니까?\n\n확인: 업스케일 버전 (고화질)\n취소: 원본 버전')
+        if (choice) {
+          videoUrl = video.upscale_video_url
+          versionSuffix = '_upscaled'
+        }
+      }
+      
       // 프로젝트 정보 가져오기
       const { data: projectData } = await supabase
         .from('projects')
@@ -585,10 +597,10 @@ const downloadVideo = async (video) => {
       
       // 파일명 생성 (특수문자 제거)
       const sanitizedProjectName = projectName.replace(/[^a-zA-Z0-9가-힣]/g, '_')
-      const fileName = `video_${sanitizedProjectName}_${sceneNumber}.mp4`
+      const fileName = `video_${sanitizedProjectName}_${sceneNumber}${versionSuffix}.mp4`
       
       // 비디오 다운로드
-      const response = await fetch(video.storage_video_url)
+      const response = await fetch(videoUrl)
       const blob = await response.blob()
       const url = URL.createObjectURL(blob)
       
