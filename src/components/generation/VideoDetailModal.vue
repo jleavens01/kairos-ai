@@ -16,9 +16,10 @@
           <!-- 비디오 영역 -->
           <div class="video-section">
             <video 
-              v-if="video.storage_video_url"
+              v-if="currentVideoUrl"
               ref="videoElement"
-              :src="video.storage_video_url"
+              :key="currentVideoUrl"
+              :src="currentVideoUrl"
               :poster="video.thumbnail_url"
               controls
               autoplay
@@ -27,6 +28,21 @@
             <div v-else class="no-video">
               <span>🎬</span>
               <p>비디오를 불러올 수 없습니다</p>
+            </div>
+            
+            <!-- 업스케일 토글 버튼 (업스케일 버전이 있을 때만 표시) -->
+            <div v-if="video.upscale_video_url && video.upscale_status === 'completed'" class="video-toggle-container">
+              <button 
+                @click="toggleVideoVersion" 
+                class="video-toggle-btn"
+                :class="{ 'active-upscale': isShowingUpscale }"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M21 3l-6 6m6-6v5m0-5h-5"/>
+                  <path d="M21 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h6"/>
+                </svg>
+                <span>{{ isShowingUpscale ? `업스케일 ${video.upscale_factor}x` : '원본' }}</span>
+              </button>
             </div>
           </div>
 
@@ -239,7 +255,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { supabase } from '@/utils/supabase'
 import { VideoFrameExtractor } from '@/utils/videoFrameExtractor'
 
@@ -266,6 +282,7 @@ const frameExtractor = ref(null)
 const videoElement = ref(null)
 const showUpscaleModal = ref(false)
 const showDownloadMenu = ref(false)
+const isShowingUpscale = ref(false) // 업스케일 버전 표시 여부
 
 // Computed
 const hasChanges = computed(() => {
@@ -274,11 +291,21 @@ const hasChanges = computed(() => {
   return favChanged || sceneChanged
 })
 
+// 현재 표시할 비디오 URL
+const currentVideoUrl = computed(() => {
+  if (isShowingUpscale.value && props.video.upscale_video_url) {
+    return props.video.upscale_video_url
+  }
+  return props.video.storage_video_url
+})
+
 // Watch for video prop changes
 watch(() => props.video, (newVideo) => {
   localFavorite.value = newVideo.is_favorite || false
   localLinkedSceneId.value = newVideo.production_sheet_id || newVideo.linked_scene_id || null
   currentLinkedSceneNumber.value = newVideo.linked_scene_number || null
+  // 비디오가 변경되면 원본으로 리셋
+  isShowingUpscale.value = false
 })
 
 // Methods
@@ -375,6 +402,26 @@ const openUpscaleModal = () => {
 
 const toggleDownloadMenu = () => {
   showDownloadMenu.value = !showDownloadMenu.value
+}
+
+// 비디오 버전 전환 (원본 <-> 업스케일)
+const toggleVideoVersion = () => {
+  // 현재 재생 시간 저장
+  const currentTime = videoElement.value?.currentTime || 0
+  const isPlaying = !videoElement.value?.paused
+  
+  // 버전 전환
+  isShowingUpscale.value = !isShowingUpscale.value
+  
+  // 비디오 URL이 변경되면 nextTick으로 대기 후 재생 위치 복원
+  nextTick(() => {
+    if (videoElement.value) {
+      videoElement.value.currentTime = currentTime
+      if (isPlaying) {
+        videoElement.value.play().catch(e => console.warn('자동 재생 실패:', e))
+      }
+    }
+  })
 }
 
 const downloadVideo = async (version = 'original') => {
@@ -548,7 +595,10 @@ const initializeFrameExtractor = async () => {
     frameExtractor.value = null
   }
   
-  const videoUrl = props.video?.storage_video_url || props.video?.result_video_url
+  // 업스케일 버전이 표시 중이면 업스케일 URL 사용
+  const videoUrl = isShowingUpscale.value && props.video?.upscale_video_url 
+    ? props.video.upscale_video_url 
+    : (props.video?.storage_video_url || props.video?.result_video_url)
   if (!videoUrl) {
     console.warn('비디오 URL을 찾을 수 없습니다')
     return
@@ -761,6 +811,8 @@ watch(() => props.show, (newShow) => {
   if (newShow && props.video && props.video.storage_video_url) {
     // 모달이 열릴 때 프레임 추출기 초기화
     initializeFrameExtractor()
+    // 업스케일 버전이 있으면 기본으로 표시할지 여부 (옵션)
+    // isShowingUpscale.value = !!props.video.upscale_video_url
   } else if (!newShow) {
     // 모달이 닫힐 때 정리
     if (frameExtractor.value) {
@@ -772,6 +824,7 @@ watch(() => props.show, (newShow) => {
       frameExtractor.value = null
     }
     capturedFrames.value = []
+    isShowingUpscale.value = false // 리셋
   }
 })
 </script>
@@ -1282,6 +1335,51 @@ watch(() => props.show, (newShow) => {
 .frame-btn:last-child:hover {
   background: var(--error-color);
   border-color: var(--error-color);
+}
+
+/* 비디오 토글 버튼 */
+.video-toggle-container {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+}
+
+.video-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: white;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.video-toggle-btn:hover {
+  background: rgba(0, 0, 0, 0.85);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.video-toggle-btn.active-upscale {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.8) 0%, rgba(118, 75, 162, 0.8) 100%);
+  border-color: rgba(102, 126, 234, 0.5);
+}
+
+.video-toggle-btn.active-upscale:hover {
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.9) 0%, rgba(118, 75, 162, 0.9) 100%);
+}
+
+.video-toggle-btn svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
 }
 
 /* 반응형 */
