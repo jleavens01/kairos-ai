@@ -76,25 +76,39 @@ export const handler = async (event) => {
       cameraFixed 
     });
 
+    // 환경 체크 (개발/프로덕션)
+    const isDevelopment = process.env.CONTEXT === 'dev' || 
+                         process.env.NETLIFY_DEV === 'true' ||
+                         (process.env.URL && process.env.URL.includes('localhost'));
+
     // FAL AI 엔드포인트 - SeedDance v1 Lite
-    const submitUrl = 'https://queue.fal.run/fal-ai/bytedance/seedance/v1/lite/image-to-video';
+    const submitUrl = 'https://queue.fal.run/fal-ai/bytedance/seedance/v1/lite/image-to-video/submit';
     
     const requestBody = {
-      prompt,
-      image_url: imageUrl,
-      resolution,
-      duration: duration.toString(), // FAL expects string
-      camera_fixed: cameraFixed
+      input: {
+        prompt,
+        image_url: imageUrl,
+        resolution,
+        duration: duration.toString(), // FAL expects string
+        camera_fixed: cameraFixed
+      }
     };
 
     // 끝 이미지가 제공되면 추가
     if (endImageUrl) {
-      requestBody.end_image_url = endImageUrl;
+      requestBody.input.end_image_url = endImageUrl;
       console.log('Using end image for SeedDance Lite:', endImageUrl);
     }
 
     if (seed !== undefined) {
-      requestBody.seed = seed;
+      requestBody.input.seed = seed;
+    }
+
+    // 프로덕션 환경에서 웹훅 URL 추가
+    if (!isDevelopment) {
+      const baseUrl = process.env.URL || process.env.DEPLOY_URL || 'https://kairos-ai-pd.netlify.app';
+      requestBody.webhook_url = `${baseUrl}/.netlify/functions/fal-webhook-handler`;
+      console.log('Webhook URL configured for Lite:', requestBody.webhook_url);
     }
 
     const submitResponse = await fetch(submitUrl, {
@@ -138,10 +152,13 @@ export const handler = async (event) => {
     const updateData = {
       generation_status: 'processing',
       reference_image_url: imageUrl,
-      resolution: resolution, // 480p, 720p 그대로 저장
-      duration_seconds: parseInt(duration), // 숫자로 변환
-      camera_movement: cameraFixed ? 'fixed' : 'dynamic', // camera_movement 필드 활용
-      model_version: 'seedance-v1-lite', // 모델 버전 명시
+      model_parameters: {
+        resolution: resolution,
+        duration: parseInt(duration),
+        camera_fixed: cameraFixed,
+        seed: seed,
+        end_image_url: endImageUrl
+      },
       request_id: requestId,
       api_request: requestBody, // API 요청 전체 저장
       credits_used: calculateCredits(), // 동적 크레딧 계산
@@ -149,9 +166,7 @@ export const handler = async (event) => {
         status_url: statusUrl,
         fal_request_id: requestId,
         model: 'seedance-lite',
-        camera_fixed: cameraFixed,
-        seed: seed,
-        seed_image_url: imageUrl
+        webhook_configured: !isDevelopment
       },
       updated_at: new Date().toISOString()
     };
