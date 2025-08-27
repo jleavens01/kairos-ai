@@ -31,29 +31,29 @@ const isMobile = ref(false);
 
 const toggleMobileNav = () => {
   isMobileNavOpen.value = !isMobileNavOpen.value;
-  // Toggled isMobileNavOpen
+  console.log("App.vue: Toggled isMobileNavOpen to", isMobileNavOpen.value);
 };
 
 const closeMobileNav = () => {
   isMobileNavOpen.value = false;
-  // Closed mobile nav
+  console.log("App.vue: Closed mobile nav. isMobileNavOpen =", isMobileNavOpen.value);
 };
 
 const checkMobile = () => {
   const newIsMobile = window.innerWidth <= 768; 
   if (isMobile.value !== newIsMobile) { 
-    // Screen width changed
+    console.log(`App.vue: Screen width: ${window.innerWidth}px, isMobile changed from ${isMobile.value} to ${newIsMobile}`);
   }
   isMobile.value = newIsMobile;
   
   if (!isMobile.value) { 
     // 데스크탑 모드에서는 모바일 네비를 닫아야 함
     isMobileNavOpen.value = false;
-    // Desktop mode detected
+    console.log("App.vue: Desktop mode, forced isMobileNavOpen to false.");
   } else { 
     // 모바일 모드에서도 기본적으로 닫힌 상태로 시작
     isMobileNavOpen.value = false;
-    // Mobile mode detected
+    console.log("App.vue: Mobile mode, set isMobileNavOpen to false.");
   }
 };
 

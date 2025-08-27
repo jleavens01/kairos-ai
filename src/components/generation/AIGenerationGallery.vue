@@ -472,11 +472,20 @@ const handleScroll = (event) => {
   
   const scrollBottom = scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight
   
-  // Scroll check performed
+  console.log('Scroll check:', {
+    scrollBottom,
+    hasMore: hasMore.value,
+    loading: loading.value,
+    imagesCount: images.value.length,
+    scrollHeight: scrollElement.scrollHeight,
+    scrollTop: scrollElement.scrollTop,
+    clientHeight: scrollElement.clientHeight,
+    element: scrollElement.className || 'document'
+  })
   
   // 하단에서 200px 이내에 도달하면 다음 페이지 로드
   if (scrollBottom < 200 && hasMore.value && !loading.value) {
-    // Triggering loadMore()
+    console.log('Triggering loadMore()...')
     loadMore()
   }
 }
@@ -499,25 +508,30 @@ const setupScrollListener = () => {
     if (!isMobile.value) {
       const gallery = document.querySelector('.ai-generation-gallery')
       if (gallery) {
-        // Desktop: Setting up scroll listener on .ai-generation-gallery
+        console.log('Desktop: Setting up scroll listener on .ai-generation-gallery', {
+          scrollHeight: gallery.scrollHeight,
+          clientHeight: gallery.clientHeight,
+          scrollTop: gallery.scrollTop,
+          hasScrollbar: gallery.scrollHeight > gallery.clientHeight
+        })
         gallery.addEventListener('scroll', handleScroll, { passive: true })
         // 초기 스크롤 체크
         setTimeout(() => {
-          // Initial scroll check for desktop
+          console.log('Initial scroll check for desktop')
           handleScroll({ target: gallery })
         }, 100)
         return
       } else {
-        // Desktop: .ai-generation-gallery not found
+        console.log('Desktop: .ai-generation-gallery not found!')
       }
     }
     
     // 모바일에서는 window에 리스너 추가
-    // Mobile: Setting up scroll listener on window
+    console.log('Mobile: Setting up scroll listener on window')
     window.addEventListener('scroll', handleScroll, { passive: true })
     // 초기 스크롤 체크
     setTimeout(() => {
-      // Initial scroll check for mobile
+      console.log('Initial scroll check for mobile')
       handleScroll()
     }, 100)
   })
@@ -573,17 +587,20 @@ const characterImageMap = computed(() => {
     .filter(img => img.element_name && img.generation_status === 'completed')
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
   
-  // CharacterImageMap computed
+  console.log('[CharacterImageMap] Completed character images:', completedCharacters.length)
+  if (completedCharacters.length > 0) {
+    console.log('[CharacterImageMap] Character names:', completedCharacters.map(img => img.element_name))
+  }
   
   completedCharacters.forEach(img => {
     // 사용자가 선택한 이미지가 있으면 그것을 사용, 없으면 최신 이미지 사용
     if (customCharacterImageMap.value.has(img.element_name)) {
       map.set(img.element_name, customCharacterImageMap.value.get(img.element_name))
-      // Using custom image
+      console.log(`[CharacterImageMap] Using custom image for ${img.element_name}`)
     } else if (!map.has(img.element_name)) {
       const imageUrl = img.thumbnail_url || img.storage_image_url || img.result_image_url
       map.set(img.element_name, imageUrl)
-      // Mapped character to image
+      console.log(`[CharacterImageMap] Mapped ${img.element_name} to ${imageUrl ? 'URL found' : 'NO URL'}`)
     }
   })
   
@@ -594,7 +611,7 @@ const characterImageMap = computed(() => {
     }
   })
   
-  // CharacterImageMap completed
+  console.log('[CharacterImageMap] Final map size:', map.size, 'entries:', Array.from(map.keys()))
   return map
 })
 
@@ -643,7 +660,7 @@ const characterSuggestions = computed(() => {
     }
   })
   
-  // Console log removed
+  console.log('[CharacterSuggestions] Suggestions:', suggestions.length, suggestions.map(s => s.name))
   return suggestions
 })
 
@@ -794,7 +811,7 @@ const fetchCharacterImages = async () => {
     // 캐릭터 이미지만 별도로 저장
     characterImagesForSuggestions.value = data || []
     
-  // Console log removed
+    console.log('Loaded character images for suggestions:', characterImagesForSuggestions.value.length)
   } catch (error) {
     console.error('Error fetching character images:', error)
     characterImagesForSuggestions.value = []
@@ -838,14 +855,14 @@ const fetchImages = async () => {
     totalCount.value = count || 0
     
     // 프로덕션 시트에서 캐릭터 확인
-  // Console log removed
+    console.log('Production sheets:', productionStore.productionSheets.length)
     const allCharacters = new Set()
     productionStore.productionSheets.forEach(sheet => {
       if (sheet.characters && Array.isArray(sheet.characters)) {
         sheet.characters.forEach(char => allCharacters.add(char))
       }
     })
-  // Console log removed
+    console.log('Characters from production sheets:', Array.from(allCharacters))
   } catch (error) {
     console.error('Error fetching images:', error)
     images.value = []
@@ -901,7 +918,7 @@ const handleCharacterImageSelect = ({ characterName, imageUrl }) => {
   savedSelections[`${props.projectId}-${characterName}`] = imageUrl
   localStorage.setItem('characterImageSelections', JSON.stringify(savedSelections))
   
-  // Console log removed
+  console.log(`Selected image for ${characterName}:`, imageUrl)
 }
 
 // 라이브러리 이미지 선택 처리
@@ -914,7 +931,7 @@ const handleLibraryImageSelect = async ({ characterName, imageUrl, imageData }) 
   savedSelections[`${props.projectId}-${characterName}`] = imageUrl
   localStorage.setItem('characterImageSelections', JSON.stringify(savedSelections))
   
-  // Console log removed
+  console.log(`Selected library image for ${characterName}:`, imageUrl)
   
   // 이미지 목록 새로고침 (새로 추가된 is_shared 이미지 포함)
   await fetchImages()
@@ -968,7 +985,7 @@ let pollingWorkerInterval = null
 
 // 폴링 워커 시작
 const startPollingWorker = () => {
-  // Console log removed
+  console.log('Starting polling worker...')
   
   // 기존 폴링 중지
   if (pollingWorkerInterval) {
@@ -988,14 +1005,14 @@ const startPollingWorker = () => {
   pollingWorkerInterval = setInterval(async () => {
     // 최대 폴링 횟수 또는 시간 초과 체크
     if (pollCount >= maxPolls || Date.now() - startTime > 200000) {
-  // Console log removed
+      console.log('Polling limit reached, stopping...')
       stopPollingWorker()
       return
     }
     
     // 처리 중인 이미지가 없으면 중지
     if (processingImages.value.length === 0) {
-  // Console log removed
+      console.log('No processing images, stopping polling')
       stopPollingWorker()
       return
     }
@@ -1007,7 +1024,7 @@ const startPollingWorker = () => {
 
 // 폴링 워커 중지
 const stopPollingWorker = () => {
-  // Console log removed
+  console.log('Stopping polling worker...')
   if (pollingWorkerInterval) {
     clearInterval(pollingWorkerInterval)
     pollingWorkerInterval = null
@@ -1018,7 +1035,7 @@ const stopPollingWorker = () => {
 const callPollingWorker = async () => {
   // 개발 환경에서만 폴링 실행
   if (import.meta.env.MODE !== 'development') {
-  // Console log removed
+    console.log('Not in development mode, skipping polling')
     return
   }
   
@@ -1029,7 +1046,7 @@ const callPollingWorker = async () => {
       return
     }
     
-  // Console log removed
+    console.log('Calling polling worker...')
     
     // AbortController로 타임아웃 설정 (3초)
     const controller = new AbortController()
@@ -1054,7 +1071,7 @@ const callPollingWorker = async () => {
     }
     
     const result = await response.json()
-  // Console log removed
+    console.log('이미지 큐 처리 결과:', result.summary)
     
     // 항상 갤러리를 새로고침하여 상태 업데이트
     await fetchImages() // 갤러리 데이터 새로고침
@@ -1063,12 +1080,12 @@ const callPollingWorker = async () => {
     if (result.summary && 
         result.summary.processing === 0 && 
         result.summary.pending === 0) {
-  // Console log removed
+      console.log('모든 이미지 처리 완료, 폴링 중지')
       stopPollingWorker()
     }
   } catch (error) {
     if (error.name === 'AbortError') {
-  // Console log removed
+      console.log('Polling request timed out (expected in dev)')
     } else {
       console.error('Polling worker error:', error)
     }
@@ -1230,7 +1247,7 @@ const deleteImage = async (image) => {
       images.value.splice(index, 1)
     }
     
-  // Console log removed
+    console.log('이미지가 삭제되었습니다.')
   } catch (error) {
     console.error('이미지 삭제 실패:', error)
     alert('이미지 삭제에 실패했습니다.')
@@ -1256,7 +1273,7 @@ const deleteImage = async (image) => {
     
     // 새 채널 생성 및 구독 (유니크한 채널명 사용)
     const channelName = `gen_images_${props.projectId}_${Date.now()}`
-  // Console log removed
+    console.log('Realtime 채널 생성:', channelName)
     
     realtimeChannel.value = supabase
       .channel(channelName)
@@ -1269,7 +1286,7 @@ const deleteImage = async (image) => {
           filter: `project_id=eq.${props.projectId}`
         },
         async (payload) => {
-  // Console log removed
+          console.log('실시간 업데이트:', payload)
           
           if (payload.eventType === 'INSERT') {
             // 새 이미지 추가
@@ -1286,7 +1303,7 @@ const deleteImage = async (image) => {
             
             // 생성 완료 시 알림
             if (payload.old.generation_status !== 'completed' && payload.new.generation_status === 'completed') {
-  // Console log removed
+              console.log('이미지 생성 완료!', payload.new)
               // 선택적: 사용자에게 알림 표시
             }
           } else if (payload.eventType === 'DELETE') {
@@ -1299,7 +1316,7 @@ const deleteImage = async (image) => {
         if (err) {
           console.error('Realtime 구독 오류:', err)
         } else {
-  // Console log removed
+          console.log('Realtime 구독 상태:', status)
         }
       })
   } catch (error) {
@@ -1338,7 +1355,7 @@ const handleSceneConnection = async (result) => {
       throw new Error('이미지 URL을 찾을 수 없습니다.')
     }
     
-  // Console log removed
+    console.log('Connecting image to scene:', { 
       sceneId, 
       imageUrl, 
       result,
@@ -1384,7 +1401,7 @@ const handleSceneConnection = async (result) => {
     await productionStore.fetchProductionSheets(props.projectId)
     
     showSceneModal.value = false
-  // Console log removed
+    console.log('이미지가 씬에 연결되었습니다.')
     alert('이미지가 씬에 연결되었습니다.')
   } catch (error) {
     console.error('씬 연결 실패:', error)
@@ -1497,13 +1514,13 @@ const handleVideoGenerated = () => {
   // 비디오 생성 성공 시 처리
   closeVideoModal()
   // 비디오 갤러리로 전환하거나 알림 표시 등
-  // Console log removed
+  console.log('비디오 생성이 시작되었습니다.')
 }
 
 // 웹훅 업데이트 처리
 const handleMediaUpdate = (event) => {
   const update = event.detail
-  // Console log removed
+  console.log('Image gallery received media update:', update)
   
   // 이미지 완료 업데이트인 경우
   if (update.event === 'image-completed' && update.project_id === props.projectId) {
@@ -1525,7 +1542,7 @@ watch(filterCategory, () => {
 
 // Lifecycle
 onMounted(async () => {
-  // Console log removed
+  console.log('AIGenerationGallery mounted, loading initial data...')
   
   // 리사이즈 이벤트 리스너 설정
   window.addEventListener('resize', handleResize)
@@ -1546,11 +1563,11 @@ onMounted(async () => {
   
   // 2. 캐릭터 이미지 먼저 로드 (상단 제안 섹션용)
   await fetchCharacterImages()
-  // Console log removed
+  console.log('Character images loaded for suggestions')
   
   // 3. 그 다음 갤러리 이미지 로드
   await fetchImages()
-  // Console log removed
+  console.log('Initial gallery images loaded:', images.value.length)
   
   // 스크롤 리스너 설정
   await nextTick()
@@ -1558,7 +1575,7 @@ onMounted(async () => {
   
   // Tab 변경 감지를 위한 MutationObserver 설정
   const observer = new MutationObserver(() => {
-  // Console log removed
+    console.log('DOM changed, re-setting up scroll listener')
     setupScrollListener()
   })
   
@@ -1571,7 +1588,7 @@ onMounted(async () => {
   // 개발 환경에서는 폴링 사용
   if (import.meta.env.MODE === 'development') {
     if (processingImages.value.length > 0) {
-  // Console log removed
+      console.log(`Found ${processingImages.value.length} processing images, starting polling...`)
       startPollingWorker()
     }
   } else {
@@ -1581,7 +1598,7 @@ onMounted(async () => {
     
     // 프로덕션에서도 처리 중인 이미지가 있으면 폴링
     if (processingImages.value.length > 0) {
-  // Console log removed
+      console.log(`[Production] Found ${processingImages.value.length} processing images, starting polling...`)
       startPollingWorker()
     }
   }
@@ -1617,7 +1634,7 @@ onUnmounted(() => {
 let realtimeChannel = null
 
 const setupRealtimeSubscription = () => {
-  // Console log removed
+  console.log('Setting up Realtime subscription for images')
   
   realtimeChannel = supabase
     .channel(`images-${props.projectId}`)
@@ -1630,7 +1647,7 @@ const setupRealtimeSubscription = () => {
         filter: `project_id=eq.${props.projectId}`
       },
       (payload) => {
-  // Console log removed
+        console.log('Image updated via webhook:', payload.new)
         handleImageUpdate(payload.new)
       }
     )
@@ -1639,7 +1656,7 @@ const setupRealtimeSubscription = () => {
 
 const cleanupRealtimeSubscription = () => {
   if (realtimeChannel) {
-  // Console log removed
+    console.log('Cleaning up Realtime subscription')
     supabase.removeChannel(realtimeChannel)
     realtimeChannel = null
   }
@@ -1664,7 +1681,7 @@ watch(() => props.projectId, async (newId, oldId) => {
     
     // 처리 중인 이미지가 있으면 폴링 시작
     if (processingImages.value.length > 0) {
-  // Console log removed
+      console.log(`Project changed, found ${processingImages.value.length} processing images, starting polling...`)
       startPollingWorker()
     }
     // 스토리보드 데이터도 다시 로드
