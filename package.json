@@ -12,6 +12,7 @@
   "dependencies": {
     "@fal-ai/client": "^1.6.2",
     "@google/earthengine": "^1.6.3",
+    "@google/genai": "^1.16.0",
     "@google/generative-ai": "^0.24.1",
     "@radix-icons/vue": "^1.0.0",
     "@supabase/supabase-js": "^2.53.0",

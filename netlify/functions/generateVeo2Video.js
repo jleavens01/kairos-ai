@@ -1,7 +1,7 @@
 // Google Veo2 모델을 사용한 비디오 생성
 import { createClient } from '@supabase/supabase-js';
 import jwt from 'jsonwebtoken';
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { genai } from '@google/genai';
 
 const VIDEO_GENERATION_COST = 3000; // 비디오 생성 비용
 
@@ -91,17 +91,20 @@ export const handler = async (event) => {
       throw new Error('Google API 키가 설정되지 않았습니다.');
     }
     
-    const genAI = new GoogleGenerativeAI(apiKey);
+    const client = new genai.Client({ apiKey });
 
-    // 이미지 다운로드 및 base64로 변환
+    // 이미지 다운로드 및 파일 객체 생성
     const imageResponse = await fetch(imageUrl);
     if (!imageResponse.ok) {
       throw new Error('이미지를 다운로드할 수 없습니다.');
     }
     
     const imageBuffer = await imageResponse.arrayBuffer();
-    const imageBytes = Buffer.from(imageBuffer).toString('base64');
-    console.log('Image downloaded, size:', imageBytes.length);
+    const imageFile = {
+      buffer: Buffer.from(imageBuffer),
+      mimeType: 'image/jpeg'
+    };
+    console.log('Image downloaded, size:', imageBuffer.byteLength);
 
     // Veo2 프롬프트 구성 - 네거티브 프롬프트 포함
     const finalPrompt = prompt;
@@ -113,45 +116,22 @@ export const handler = async (event) => {
     // Veo2 모델 설정 및 비디오 생성 요청
     console.log('Requesting video generation with Veo2...');
     
-    // Veo2 모델 가져오기
-    const model = genAI.getGenerativeModel({ 
-      model: "veo-2.0-generate-001"  // 올바른 Veo2 모델명
+    // 비디오 생성 요청 구성
+    const config = {
+      negativePrompt: finalNegativePrompt,
+      aspectRatio: aspectRatio,
+      personGeneration: personGeneration  // image-to-video는 allow_adult 또는 dont_allow만 가능
+    };
+
+    // 비디오 생성 요청 (공식 API 사용)
+    const operation = await client.models.generateVideos({
+      model: "veo-2.0-generate-001",  // 올바른 Veo2 모델명
+      prompt: finalPrompt,
+      image: imageFile,
+      config: config
     });
 
-    // Veo2 API에 맞는 비디오 생성 요청 구성
-    // Gemini API의 표준 형식 사용 - 텍스트와 이미지를 별도의 parts로 전달
-    const parts = [
-      {
-        text: `Generate a video based on this image with the following prompt: ${finalPrompt}
-        
-Aspect Ratio: ${aspectRatio}
-Person Generation: ${personGeneration}
-${finalNegativePrompt ? `Negative Prompt (things to avoid): ${finalNegativePrompt}` : ''}`
-      },
-      {
-        inlineData: {
-          mimeType: "image/jpeg",
-          data: imageBytes
-        }
-      }
-    ];
-
-    // 비디오 생성 요청 (표준 generateContent API 사용)
-    const result = await model.generateContent({
-      contents: [{
-        role: "user",
-        parts: parts
-      }],
-      generationConfig: {
-        // Veo2 특화 설정이 있다면 여기에 추가
-        temperature: 0.7,
-        topK: 40,
-        topP: 0.95
-      }
-    });
-
-    const response = await result.response;
-    console.log('Veo2 generation started:', response);
+    console.log('Veo2 generation started, operation:', operation.name);
 
     const generationId = `veo2_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 

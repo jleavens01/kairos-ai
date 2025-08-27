@@ -1,7 +1,7 @@
 // Google Veo3 Fast Preview 모델을 사용한 비디오 생성
 import { createClient } from '@supabase/supabase-js';
 import jwt from 'jsonwebtoken';
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { genai } from '@google/genai';
 
 const VIDEO_GENERATION_COST = 1500; // Veo3 Fast Preview 비용 (가장 저렴)
 
@@ -91,17 +91,20 @@ export const handler = async (event) => {
       throw new Error('Google API 키가 설정되지 않았습니다.');
     }
     
-    const genAI = new GoogleGenerativeAI(apiKey);
+    const client = new genai.Client({ apiKey });
 
-    // 이미지 다운로드 및 base64로 변환
+    // 이미지 다운로드 및 파일 객체 생성
     const imageResponse = await fetch(imageUrl);
     if (!imageResponse.ok) {
       throw new Error('이미지를 다운로드할 수 없습니다.');
     }
     
     const imageBuffer = await imageResponse.arrayBuffer();
-    const imageBytes = Buffer.from(imageBuffer).toString('base64');
-    console.log('Image downloaded, size:', imageBytes.length);
+    const imageFile = {
+      buffer: Buffer.from(imageBuffer),
+      mimeType: 'image/jpeg'
+    };
+    console.log('Image downloaded, size:', imageBuffer.byteLength);
 
     // Veo3 Fast 프롬프트 구성 - 네거티브 프롬프트 포함
     const finalPrompt = prompt;
@@ -113,45 +116,23 @@ export const handler = async (event) => {
     // Veo3 Fast Preview 모델 설정 및 비디오 생성 요청
     console.log('Requesting video generation with Veo3 Fast Preview...');
     
-    // Veo3 Fast Preview 모델 가져오기
-    const model = genAI.getGenerativeModel({ 
-      model: "imagen-3.0-fast-generate-001"  // Veo3 Fast는 Imagen 3.0 Fast로 실행됨
+    // 비디오 생성 요청 구성
+    // Veo3 Fast는 personGeneration이 image-to-video일 때 allow_adult만 가능
+    const config = {
+      negativePrompt: finalNegativePrompt,
+      aspectRatio: '16:9',  // Veo3 Fast는 16:9만 지원
+      personGeneration: 'allow_adult'  // image-to-video는 allow_adult만 가능
+    };
+
+    // 비디오 생성 요청 (공식 API 사용)
+    const operation = await client.models.generateVideos({
+      model: "veo-3.0-fast-generate-preview",  // 올바른 Veo3 Fast 모델명
+      prompt: finalPrompt,
+      image: imageFile,
+      config: config
     });
 
-    // Veo3 Fast API에 맞는 비디오 생성 요청 구성
-    // Gemini API의 표준 형식 사용 - 텍스트와 이미지를 별도의 parts로 전달
-    const parts = [
-      {
-        text: `Generate a video based on this image with the following prompt: ${finalPrompt}
-        
-Aspect Ratio: ${aspectRatio}
-Person Generation: ${personGeneration}
-${finalNegativePrompt ? `Negative Prompt (things to avoid): ${finalNegativePrompt}` : ''}`
-      },
-      {
-        inlineData: {
-          mimeType: "image/jpeg",
-          data: imageBytes
-        }
-      }
-    ];
-
-    // 비디오 생성 요청 (표준 generateContent API 사용)
-    const result = await model.generateContent({
-      contents: [{
-        role: "user",
-        parts: parts
-      }],
-      generationConfig: {
-        // Veo3 Fast 특화 설정이 있다면 여기에 추가
-        temperature: 0.7,
-        topK: 40,
-        topP: 0.95
-      }
-    });
-
-    const response = await result.response;
-    console.log('Veo3 Fast Preview generation started:', response);
+    console.log('Veo3 Fast Preview generation started, operation:', operation.name);
 
     const generationId = `veo3fast_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
