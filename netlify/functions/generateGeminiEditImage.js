@@ -27,9 +27,9 @@ export const generateImage = async ({
     sceneNumber
   });
 
-  // Gemini Edit은 정확히 2개의 참조 이미지가 필요
-  if (!referenceImages || referenceImages.length !== 2) {
-    throw new Error('Gemini 2.5 Flash Edit 모델은 정확히 2개의 참조 이미지가 필요합니다.');
+  // Gemini Edit는 1-5개의 참조 이미지 지원
+  if (!referenceImages || referenceImages.length < 1 || referenceImages.length > 5) {
+    throw new Error('Gemini 2.5 Flash Edit 모델은 1-5개의 참조 이미지가 필요합니다.');
   }
 
   // 참조 이미지 URL 추출
@@ -71,24 +71,26 @@ export const generateImage = async ({
     // 1. gen_images 테이블에 초기 레코드 생성
     const imageRecord = {
       project_id: projectId,
-      scene_number: sceneNumber,
+      production_sheet_id: sceneNumber,  // scene_number가 아닌 production_sheet_id
       element_name: prompt.substring(0, 100),
-      element_type: 'generated',
-      image_type: 'generated',
+      image_type: 'generated',  // element_type가 아닌 image_type
       generation_model: 'gemini-25-flash-edit',
-      generation_prompt: finalPrompt,
+      prompt_used: finalPrompt,  // generation_prompt가 아닌 prompt_used
+      custom_prompt: prompt,
       generation_status: 'pending',
-      resolution: `${dimensions.width}x${dimensions.height}`,
-      style: style?.name || null,
+      reference_image_url: imageUrls[0] || null,  // 첫 번째 참조 이미지
       style_id: style?.id || null,
+      style_name: style?.name || null,
       metadata: {
         ...metadata,
         aspect_ratio: imageSize,
+        resolution: `${dimensions.width}x${dimensions.height}`,
         reference_images: imageUrls,
-        reference_count: 2,
-        model_version: '2.5-flash'
+        reference_count: imageUrls.length,
+        model_version: '2.5-flash',
+        created_by: user.sub
       },
-      created_by: user.sub
+      tags: []
     };
 
     const { data: createdImage, error: dbError } = await supabaseAdmin
@@ -98,8 +100,15 @@ export const generateImage = async ({
       .single();
 
     if (dbError) {
-      console.error('Database insert error:', dbError);
-      throw new Error('이미지 레코드 생성 실패');
+      console.error('Database insert error details:', {
+        error: dbError,
+        message: dbError.message,
+        details: dbError.details,
+        hint: dbError.hint,
+        code: dbError.code,
+        imageRecord: imageRecord
+      });
+      throw new Error(`이미지 레코드 생성 실패: ${dbError.message || dbError}`);
     }
     
     dbImage = createdImage; // 외부 변수에 할당

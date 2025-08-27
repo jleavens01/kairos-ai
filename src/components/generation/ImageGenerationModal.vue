@@ -23,7 +23,7 @@
               <option value="flux-pro">Flux Pro</option>
               <option value="flux-kontext">Flux Kontext (참조 이미지 1개)</option>
               <option value="flux-kontext-multi">Flux Kontext Multi (참조 이미지 여러개)</option>
-              <option value="gemini-25-flash-edit">Gemini 2.5 Flash Edit (이미지 편집 2개)</option>
+              <option value="gemini-25-flash-edit">Gemini 2.5 Flash Edit (이미지 편집 1-5개)</option>
             </select>
           </div>
           <div class="inline-item">
@@ -645,10 +645,10 @@ const selectedStyle = computed(() => {
 const getMaxImages = () => {
   if (selectedModel.value === 'flux-kontext') {
     return 1
-  } else if (selectedModel.value === 'gemini-25-flash-edit') {
-    return 2  // Gemini Edit는 정확히 2개의 이미지 필요
-  } else if (selectedModel.value === 'flux-kontext-multi' || selectedModel.value === 'gpt-image-1') {
-    return 5
+  } else if (selectedModel.value === 'gemini-25-flash-edit' || 
+             selectedModel.value === 'flux-kontext-multi' || 
+             selectedModel.value === 'gpt-image-1') {
+    return 5  // Gemini Edit, Flux Multi, GPT는 최대 5개
   }
   return 0
 }
