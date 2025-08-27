@@ -845,8 +845,8 @@ const loadLibraryImages = async () => {
         query = query.neq('is_kept', true)
       }
       
-      // is_shared인 이미지는 항상 제외 (중복 방지)
-      query = query.neq('is_shared', true)
+      // is_shared 이미지도 포함 (제외 로직 삭제)
+      // 주석처리: query = query.neq('is_shared', true)
     }
     // 공유 이미지 (구현 예정)
     // else if (librarySource.value === 'shared') {
