@@ -156,7 +156,7 @@ export const handler = async (event) => {
         end_image_url: endImageUrl
       },
       request_id: requestId,
-      api_request: requestBody, // API 요청 전체 저장
+      api_request: { input: falRequestBody }, // API 요청 전체 저장
       credits_used: calculateCredits(), // 동적 크레딧 계산
       metadata: {
         status_url: statusUrl,
