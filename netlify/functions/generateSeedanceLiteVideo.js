@@ -159,7 +159,6 @@ export const handler = async (event) => {
       api_request: { input: falRequestBody }, // API 요청 전체 저장
       credits_used: calculateCredits(), // 동적 크레딧 계산
       metadata: {
-        status_url: statusUrl,
         fal_request_id: requestId,
         model: 'seedance-lite',
         webhook_configured: !isDevelopment
