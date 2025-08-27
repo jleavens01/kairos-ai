@@ -115,13 +115,14 @@ export const generateImage = async ({
     console.log('Created image record:', dbImage.id);
 
     // 2. FAL AI로 이미지 생성 요청
+    // API 문서에 맞는 형식으로 파라미터 구성
     const falParams = {
       prompt: finalPrompt,
-      image_urls: imageUrls,
+      image_urls: imageUrls, // 모든 이미지를 배열로 전달
       num_images: 1
     };
 
-    console.log('Submitting to FAL AI Gemini 2.5 Flash Edit:', falParams);
+    console.log('Submitting to FAL AI Gemini Flash Edit:', falParams);
 
     // 개발 환경 확인
     const isDevelopment = process.env.CONTEXT === 'dev' || 
@@ -133,18 +134,26 @@ export const generateImage = async ({
     if (!isDevelopment) {
       // 프로덕션: 웹훅 사용
       const baseUrl = process.env.URL || process.env.DEPLOY_URL || 'https://kairos-ai-pd.netlify.app';
-      const { request_id } = await fal.queue.submit('fal-ai/gemini-25-flash-image/edit', {
-        input: falParams,
+      const submitResult = await fal.queue.submit('fal-ai/gemini-25-flash-image/edit', {
+        input: {
+          prompt: finalPrompt,
+          image_urls: imageUrls,  // 모든 이미지를 배열로 전달
+          num_images: 1
+        },
         webhookUrl: `${baseUrl}/.netlify/functions/fal-webhook-handler`
       });
-      requestId = request_id;
+      requestId = submitResult.request_id;
       console.log('Image generation submitted with webhook:', requestId);
     } else {
       // 개발: 폴링 사용
-      const { request_id } = await fal.queue.submit('fal-ai/gemini-25-flash-image/edit', {
-        input: falParams
+      const submitResult = await fal.queue.submit('fal-ai/gemini-25-flash-image/edit', {
+        input: {
+          prompt: finalPrompt,
+          image_urls: imageUrls,  // 모든 이미지를 배열로 전달
+          num_images: 1
+        }
       });
-      requestId = request_id;
+      requestId = submitResult.request_id;
       console.log('Image generation submitted for polling:', requestId);
     }
 
