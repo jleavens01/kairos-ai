@@ -200,18 +200,46 @@ export const handler = async (event) => {
 
     // Supabase Storage에 이미지 저장
     const imageResponse = await fetch(falResult.image_url);
+    
+    // 실제 이미지 형식 감지
+    const contentType = imageResponse.headers.get('content-type');
+    const isJpeg = contentType?.includes('jpeg') || contentType?.includes('jpg');
+    const isPng = contentType?.includes('png');
+    const isWebp = contentType?.includes('webp');
+    
+    // 확장자와 ContentType 동적 설정
+    let extension = 'png'; // 기본값
+    let uploadContentType = 'image/png'; // 기본값
+    
+    if (isJpeg) {
+      extension = 'jpg';
+      uploadContentType = 'image/jpeg';
+    } else if (isWebp) {
+      extension = 'webp';
+      uploadContentType = 'image/webp';
+    } else if (isPng) {
+      extension = 'png';
+      uploadContentType = 'image/png';
+    }
+    
+    // Flux 모델의 경우 JPEG 형식 강제 (output_format 설정에 따라)
+    if (model.includes('flux-') && model !== 'flux-schnell') {
+      extension = 'jpg';
+      uploadContentType = 'image/jpeg';
+    }
+    
     const imageBlob = await imageResponse.blob();
     const imageBuffer = await imageBlob.arrayBuffer();
     const imageData = Buffer.from(imageBuffer);
     
     const timestamp = Date.now();
-    const fileName = `${projectId}/${category}/${timestamp}.png`;
+    const fileName = `${projectId}/${category}/${timestamp}.${extension}`;
     
     const { data: uploadData, error: uploadError } = await supabaseAdmin
       .storage
       .from('gen-images')
       .upload(fileName, imageData, {
-        contentType: 'image/png',
+        contentType: uploadContentType,
         upsert: false
       });
 

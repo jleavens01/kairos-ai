@@ -112,19 +112,48 @@ export const handler = async (event) => {
             
             // 이미지를 Supabase Storage에 저장
             const imageResponse = await fetch(imageUrl);
+            
+            // 실제 이미지 형식 감지
+            const contentType = imageResponse.headers.get('content-type');
+            const isJpeg = contentType?.includes('jpeg') || contentType?.includes('jpg');
+            const isPng = contentType?.includes('png');
+            const isWebp = contentType?.includes('webp');
+            
+            // 확장자와 ContentType 동적 설정
+            let extension = 'png'; // 기본값
+            let uploadContentType = 'image/png'; // 기본값
+            
+            if (isJpeg) {
+              extension = 'jpg';
+              uploadContentType = 'image/jpeg';
+            } else if (isWebp) {
+              extension = 'webp';
+              uploadContentType = 'image/webp';
+            } else if (isPng) {
+              extension = 'png';
+              uploadContentType = 'image/png';
+            }
+            
+            // Flux 모델의 경우 JPEG 형식 강제 (output_format 설정에 따라)
+            const model = image.generation_model;
+            if (model?.includes('flux-') && model !== 'flux-schnell') {
+              extension = 'jpg';
+              uploadContentType = 'image/jpeg';
+            }
+            
             const imageBlob = await imageResponse.blob();
             const imageBuffer = await imageBlob.arrayBuffer();
             const imageData = Buffer.from(imageBuffer);
             
             const timestamp = Date.now();
             const randomId = Math.random().toString(36).substring(2, 9);
-            const fileName = `${image.project_id}/${image.image_type}/${timestamp}-${randomId}.png`;
+            const fileName = `${image.project_id}/${image.image_type}/${timestamp}-${randomId}.${extension}`;
             
             const { data: uploadData, error: uploadError } = await supabaseAdmin
               .storage
               .from('gen-images')
               .upload(fileName, imageData, {
-                contentType: 'image/png',
+                contentType: uploadContentType,
                 upsert: false
               });
 
@@ -175,7 +204,7 @@ Be specific and use commonly understood terms. Limit to 10-15 most relevant tags
                 tagPrompt,
                 {
                   inlineData: {
-                    mimeType: 'image/png',
+                    mimeType: uploadContentType || 'image/png',
                     data: base64Image
                   }
                 }
