@@ -15,6 +15,8 @@ export async function generateImage({
   parameters = {},
   referenceImages = [],
   sceneId = null,
+  sceneNumber = null,
+  sceneName = null,
   styleId = null,
   user,
   supabaseAdmin
@@ -36,7 +38,9 @@ export async function generateImage({
         project_id: projectId,
         production_sheet_id: sceneId,
         image_type: category,
-        element_name: characterName || prompt.substring(0, 100),
+        element_name: category === 'scene' ? 
+          (sceneName || (sceneNumber ? `씬 ${sceneNumber}` : '제목 없음')) : 
+          (characterName || prompt.substring(0, 100)),
         generation_status: 'pending',
         prompt_used: prompt,
         custom_prompt: prompt,

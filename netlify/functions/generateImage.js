@@ -45,7 +45,10 @@ export const handler = async (event) => {
       category = 'scene',
       characterName,
       parameters = {},
-      referenceImages = []
+      referenceImages = [],
+      sceneId = null,
+      sceneNumber = null,
+      sceneName = null
     } = JSON.parse(event.body || '{}');
 
     if (!projectId || !prompt) {
@@ -228,8 +231,11 @@ export const handler = async (event) => {
       .from('gen_images')
       .insert({
         project_id: projectId,
+        production_sheet_id: sceneId,
         image_type: category, // category를 image_type으로 매핑
-        element_name: characterName || prompt.substring(0, 100),
+        element_name: category === 'scene' ? 
+          (sceneName || (sceneNumber ? `씬 ${sceneNumber}` : '제목 없음')) : 
+          (characterName || prompt.substring(0, 100)),
         generation_status: 'completed',
         result_image_url: falResult.image_url,
         storage_image_url: publicUrl,
