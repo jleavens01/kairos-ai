@@ -277,12 +277,13 @@
       ref="mediaPanel"
       :project-id="currentProjectId"
       @media-drop="handleMediaDrop"
+      @panel-toggle="mediaPanelOpen = $event"
     />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import MediaPanel from '@/components/storyboard/MediaPanel.vue'
 import { useProjectsStore } from '@/stores/projects'
@@ -612,6 +613,13 @@ onMounted(() => {
   }
 })
 
+// 미디어 패널 상태 감시
+watch(() => mediaPanel.value?.isOpen, (newValue) => {
+  if (newValue !== undefined) {
+    mediaPanelOpen.value = newValue
+  }
+})
+
 // 계산된 속성
 const currentResult = computed(() => {
   return analysisResults.value.find(r => r.modelId === selectedResultTab.value)
@@ -642,6 +650,12 @@ const totalTokens = computed(() => {
   max-width: 1400px;
   margin: 0 auto;
   padding: 2rem;
+  transition: padding-right 0.3s ease;
+}
+
+/* 패널이 열렸을 때 콘텐츠 영역 조정 */
+.storyboard-lab.panel-open {
+  padding-right: 320px; /* 패널 너비(300px) + 여백(20px) */
 }
 
 .lab-header {

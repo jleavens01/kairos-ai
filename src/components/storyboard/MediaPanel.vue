@@ -1,27 +1,31 @@
 <template>
-  <div :class="['media-panel', { 'panel-open': isOpen }]">
+  <div v-if="!isMobile" :class="['media-panel', { 'panel-open': isOpen }]">
     <!-- 패널 토글 버튼 -->
     <button 
       @click="togglePanel" 
       class="panel-toggle-btn"
-      :title="isOpen ? '패널 닫기' : '미디어 패널 열기'"
+      :title="isOpen ? '패널 닫기' : '미디어 갤러리 열기'"
     >
-      <span v-if="!isOpen">◀ 미디어</span>
+      <span v-if="!isOpen">◀ 갤러리</span>
       <span v-else>▶</span>
     </button>
 
     <!-- 패널 콘텐츠 -->
     <div v-if="isOpen" class="panel-content">
       <div class="panel-header">
-        <h3>🎬 미디어 라이브러리</h3>
+        <h3>미디어 갤러리</h3>
         <div class="panel-controls">
           <select v-model="filterType" class="filter-select">
             <option value="all">모두</option>
-            <option value="images">이미지</option>
-            <option value="videos">비디오</option>
+            <option value="images">이미지만</option>
+            <option value="videos">비디오만</option>
           </select>
           <button @click="refreshMedia" class="btn-refresh" title="새로고침">
-            🔄
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="23 4 23 10 17 10"/>
+              <polyline points="1 20 1 14 7 14"/>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+            </svg>
           </button>
         </div>
       </div>
@@ -35,12 +39,17 @@
           class="search-input"
         />
       </div>
+      
+      <!-- 사용 안내 -->
+      <div class="usage-hint">
+        <small>💡 이미지나 비디오를 스토리보드로 드래그하여 연결하세요</small>
+      </div>
 
       <!-- 미디어 그리드 -->
       <div class="media-grid" v-if="!loading">
         <!-- 이미지 섹션 -->
         <div v-if="filterType === 'all' || filterType === 'images'" class="media-section">
-          <h4 v-if="filterType === 'all'">📸 이미지</h4>
+          <h4 v-if="filterType === 'all'" class="section-title">이미지</h4>
           <div class="media-items">
             <div 
               v-for="image in filteredImages" 
@@ -66,7 +75,7 @@
 
         <!-- 비디오 섹션 -->
         <div v-if="filterType === 'all' || filterType === 'videos'" class="media-section">
-          <h4 v-if="filterType === 'all'">🎥 비디오</h4>
+          <h4 v-if="filterType === 'all'" class="section-title">비디오</h4>
           <div class="media-items">
             <div 
               v-for="video in filteredVideos" 
@@ -112,7 +121,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useProjectsStore } from '@/stores/projects'
 import { supabase } from '@/utils/supabase'
 
@@ -123,7 +132,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['media-drop'])
+const emit = defineEmits(['media-drop', 'panel-toggle'])
 
 // 상태
 const isOpen = ref(false)
@@ -133,6 +142,12 @@ const searchQuery = ref('')
 const images = ref([])
 const videos = ref([])
 const draggedItem = ref(null)
+
+// 모바일 체크
+const isMobile = ref(window.innerWidth <= 768)
+const handleResize = () => {
+  isMobile.value = window.innerWidth <= 768
+}
 
 // 프로젝트 스토어
 const projectStore = useProjectsStore()
@@ -179,12 +194,13 @@ const togglePanel = () => {
 const loadMedia = async () => {
   loading.value = true
   try {
-    // 이미지 로드
+    // 이미지 로드 (is_kept가 true가 아닌 것만)
     const { data: imageData, error: imageError } = await supabase
       .from('gen_images')
       .select('*')
       .eq('project_id', props.projectId)
       .eq('generation_status', 'completed')
+      .or('is_kept.is.null,is_kept.eq.false')  // is_kept가 null이거나 false인 것만
       .order('created_at', { ascending: false })
       .limit(100)
 
@@ -192,12 +208,13 @@ const loadMedia = async () => {
       images.value = imageData
     }
 
-    // 비디오 로드
+    // 비디오 로드 (is_kept가 true가 아닌 것만)
     const { data: videoData, error: videoError } = await supabase
       .from('gen_videos')
       .select('*')
       .eq('project_id', props.projectId)
       .eq('generation_status', 'completed')
+      .or('is_kept.is.null,is_kept.eq.false')  // is_kept가 null이거나 false인 것만
       .order('created_at', { ascending: false })
       .limit(50)
 
@@ -260,6 +277,16 @@ const truncateName = (name) => {
 // 생명주기
 onMounted(() => {
   // 초기 로드는 패널이 열릴 때 수행
+  window.addEventListener('resize', handleResize)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+})
+
+// 패널 상태 변경 시 부모 컴포넌트에 알림
+watch(isOpen, (newValue) => {
+  emit('panel-toggle', newValue)
 })
 
 // 외부에서 호출 가능한 메서드
@@ -384,6 +411,15 @@ defineExpose({
   color: var(--text-secondary);
 }
 
+.usage-hint {
+  padding: 8px 15px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: center;
+}
+
 .media-grid {
   flex: 1;
   overflow-y: auto;
@@ -399,6 +435,17 @@ defineExpose({
   font-size: 14px;
   color: var(--text-secondary);
   font-weight: 500;
+}
+
+.section-title {
+  margin: 0 0 12px 0;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .media-items {
