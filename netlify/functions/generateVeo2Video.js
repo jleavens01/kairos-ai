@@ -1,7 +1,7 @@
 // Google Veo2 모델을 사용한 비디오 생성
 import { createClient } from '@supabase/supabase-js';
 import jwt from 'jsonwebtoken';
-import { genai } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const VIDEO_GENERATION_COST = 3000; // 비디오 생성 비용
 

@@ -1,5 +1,5 @@
 <template>
-  <div class="production-table-wrapper">
+  <div class="production-table-wrapper" :class="{ 'panel-open': mediaPanelOpen }">
     <!-- 선택된 씬이 있을 때 표시되는 액션 바 -->
     <div v-if="selectedScenes.length > 0" class="selection-actions">
       <div class="selection-info">
@@ -290,6 +290,15 @@
     </div>
     </div>
   </div>
+  
+  <!-- 미디어 패널 (데스크톱용) -->
+  <MediaPanel 
+    v-if="projectId && !isMobile"
+    ref="mediaPanel"
+    :project-id="projectId"
+    @media-drop="handleMediaDrop"
+    @panel-toggle="mediaPanelOpen = $event"
+  />
 </template>
 
 <script setup>
@@ -298,6 +307,7 @@ import { useProductionStore } from '@/stores/production'
 import { useProjectsStore } from '@/stores/projects'
 import { supabase } from '@/utils/supabase'
 import SceneImageUploader from './SceneImageUploader.vue'
+import MediaPanel from '@/components/storyboard/MediaPanel.vue'
 import JSZip from 'jszip'
 import { Download, Play, Pause } from 'lucide-vue-next'
 
@@ -328,6 +338,10 @@ const hoveredItemId = ref(null)
 const isSaving = ref(false)
 const globalMediaType = ref('image') // 전체 미디어 타입 (image/video)
 const pollingInterval = ref(null) // 자동 새로고침용 interval
+
+// MediaPanel 관련
+const mediaPanel = ref(null)
+const mediaPanelOpen = ref(false)
 
 // 모바일 감지
 const isMobile = ref(window.innerWidth <= 768)
@@ -1701,6 +1715,12 @@ onMounted(() => {
   startPolling() // 자동 새로고침 시작
 })
 
+// MediaPanel에서 미디어 드롭 처리
+const handleMediaDrop = (data) => {
+  console.log('미디어 패널에서 드롭:', data)
+  // TODO: 드롭된 미디어를 씬에 연결하는 로직 구현
+}
+
 // 컴포넌트 언마운트 시 오디오 정리 및 폴링 중지
 onUnmounted(() => {
   Object.values(audioElements.value).forEach(audio => {
@@ -1726,6 +1746,12 @@ defineExpose({ deleteSelectedScenes })
   overflow-y: auto;
   padding: 10px 5px; /* 좌우 여백 최소화 */
   padding-top: 10px;
+  transition: padding-right 0.3s ease;
+}
+
+/* 패널이 열렸을 때 콘텐츠 영역 조정 */
+.production-table-wrapper.panel-open {
+  padding-right: 310px; /* 패널 너비(300px) + 여백(10px) */
 }
 
 /* 섹션 헤더 - 이미지뷰와 스타일 통일 */

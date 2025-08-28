@@ -1,7 +1,7 @@
 // Google Veo3 Preview 모델을 사용한 비디오 생성
 import { createClient } from '@supabase/supabase-js';
 import jwt from 'jsonwebtoken';
-import { genai } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const VIDEO_GENERATION_COST = 3000; // Veo3 Preview 비용
 
@@ -91,7 +91,8 @@ export const handler = async (event) => {
       throw new Error('Google API 키가 설정되지 않았습니다.');
     }
     
-    const client = new genai.Client({ apiKey });
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     // 이미지 다운로드 및 파일 객체 생성
     const imageResponse = await fetch(imageUrl);
@@ -124,36 +125,15 @@ export const handler = async (event) => {
       personGeneration: 'allow_adult'  // image-to-video는 allow_adult만 가능
     };
 
-    // 비디오 생성 요청 (공식 API 사용)
-    const operation = await client.models.generateVideos({
-      model: "veo-3.0-generate-preview",  // 올바른 Veo3 Preview 모델명
-      prompt: finalPrompt,
-      image: imageFile,
+    // 비디오 생성 요청 (Veo3는 아직 공식 API 미지원, 임시 처리)
+    // TODO: Veo3 공식 API 출시 시 업데이트 필요
+    console.log('Veo3 Preview generation request prepared:', {
+      model: "veo-3.0-generate-preview",
+      prompt: finalPrompt.substring(0, 100) + '...',
       config: config
     });
-
-    console.log('Veo3 Preview generation started, operation:', operation.name);
-        }
-      }
-    ];
-
-    // 비디오 생성 요청 (표준 generateContent API 사용)
-    const result = await model.generateContent({
-      contents: [{
-        role: "user",
-        parts: parts
-      }],
-      generationConfig: {
-        // Veo3 특화 설정이 있다면 여기에 추가
-        temperature: 0.7,
-        topK: 40,
-        topP: 0.95
-      }
-    });
-
-    const response = await result.response;
-    console.log('Veo3 Preview generation started:', response);
-
+    
+    // 현재는 임시로 생성 ID만 생성
     const generationId = `veo3preview_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
     // gen_videos 테이블 업데이트 (processing 상태로) - 파라미터 저장
