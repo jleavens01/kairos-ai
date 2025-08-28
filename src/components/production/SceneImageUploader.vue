@@ -150,6 +150,7 @@ const switchLocalMediaType = () => {
 // Methods
 const handleDragOver = (event) => {
   event.preventDefault()
+  event.dataTransfer.dropEffect = 'copy'
   isDragOver.value = true
 }
 
@@ -161,13 +162,64 @@ const handleDrop = async (event) => {
   event.preventDefault()
   isDragOver.value = false
   
-  const files = event.dataTransfer.files
-  if (files.length > 0) {
-    const file = files[0]
-    if (file.type.startsWith('image/')) {
-      await uploadImage(file)
-    } else {
-      alert('이미지 파일만 업로드 가능합니다.')
+  // MediaPanel에서 드래그한 데이터 확인
+  const jsonData = event.dataTransfer.getData('application/json')
+  
+  if (jsonData) {
+    // MediaPanel에서 드래그한 미디어 처리
+    try {
+      const dragData = JSON.parse(jsonData)
+      console.log('Dropped media from panel:', dragData)
+      
+      // 미디어 타입에 따라 처리
+      if (dragData.type === 'image') {
+        // 이미지 URL을 production_sheets에 저장
+        const { error } = await supabase
+          .from('production_sheets')
+          .update({ 
+            scene_image_url: dragData.url,
+            scene_media_type: 'image'
+          })
+          .eq('id', props.sceneId)
+        
+        if (error) {
+          console.error('Failed to update image:', error)
+          alert('이미지 연결에 실패했습니다.')
+        } else {
+          emit('update', dragData.url)
+        }
+      } else if (dragData.type === 'video') {
+        // 비디오 URL을 production_sheets에 저장
+        const { error } = await supabase
+          .from('production_sheets')
+          .update({ 
+            scene_video_url: dragData.url,
+            scene_media_type: 'video'
+          })
+          .eq('id', props.sceneId)
+        
+        if (error) {
+          console.error('Failed to update video:', error)
+          alert('비디오 연결에 실패했습니다.')
+        } else {
+          emit('update', dragData.url)
+          // 미디어 타입을 비디오로 변경
+          localMediaType.value = 'video'
+        }
+      }
+    } catch (error) {
+      console.error('Failed to parse drag data:', error)
+    }
+  } else {
+    // 일반 파일 드롭 처리 (기존 로직)
+    const files = event.dataTransfer.files
+    if (files.length > 0) {
+      const file = files[0]
+      if (file.type.startsWith('image/')) {
+        await uploadImage(file)
+      } else {
+        alert('이미지 파일만 업로드 가능합니다.')
+      }
     }
   }
 }

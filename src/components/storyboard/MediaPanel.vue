@@ -86,9 +86,9 @@
               @dragend="handleDragEnd"
               :title="video.element_name || video.prompt_used"
             >
-              <div v-if="video.thumbnail_url" class="video-thumbnail">
+              <div v-if="video.thumbnail_url || video.reference_image_url" class="video-thumbnail">
                 <img 
-                  :src="video.thumbnail_url" 
+                  :src="video.thumbnail_url || video.reference_image_url" 
                   :alt="video.element_name"
                   @error="handleImageError($event)"
                 />
@@ -241,8 +241,10 @@ const handleDragStart = (event, item, type) => {
     id: item.id,
     url: type === 'image' 
       ? (item.storage_image_url || item.result_image_url)
-      : (item.storage_video_url || item.result_video_url),
-    thumbnailUrl: item.thumbnail_url,
+      : (item.storage_video_url || item.result_video_url || item.video_url),
+    thumbnailUrl: type === 'video' 
+      ? (item.thumbnail_url || item.reference_image_url)
+      : (item.thumbnail_url || item.storage_image_url || item.result_image_url),
     name: item.element_name,
     prompt: item.prompt_used
   }
@@ -304,12 +306,14 @@ defineExpose({
   top: 60px;
   bottom: 0;
   width: 300px;
-  background: var(--bg-secondary);
-  border-left: 1px solid var(--border-color);
+  background: rgba(26, 27, 30, 0.95);
+  backdrop-filter: blur(10px);
+  border-left: 1px solid rgba(255, 255, 255, 0.05);
   transform: translateX(100%);
-  transition: transform 0.3s ease;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   z-index: 100;
   display: flex;
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.3);
 }
 
 .media-panel.panel-open {
@@ -323,23 +327,29 @@ defineExpose({
   transform: translateY(-50%);
   width: 40px;
   height: 80px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(16, 185, 129, 0.05));
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(74, 222, 128, 0.2);
   border-right: none;
-  border-radius: 8px 0 0 8px;
+  border-radius: 12px 0 0 12px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   writing-mode: vertical-rl;
   text-orientation: mixed;
-  font-size: 14px;
-  color: var(--text-primary);
-  transition: background-color 0.2s;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .panel-toggle-btn:hover {
-  background: var(--bg-tertiary);
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(16, 185, 129, 0.1));
+  border-color: rgba(74, 222, 128, 0.4);
+  transform: translateY(-50%) translateX(-2px);
 }
 
 .panel-content {
@@ -350,8 +360,9 @@ defineExpose({
 }
 
 .panel-header {
-  padding: 15px;
-  border-bottom: 1px solid var(--border-color);
+  padding: 16px;
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.05), rgba(16, 185, 129, 0.02));
+  border-bottom: 1px solid rgba(74, 222, 128, 0.1);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -359,8 +370,10 @@ defineExpose({
 
 .panel-header h3 {
   margin: 0;
-  font-size: 16px;
-  color: var(--text-primary);
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+  letter-spacing: 0.3px;
 }
 
 .panel-controls {
@@ -370,26 +383,42 @@ defineExpose({
 }
 
 .filter-select {
-  padding: 4px 8px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  color: var(--text-primary);
+  padding: 6px 10px;
+  background: rgba(31, 32, 35, 0.7);
+  border: 1px solid rgba(74, 222, 128, 0.2);
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.9);
   font-size: 12px;
+  transition: all 0.2s ease;
+  outline: none;
+}
+
+.filter-select:hover {
+  border-color: rgba(74, 222, 128, 0.4);
+  background: rgba(31, 32, 35, 0.9);
+}
+
+.filter-select:focus {
+  border-color: rgba(74, 222, 128, 0.6);
+  box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.1);
 }
 
 .btn-refresh {
-  padding: 4px 8px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
+  padding: 6px 10px;
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(16, 185, 129, 0.05));
+  border: 1px solid rgba(74, 222, 128, 0.3);
+  border-radius: 6px;
   cursor: pointer;
   font-size: 14px;
-  transition: background-color 0.2s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .btn-refresh:hover {
-  background: var(--bg-tertiary);
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.2), rgba(16, 185, 129, 0.1));
+  border-color: rgba(74, 222, 128, 0.5);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(74, 222, 128, 0.2);
 }
 
 .search-bar {
@@ -399,25 +428,34 @@ defineExpose({
 
 .search-input {
   width: 100%;
-  padding: 8px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  color: var(--text-primary);
+  padding: 10px 12px;
+  background: rgba(31, 32, 35, 0.5);
+  border: 1px solid rgba(74, 222, 128, 0.2);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.9);
   font-size: 13px;
+  transition: all 0.3s ease;
+  outline: none;
 }
 
 .search-input::placeholder {
-  color: var(--text-secondary);
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.search-input:focus {
+  background: rgba(31, 32, 35, 0.7);
+  border-color: rgba(74, 222, 128, 0.5);
+  box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.1);
 }
 
 .usage-hint {
-  padding: 8px 15px;
-  background: var(--bg-tertiary);
-  border-bottom: 1px solid var(--border-color);
-  color: var(--text-secondary);
+  padding: 10px 16px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.05), rgba(147, 51, 234, 0.03));
+  border-bottom: 1px solid rgba(74, 222, 128, 0.1);
+  color: rgba(255, 255, 255, 0.6);
   font-size: 12px;
   text-align: center;
+  letter-spacing: 0.3px;
 }
 
 .media-grid {
@@ -439,13 +477,13 @@ defineExpose({
 
 .section-title {
   margin: 0 0 12px 0;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--border-color);
-  font-size: 13px;
-  color: var(--text-secondary);
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(74, 222, 128, 0.1);
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 1px;
 }
 
 .media-items {
@@ -457,18 +495,19 @@ defineExpose({
 .media-item {
   position: relative;
   aspect-ratio: 1;
-  border-radius: 6px;
+  border-radius: 8px;
   overflow: hidden;
-  background: var(--bg-tertiary);
+  background: rgba(31, 32, 35, 0.5);
   cursor: grab;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border: 2px solid transparent;
 }
 
 .media-item:hover {
-  transform: scale(1.05);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  border-color: var(--primary-color);
+  transform: scale(1.05) translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(74, 222, 128, 0.3);
+  border-color: rgba(74, 222, 128, 0.5);
+  background: rgba(31, 32, 35, 0.7);
 }
 
 .media-item.dragging {
@@ -494,7 +533,7 @@ defineExpose({
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(147, 51, 234, 0.15));
 }
 
 .video-icon {
@@ -506,21 +545,29 @@ defineExpose({
   bottom: 0;
   left: 0;
   right: 0;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.4) 50%, transparent);
   padding: 8px;
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
   pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.media-item:hover .media-overlay {
+  opacity: 1;
 }
 
 .media-type {
-  background: rgba(0, 0, 0, 0.6);
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.8), rgba(16, 185, 129, 0.6));
   color: white;
   font-size: 10px;
-  padding: 2px 4px;
-  border-radius: 3px;
-  font-weight: bold;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .media-name {
@@ -539,16 +586,22 @@ defineExpose({
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: var(--text-secondary);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.loading-state p {
+  margin-top: 12px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .spinner {
   width: 30px;
   height: 30px;
-  border: 3px solid var(--border-color);
-  border-top-color: var(--primary-color);
+  border: 3px solid rgba(74, 222, 128, 0.1);
+  border-top-color: rgba(74, 222, 128, 0.8);
   border-radius: 50%;
-  animation: spin 1s linear infinite;
+  animation: spin 0.8s cubic-bezier(0.5, 0, 0.5, 1) infinite;
 }
 
 @keyframes spin {
@@ -561,25 +614,35 @@ defineExpose({
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: var(--text-secondary);
+  color: rgba(255, 255, 255, 0.5);
   padding: 20px;
   text-align: center;
 }
 
+.empty-state p {
+  font-size: 14px;
+  margin-bottom: 8px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
 .btn-refresh-empty {
-  margin-top: 10px;
-  padding: 8px 16px;
-  background: var(--primary-color);
+  margin-top: 12px;
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #22c55e, #10b981);
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 13px;
-  transition: opacity 0.2s;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  text-transform: uppercase;
 }
 
 .btn-refresh-empty:hover {
-  opacity: 0.9;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(34, 197, 94, 0.4);
 }
 
 .image-error {

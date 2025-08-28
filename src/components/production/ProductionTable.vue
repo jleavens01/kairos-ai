@@ -1,5 +1,6 @@
 <template>
-  <div class="production-table-wrapper" :class="{ 'panel-open': mediaPanelOpen }">
+  <div class="production-table-root">
+    <div class="production-table-wrapper" :class="{ 'panel-open': mediaPanelOpen }">
     <!-- 선택된 씬이 있을 때 표시되는 액션 바 -->
     <div v-if="selectedScenes.length > 0" class="selection-actions">
       <div class="selection-info">
@@ -289,16 +290,16 @@
       <p>아직 생성된 씬이 없습니다.</p>
     </div>
     </div>
-  </div>
+    </div>
   
-  <!-- 미디어 패널 (데스크톱용) -->
-  <MediaPanel 
-    v-if="projectId && !isMobile"
-    ref="mediaPanel"
-    :project-id="projectId"
-    @media-drop="handleMediaDrop"
-    @panel-toggle="mediaPanelOpen = $event"
-  />
+    <!-- 미디어 패널 (데스크톱용) -->
+    <MediaPanel 
+      v-if="projectId && !isMobile"
+      ref="mediaPanel"
+      :project-id="projectId"
+      @panel-toggle="mediaPanelOpen = $event"
+    />
+  </div>
 </template>
 
 <script setup>
@@ -674,7 +675,7 @@ const splitSceneAtCursor = async (scene) => {
   }
   
   try {
-    // 현재 씬의 텍스트를 커서 앞부분으로 직접 업데이트 (saveEdit 사용하지 않음)
+    // 현재 씬의 텍스트를 커서 앞부분으로 업데이트
     const { error: updateError } = await supabase
       .from('production_sheets')
       .update({ original_script_text: beforeText })
@@ -685,6 +686,9 @@ const splitSceneAtCursor = async (scene) => {
       alert('씬 업데이트에 실패했습니다.')
       return
     }
+    
+    // 로컬 상태 업데이트 (UI 즉시 반영)
+    scene.original_script_text = beforeText
     
     // 커서 뒷부분으로 새 씬 추가
     const session = await supabase.auth.getSession()
@@ -717,11 +721,11 @@ const splitSceneAtCursor = async (scene) => {
       return
     }
     
+    // 편집 모드 종료 (스토어 로드 전에 실행)
+    cancelEdit()
+    
     // 프로덕션 시트 다시 로드
     await productionStore.fetchProductionSheets(props.projectId)
-    
-    // 편집 모드 종료
-    cancelEdit()
     
   } catch (err) {
     console.error('씬 분할 중 오류:', err)
@@ -1715,11 +1719,6 @@ onMounted(() => {
   startPolling() // 자동 새로고침 시작
 })
 
-// MediaPanel에서 미디어 드롭 처리
-const handleMediaDrop = (data) => {
-  console.log('미디어 패널에서 드롭:', data)
-  // TODO: 드롭된 미디어를 씬에 연결하는 로직 구현
-}
 
 // 컴포넌트 언마운트 시 오디오 정리 및 폴링 중지
 onUnmounted(() => {
@@ -1739,6 +1738,14 @@ defineExpose({ deleteSelectedScenes })
 </script>
 
 <style scoped>
+/* 루트 컨테이너 */
+.production-table-root {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  display: flex;
+}
+
 .production-table-wrapper {
   width: 100%;
   position: relative;
