@@ -256,6 +256,38 @@
       @close="showSceneModal = false"
       @success="handleSceneConnection"
     />
+    
+    <!-- 다운로드 선택 모달 -->
+    <div v-if="showDownloadModal" class="modal-overlay" @click.self="showDownloadModal = false">
+      <div class="download-modal">
+        <h3 class="modal-title">비디오 다운로드</h3>
+        <p class="modal-message">
+          {{ videoToDownload?.upscale_video_url ? '다운로드할 버전을 선택하세요:' : '원본 비디오를 다운로드하시겠습니까?' }}
+        </p>
+        <div class="modal-buttons">
+          <button 
+            v-if="videoToDownload?.upscale_video_url"
+            @click="performDownload('upscaled')"
+            class="btn btn-primary"
+          >
+            업스케일 버전 (고화질)
+          </button>
+          <button 
+            @click="performDownload('original')"
+            class="btn"
+            :class="videoToDownload?.upscale_video_url ? 'btn-secondary' : 'btn-primary'"
+          >
+            원본 버전
+          </button>
+          <button 
+            @click="showDownloadModal = false; videoToDownload = null"
+            class="btn btn-ghost"
+          >
+            취소
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -293,10 +325,12 @@ const showGenerationModal = ref(false)
 const showDetailModal = ref(false)
 const showSceneModal = ref(false)
 const showUpscaleModal = ref(false)
+const showDownloadModal = ref(false)
 const currentPrompt = ref('')
 const videoToView = ref(null)
 const videoToConnect = ref(null)
 const videoToUpscale = ref(null)
+const videoToDownload = ref(null)
 const selectedVideo = ref(null) // 모바일에서 선택된 비디오 추적
 const videoRefs = ref({})
 let pollingInterval = null
@@ -315,6 +349,10 @@ watch(showSceneModal, (isOpen) => {
 })
 
 watch(showUpscaleModal, (isOpen) => {
+  productionStore.setModalOpen(isOpen)
+})
+
+watch(showDownloadModal, (isOpen) => {
   productionStore.setModalOpen(isOpen)
 })
 
@@ -570,57 +608,74 @@ const toggleKeep = async (video) => {
   }
 }
 
-const downloadVideo = async (video) => {
+const downloadVideo = (video) => {
   if (video.storage_video_url) {
-    try {
-      // 업스케일 버전이 있는 경우 선택 옵션 제공
-      let videoUrl = video.storage_video_url
-      let versionSuffix = ''
-      
-      if (video.upscale_video_url) {
-        const choice = confirm('업스케일 버전을 다운로드하시겠습니까?\n\n확인: 업스케일 버전 (고화질)\n취소: 원본 버전')
-        if (choice) {
-          videoUrl = video.upscale_video_url
-          versionSuffix = '_upscaled'
-        }
-      }
-      
-      // 프로젝트 정보 가져오기
-      const { data: projectData } = await supabase
-        .from('projects')
-        .select('name')
-        .eq('id', props.projectId)
-        .single()
-      
-      const projectName = projectData?.name || 'untitled'
-      const sceneNumber = video.linked_scene_number || 'no-scene'
-      
-      // 파일명 생성 (특수문자 제거)
-      const sanitizedProjectName = projectName.replace(/[^a-zA-Z0-9가-힣]/g, '_')
-      const fileName = `video_${sanitizedProjectName}_${sceneNumber}${versionSuffix}.mp4`
-      
-      // 비디오 다운로드
-      const response = await fetch(videoUrl)
-      const blob = await response.blob()
-      const url = URL.createObjectURL(blob)
-      
-      const link = document.createElement('a')
-      link.href = url
-      link.download = fileName
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      
-      // 메모리 정리
-      URL.revokeObjectURL(url)
-    } catch (error) {
-      console.error('Video download error:', error)
-      // 실패 시 기본 다운로드
-      const link = document.createElement('a')
-      link.href = video.storage_video_url
-      link.download = `video_${video.id}.mp4`
-      link.click()
+    videoToDownload.value = video
+    showDownloadModal.value = true
+  }
+}
+
+const performDownload = async (downloadType) => {
+  const video = videoToDownload.value
+  if (!video || !video.storage_video_url) return
+  
+  showDownloadModal.value = false
+  
+  try {
+    let videoUrl = video.storage_video_url
+    let versionSuffix = ''
+    
+    // 다운로드 타입에 따라 URL 선택
+    if (downloadType === 'upscaled' && video.upscale_video_url) {
+      videoUrl = video.upscale_video_url
+      versionSuffix = '_upscaled'
+    } else if (downloadType === 'original') {
+      // 원본 사용 (기본값)
+      videoUrl = video.storage_video_url
+      versionSuffix = ''
+    } else {
+      // 취소된 경우
+      videoToDownload.value = null
+      return
     }
+    
+    // 프로젝트 정보 가져오기
+    const { data: projectData } = await supabase
+      .from('projects')
+      .select('name')
+      .eq('id', props.projectId)
+      .single()
+    
+    const projectName = projectData?.name || 'untitled'
+    const sceneNumber = video.linked_scene_number || 'no-scene'
+    
+    // 파일명 생성 (특수문자 제거)
+    const sanitizedProjectName = projectName.replace(/[^a-zA-Z0-9가-힣]/g, '_')
+    const fileName = `video_${sanitizedProjectName}_${sceneNumber}${versionSuffix}.mp4`
+    
+    // 비디오 다운로드
+    const response = await fetch(videoUrl)
+    const blob = await response.blob()
+    const url = URL.createObjectURL(blob)
+    
+    const link = document.createElement('a')
+    link.href = url
+    link.download = fileName
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    
+    // 메모리 정리
+    URL.revokeObjectURL(url)
+    videoToDownload.value = null
+  } catch (error) {
+    console.error('Video download error:', error)
+    // 실패 시 기본 다운로드
+    const link = document.createElement('a')
+    link.href = video.storage_video_url
+    link.download = `video_${video.id}.mp4`
+    link.click()
+    videoToDownload.value = null
   }
 }
 
@@ -1644,5 +1699,137 @@ defineExpose({
   font-size: 0.9rem;
   font-weight: 500;
   text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+/* 다운로드 선택 모달 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: fadeIn 0.2s ease;
+}
+
+.download-modal {
+  background: white;
+  border-radius: 16px;
+  padding: 24px;
+  max-width: 400px;
+  width: 90%;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  animation: slideUp 0.3s ease;
+}
+
+.modal-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0 0 12px 0;
+  text-align: center;
+}
+
+.modal-message {
+  color: #666;
+  text-align: center;
+  margin-bottom: 24px;
+  font-size: 0.95rem;
+}
+
+.modal-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.modal-buttons .btn {
+  width: 100%;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.modal-buttons .btn-primary {
+  background: #3b82f6;
+  color: white;
+}
+
+.modal-buttons .btn-primary:hover {
+  background: #2563eb;
+  transform: translateY(-1px);
+}
+
+.modal-buttons .btn-secondary {
+  background: #6b7280;
+  color: white;
+}
+
+.modal-buttons .btn-secondary:hover {
+  background: #4b5563;
+  transform: translateY(-1px);
+}
+
+.modal-buttons .btn-ghost {
+  background: transparent;
+  color: #666;
+  border: 1px solid #e5e7eb;
+}
+
+.modal-buttons .btn-ghost:hover {
+  background: #f3f4f6;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* 다크 모드 지원 */
+@media (prefers-color-scheme: dark) {
+  .download-modal {
+    background: #1f2937;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
+  }
+  
+  .modal-title {
+    color: #f3f4f6;
+  }
+  
+  .modal-message {
+    color: #9ca3af;
+  }
+  
+  .modal-buttons .btn-ghost {
+    color: #9ca3af;
+    border-color: #374151;
+  }
+  
+  .modal-buttons .btn-ghost:hover {
+    background: #374151;
+  }
 }
 </style>
