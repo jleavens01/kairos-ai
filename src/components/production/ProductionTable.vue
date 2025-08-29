@@ -675,7 +675,13 @@ const splitSceneAtCursor = async (scene) => {
   }
   
   try {
-    // 현재 씬의 텍스트를 커서 앞부분으로 업데이트
+    const session = await supabase.auth.getSession()
+    if (!session.data.session) {
+      alert('로그인이 필요합니다.')
+      return
+    }
+    
+    // 1. 먼저 현재 씬을 커서 앞부분으로 업데이트 (ID로 직접 업데이트하므로 안전)
     const { error: updateError } = await supabase
       .from('production_sheets')
       .update({ original_script_text: beforeText })
@@ -687,17 +693,7 @@ const splitSceneAtCursor = async (scene) => {
       return
     }
     
-    // 로컬 상태 업데이트 (UI 즉시 반영)
-    scene.original_script_text = beforeText
-    
-    // 커서 뒷부분으로 새 씬 추가
-    const session = await supabase.auth.getSession()
-    if (!session.data.session) {
-      alert('로그인이 필요합니다.')
-      return
-    }
-    
-    // 새 씬 데이터 생성
+    // 2. 그 다음 새 씬 추가 (커서 뒷부분)
     const newSceneData = {
       projectId: props.projectId,
       afterSceneNumber: scene.scene_number,
@@ -718,13 +714,20 @@ const splitSceneAtCursor = async (scene) => {
       const error = await response.json()
       console.error('씬 분할 실패:', error)
       alert('씬 분할에 실패했습니다.')
+      
+      // 새 씬 추가 실패 시 원래 텍스트로 복구
+      await supabase
+        .from('production_sheets')
+        .update({ original_script_text: fullText })
+        .eq('id', scene.id)
+      
       return
     }
     
-    // 편집 모드 종료 (스토어 로드 전에 실행)
+    // 3. 편집 모드 종료
     cancelEdit()
     
-    // 프로덕션 시트 다시 로드
+    // 4. 프로덕션 시트 다시 로드
     await productionStore.fetchProductionSheets(props.projectId)
     
   } catch (err) {

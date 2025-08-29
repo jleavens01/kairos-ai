@@ -118,6 +118,12 @@ export const handler = async (event) => {
       negative_prompt: klingParams.negative_prompt,
       cfg_scale: klingParams.cfg_scale
     };
+    
+    // tail_image_url이 제공된 경우 추가 (두 번째 이미지)
+    if (klingParams.tail_image_url) {
+      falRequestBody.tail_image_url = klingParams.tail_image_url;
+      console.log('Tail image URL provided:', klingParams.tail_image_url);
+    }
 
     console.log('FAL API Request for Kling 2.1:', JSON.stringify(falRequestBody, null, 2));
 

@@ -62,11 +62,11 @@
             </div>
           </div>
 
-          <!-- 씨댄스 라이트 모델 안내 -->
-          <div v-if="selectedModel === 'seedance-lite' && referenceTab !== 'storyboard'" class="seedance-info">
+          <!-- 씨댄스 라이트 / Kling 2.1 모델 안내 -->
+          <div v-if="(selectedModel === 'seedance-lite' || selectedModel === 'kling2.1') && referenceTab !== 'storyboard'" class="seedance-info">
             <p class="seedance-hint">
               <span class="icon">ℹ️</span>
-              SeedDance Lite는 <strong>첫 프레임</strong>과 <strong>끝 이미지</strong>를 참조합니다.
+              {{ selectedModel === 'seedance-lite' ? 'SeedDance Lite' : 'Kling 2.1 Pro' }}는 <strong>첫 프레임</strong>과 <strong>끝 프레임</strong>을 참조합니다.
               <br>
               <span v-if="referenceImages.length === 0" class="warning">
                 ⚠️ 최소 1개의 이미지를 선택해주세요.
@@ -119,10 +119,10 @@
                 <div v-if="item.hasAnnotations" class="annotation-badge" title="주석 추가됨">
                   🎨
                 </div>
-                <!-- 씨댄스 라이트 모델일 때 첫/마짉 이미지 표시 -->
-                <div v-if="selectedModel === 'seedance-lite' && referenceImages.length > 1" class="image-position-badge">
+                <!-- 씨댄스 라이트 / Kling 2.1 모델일 때 첫/마지막 이미지 표시 -->
+                <div v-if="(selectedModel === 'seedance-lite' || selectedModel === 'kling2.1') && referenceImages.length > 1" class="image-position-badge">
                   <span v-if="index === 0" class="badge-first">첫 프레임</span>
-                  <span v-else-if="index === referenceImages.length - 1" class="badge-last">끝 이미지</span>
+                  <span v-else-if="index === referenceImages.length - 1" class="badge-last">끝 프레임</span>
                 </div>
               </div>
             </div>
@@ -851,9 +851,9 @@ const handleFileSelect = (e) => {
 const handleFiles = async (files) => {
   for (const file of files) {
     if (file.type.startsWith('image/')) {
-      // SeedDance Lite는 최대 2개 이미지만 허용
-      if (selectedModel.value === 'seedance-lite' && referenceImages.value.length >= 2) {
-        console.log('SeedDance Lite는 최대 2개 이미지만 지원합니다')
+      // SeedDance Lite와 Kling 2.1은 최대 2개 이미지만 허용
+      if ((selectedModel.value === 'seedance-lite' || selectedModel.value === 'kling2.1') && referenceImages.value.length >= 2) {
+        console.log(`${selectedModel.value}는 최대 2개 이미지만 지원합니다`)
         break
       }
       
@@ -869,8 +869,8 @@ const handleFiles = async (files) => {
         sanitizedName: sanitizedFile.name
       }
       
-      // SeedDance Lite는 2개까지, 다른 모델은 1개만
-      if (selectedModel.value === 'seedance-lite') {
+      // SeedDance Lite와 Kling 2.1은 2개까지, 다른 모델은 1개만
+      if (selectedModel.value === 'seedance-lite' || selectedModel.value === 'kling2.1') {
         if (referenceImages.value.length < 2) {
           referenceImages.value.push(item)
         }
@@ -986,8 +986,8 @@ const toggleLibraryImage = (image) => {
   if (index >= 0) {
     referenceImages.value.splice(index, 1)
   } else {
-    // SeedDance Lite는 2개 이미지 허용, 다른 모델은 1개만
-    if (selectedModel.value === 'seedance-lite') {
+    // SeedDance Lite와 Kling 2.1은 2개 이미지 허용, 다른 모델은 1개만
+    if (selectedModel.value === 'seedance-lite' || selectedModel.value === 'kling2.1') {
       if (referenceImages.value.length < 2) {
         referenceImages.value.push({
           id: image.id,
@@ -1015,8 +1015,8 @@ const toggleLibraryImage = (image) => {
 
 const addImageFromUrl = () => {
   if (urlInput.value) {
-    // SeedDance Lite는 2개 이미지 허용, 다른 모델은 1개만
-    if (selectedModel.value === 'seedance-lite') {
+    // SeedDance Lite와 Kling 2.1은 2개 이미지 허용, 다른 모델은 1개만
+    if (selectedModel.value === 'seedance-lite' || selectedModel.value === 'kling2.1') {
       if (referenceImages.value.length < 2) {
         referenceImages.value.push({
           url: urlInput.value,
@@ -1113,8 +1113,8 @@ const selectStoryboardImage = (scene) => {
   if (index >= 0) {
     referenceImages.value.splice(index, 1)
   } else {
-    // SeedDance Lite는 2개 이미지 허용, 다른 모델은 1개만
-    if (selectedModel.value === 'seedance-lite') {
+    // SeedDance Lite와 Kling 2.1은 2개 이미지 허용, 다른 모델은 1개만
+    if (selectedModel.value === 'seedance-lite' || selectedModel.value === 'kling2.1') {
       if (referenceImages.value.length < 2) {
         referenceImages.value.push({
           sceneId: scene.id,
@@ -1273,8 +1273,8 @@ const generateVideo = async () => {
       referenceImageUrl = firstRef.url
     }
     
-    // 씨댄스 라이트 모델이고 이미지가 2개 이상일 때 마지막 이미지 처리
-    if (selectedModel.value === 'seedance-lite' && referenceImages.value.length > 1) {
+    // 씨댄스 라이트 또는 Kling 2.1 모델이고 이미지가 2개 이상일 때 마지막 이미지 처리
+    if ((selectedModel.value === 'seedance-lite' || selectedModel.value === 'kling2.1') && referenceImages.value.length > 1) {
       if (lastRef.file) {
         const userId = authStore.user?.id
         const fileName = lastRef.file.name
@@ -1311,6 +1311,10 @@ const generateVideo = async () => {
       negativePromptToSend = negativePrompt.value || veo3FastParams.value.negativePrompt
     } else if (selectedModel.value === 'kling2.1') {
       modelParams = { ...klingParams.value }
+      // Kling 2.1에서 두 번째 이미지가 있으면 tail_image_url로 추가
+      if (endImageUrl) {
+        modelParams.tail_image_url = endImageUrl
+      }
     } else if (selectedModel.value === 'hailou02-standard') {
       modelParams = { ...hailouStandardParams.value }
     } else if (selectedModel.value === 'hailou02-pro') {

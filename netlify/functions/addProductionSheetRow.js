@@ -25,7 +25,7 @@ export const handler = async (event) => {
     if (!user || !user.sub) throw { statusCode: 401, message: 'Invalid token payload.' };
 
     // 요청 본문 파싱
-    const { projectId, afterSceneNumber } = JSON.parse(event.body);
+    const { projectId, afterSceneNumber, scriptText, characters } = JSON.parse(event.body);
     if (projectId === undefined || afterSceneNumber === undefined) {
       throw new Error("projectId and afterSceneNumber are required.");
     }
@@ -35,7 +35,7 @@ export const handler = async (event) => {
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
     
-    // DB 함수(RPC) 호출
+    // DB 함수(RPC) 호출하여 새 씬 추가
     console.log('Calling RPC with:', { projectId, afterSceneNumber });
     
     const { data, error: rpcError } = await supabaseAdmin.rpc('add_production_sheet_row', {
@@ -49,6 +49,41 @@ export const handler = async (event) => {
     }
     
     console.log('RPC Success:', data);
+
+    // scriptText나 characters가 제공된 경우, 새로 생성된 씬을 업데이트
+    if (scriptText || characters) {
+      // 새로 추가된 씬 찾기 (afterSceneNumber + 1)
+      const newSceneNumber = afterSceneNumber + 1;
+      
+      const { data: scenes, error: fetchError } = await supabaseAdmin
+        .from('production_sheets')
+        .select('id')
+        .eq('project_id', projectId)
+        .eq('scene_number', newSceneNumber)
+        .single();
+      
+      if (fetchError) {
+        console.error('Error fetching new scene:', fetchError);
+      } else if (scenes) {
+        // 새 씬 업데이트
+        const updateData = {};
+        if (scriptText) updateData.original_script_text = scriptText;
+        if (characters && characters.length > 0) updateData.characters = characters;
+        
+        if (Object.keys(updateData).length > 0) {
+          const { error: updateError } = await supabaseAdmin
+            .from('production_sheets')
+            .update(updateData)
+            .eq('id', scenes.id);
+          
+          if (updateError) {
+            console.error('Error updating new scene:', updateError);
+          } else {
+            console.log('New scene updated with text and characters');
+          }
+        }
+      }
+    }
 
     // 성공 응답 반환
     return {
