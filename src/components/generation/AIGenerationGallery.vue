@@ -861,23 +861,51 @@ const startPollingWorker = () => {
   const startTime = Date.now()
   let pollCount = 0
   const maxPolls = 40 // 최대 40회 (5초 * 40 = 200초)
+  let forceCheckDone = false // 5분 후 강제 체크 여부
+  
   // 즉시 한 번 실행
   callPollingWorker()
   pollCount++
+  
   // 5초마다 폴링 워커 호출
   pollingWorkerInterval = setInterval(async () => {
-    // 최대 폴링 횟수 또는 시간 초과 체크
-    if (pollCount >= maxPolls || Date.now() - startTime > 200000) {
-      // Debug log removed
+    const elapsedTime = Date.now() - startTime
+    
+    // 5분(300초) 경과 시 강제로 상태 체크 1회 실행
+    if (!forceCheckDone && elapsedTime > 300000) {
+      console.log('🔍 5분 경과 - 강제 상태 체크 실행')
+      forceCheckDone = true
+      await callPollingWorker()
+      
+      // 여전히 processing 상태인 이미지들을 failed로 변경
+      const stuckImages = processingImages.value.filter(img => {
+        const imgStartTime = new Date(img.created_at).getTime()
+        return Date.now() - imgStartTime > 300000 // 5분 이상 경과
+      })
+      
+      if (stuckImages.length > 0) {
+        console.warn(`⚠️ 5분 초과 이미지 ${stuckImages.length}개를 실패 처리합니다`)
+        stuckImages.forEach(img => {
+          console.warn(`- ${img.prompt} (ID: ${img.id})`)
+        })
+        await markImagesAsFailed(stuckImages.map(img => img.id), '생성 시간 초과 (5분)')
+        await loadImages() // 갤러리 새로고침
+      }
+    }
+    
+    // 최대 폴링 횟수 또는 시간 초과 체크 (기존 200초 + 5분 강제체크까지)
+    if (pollCount >= maxPolls || elapsedTime > 400000) {
+      console.log('⏰ 폴링 시간 제한 도달')
       stopPollingWorker()
       return
     }
+    
     // 처리 중인 이미지가 없으면 중지
     if (processingImages.value.length === 0) {
-      // Debug log removed
       stopPollingWorker()
       return
     }
+    
     await callPollingWorker()
     pollCount++
   }, 5000)
@@ -890,6 +918,33 @@ const stopPollingWorker = () => {
     pollingWorkerInterval = null
   }
 }
+
+// 이미지들을 실패 상태로 표시
+const markImagesAsFailed = async (imageIds, errorMessage = '생성 실패') => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+
+    const { error } = await supabase
+      .from('ai_images')
+      .update({
+        generation_status: 'failed',
+        error_message: errorMessage,
+        completed_at: new Date().toISOString()
+      })
+      .in('id', imageIds)
+      .eq('user_id', session.user.id)
+
+    if (error) {
+      console.error('Failed to mark images as failed:', error)
+    } else {
+      console.log(`✅ ${imageIds.length}개 이미지를 실패 처리했습니다`)
+    }
+  } catch (error) {
+    console.error('Error marking images as failed:', error)
+  }
+}
+
 // 폴링 워커 호출
 const callPollingWorker = async () => {
   // 개발 환경에서만 폴링 실행

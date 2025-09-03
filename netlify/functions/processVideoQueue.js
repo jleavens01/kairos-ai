@@ -276,6 +276,29 @@ export const handler = async (event) => {
           
         } catch (error) {
           console.error(`Error processing video ${video.id}:`, error);
+          
+          // 422 에러 처리 (Unprocessable Entity - 요청 검증 실패)
+          if (error.status === 422 || error.message?.includes('422')) {
+            console.log(`🚫 422 validation error for video ${video.id} - prompt: ${video.prompt?.substring(0, 50)}...`);
+            
+            await supabaseAdmin
+              .from('ai_videos')
+              .update({
+                generation_status: 'failed',
+                error_message: 'Invalid request parameters (422)',
+                metadata: {
+                  ...video.metadata,
+                  error: 'Invalid request parameters (422)',
+                  error_details: error.message || 'Request validation failed',
+                  failed_at: new Date().toISOString()
+                },
+                completed_at: new Date().toISOString()
+              })
+              .eq('id', video.id);
+              
+            return { id: video.id, status: 'failed', error: '422 validation error' };
+          }
+          
           return { id: video.id, status: 'error', error: error.message };
         }
       })

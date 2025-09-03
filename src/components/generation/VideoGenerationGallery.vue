@@ -65,27 +65,29 @@
                 <p v-if="video.error_message" class="failed-reason">{{ video.error_message }}</p>
               </div>
             </div>
-            <!-- 썸네일 또는 비디오 미리보기 -->
+            <!-- 썸네일 기본 표시, 호버 시 비디오 미리보기 -->
             <div v-else class="video-preview">
+              <!-- 호버 상태에서만 비디오 로드 -->
               <video 
-                v-if="video.storage_video_url"
+                v-if="video.storage_video_url && hoveredVideoId === video.id"
                 :ref="el => setVideoRef(el, video.id)"
                 :src="video.storage_video_url"
-                :poster="video.thumbnail_url"
-                :autoplay="false"
+                :autoplay="true"
                 muted
                 loop
                 preload="auto"
                 playsinline
                 webkit-playsinline
                 @loadedmetadata="onVideoMetadataLoaded"
-                class="preview-video"
+                class="preview-video hover-video"
               ></video>
+              <!-- 기본 썸네일 이미지 (reference_image_url 사용, 항상 표시) -->
               <LazyImage 
-                v-else-if="video.thumbnail_url"
-                :src="video.thumbnail_url"
+                v-if="video.reference_image_url"
+                :src="video.reference_image_url"
                 :alt="video.description || 'Video thumbnail'"
                 root-margin="200px"
+                :class="{ 'thumbnail-hidden': hoveredVideoId === video.id && video.storage_video_url }"
               />
               <div v-else class="no-preview">
                 <Video :size="48" />
@@ -225,6 +227,13 @@
       @close="closeGenerationModal"
       @generated="handleGenerationSuccess"
     />
+    
+    <!-- 아바타 비디오 생성 모달 -->
+    <AvatarVideoGenerationModal
+      v-if="showAvatarGenerationModal"
+      @close="closeAvatarGenerationModal"
+      @generated="handleAvatarGenerationSuccess"
+    />
 
     <!-- 비디오 상세보기 모달 -->
     <VideoDetailModal
@@ -296,6 +305,7 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { supabase } from '@/utils/supabase'
 import { useProductionStore } from '@/stores/production'
 import VideoGenerationModal from './VideoGenerationModal.vue'
+import AvatarVideoGenerationModal from './AvatarVideoGenerationModal.vue'
 import VideoDetailModal from './VideoDetailModal.vue'
 import VideoUpscaleModal from './VideoUpscaleModal.vue'
 import { Plus, Link, Download, Trash2, Loader, Clock, AlertCircle, Video, Star, Archive, ChevronLeft, ChevronRight, ChevronFirst, ChevronLast } from 'lucide-vue-next'
@@ -322,6 +332,7 @@ const totalCount = ref(0)
 const filterModel = ref('')
 const showKeptOnly = ref(false)
 const showGenerationModal = ref(false)
+const showAvatarGenerationModal = ref(false)
 const showDetailModal = ref(false)
 const showSceneModal = ref(false)
 const showUpscaleModal = ref(false)
@@ -355,6 +366,9 @@ watch(showUpscaleModal, (isOpen) => {
 watch(showDownloadModal, (isOpen) => {
   productionStore.setModalOpen(isOpen)
 })
+
+// 호버된 비디오 ID
+const hoveredVideoId = ref(null)
 
 // 모바일 여부 감지
 const isMobile = ref(window.innerWidth <= 768)
@@ -521,9 +535,17 @@ const openGenerationModal = () => {
   showGenerationModal.value = true
 }
 
+const openAvatarGenerationModal = () => {
+  showAvatarGenerationModal.value = true
+}
+
 const closeGenerationModal = () => {
   showGenerationModal.value = false
   currentPrompt.value = ''
+}
+
+const closeAvatarGenerationModal = () => {
+  showAvatarGenerationModal.value = false
 }
 
 const handleGenerationSuccess = async (result) => {
@@ -536,6 +558,20 @@ const handleGenerationSuccess = async (result) => {
   // 처리 중인 비디오가 있으면 폴링 시작
   if (result.status === 'processing' || result.status === 'pending') {
     console.log('Starting polling for processing video')
+    startPolling()
+  }
+}
+
+const handleAvatarGenerationSuccess = async (result) => {
+  console.log('Avatar video generation success:', result)
+  closeAvatarGenerationModal()
+  
+  // 즉시 비디오 목록 새로고침
+  await fetchVideos()
+  
+  // 처리 중인 비디오가 있으면 폴링 시작
+  if (result.status === 'processing' || result.status === 'pending') {
+    console.log('Starting polling for avatar video')
     startPolling()
   }
 }
@@ -694,6 +730,9 @@ const onVideoMetadataLoaded = (event) => {
 }
 
 const handleVideoHover = async (videoId, isHovering) => {
+  // 호버 상태 업데이트
+  hoveredVideoId.value = isHovering ? videoId : null
+  
   const video = videoRefs.value[videoId]
   if (!video) return
   
@@ -898,15 +937,69 @@ const checkUpscaleStatuses = async () => {
   }
 }
 
+// 비디오들을 실패 상태로 표시
+const markVideosAsFailed = async (videoIds, errorMessage = '생성 실패') => {
+  try {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
+
+    const { error } = await supabase
+      .from('ai_videos')
+      .update({
+        generation_status: 'failed',
+        error_message: errorMessage,
+        completed_at: new Date().toISOString()
+      })
+      .in('id', videoIds)
+      .eq('user_id', session.user.id)
+
+    if (error) {
+      console.error('Failed to mark videos as failed:', error)
+    } else {
+      console.log(`✅ ${videoIds.length}개 비디오를 실패 처리했습니다`)
+    }
+  } catch (error) {
+    console.error('Error marking videos as failed:', error)
+  }
+}
+
 // 폴링 관련
 const startPolling = () => {
   if (pollingInterval) return
+  
+  // 폴링 시작 시간 기록
+  const startTime = Date.now()
+  let forceCheckDone = false
   
   // 즉시 한 번 실행
   callPollingWorker()
   
   // 5초마다 폴링
   pollingInterval = setInterval(async () => {
+    const elapsedTime = Date.now() - startTime
+    
+    // 5분(300초) 경과 시 강제로 상태 체크 1회 실행
+    if (!forceCheckDone && elapsedTime > 300000) {
+      console.log('🔍 비디오 5분 경과 - 강제 상태 체크 실행')
+      forceCheckDone = true
+      await callPollingWorker()
+      
+      // 여전히 processing 상태인 비디오들을 failed로 변경
+      const stuckVideos = processingVideos.value.filter(video => {
+        const videoStartTime = new Date(video.created_at).getTime()
+        return Date.now() - videoStartTime > 300000 // 5분 이상 경과
+      })
+      
+      if (stuckVideos.length > 0) {
+        console.warn(`⚠️ 5분 초과 비디오 ${stuckVideos.length}개를 실패 처리합니다`)
+        stuckVideos.forEach(video => {
+          console.warn(`- ${video.prompt} (ID: ${video.id})`)
+        })
+        await markVideosAsFailed(stuckVideos.map(video => video.id), '생성 시간 초과 (5분)')
+        await loadVideos() // 갤러리 새로고침
+      }
+    }
+    
     // 처리 중인 비디오나 업스케일 중인 비디오가 있으면 계속
     if (processingVideos.value.length === 0 && upscalingVideos.value.length === 0) {
       stopPolling()
@@ -920,10 +1013,11 @@ const startPolling = () => {
     }
   }, 5000)
   
-  // 5분 후 자동 중지
+  // 7분 후 자동 중지 (5분 강제체크 + 2분 추가)
   setTimeout(() => {
+    console.log('⏰ 비디오 폴링 시간 제한 도달')
     stopPolling()
-  }, 300000) // 비디오는 이미지보다 오래 걸릴 수 있으므로 5분
+  }, 420000)
 }
 
 const stopPolling = () => {
@@ -1107,6 +1201,7 @@ const toggleKeptView = async (showKept) => {
 // Expose method for parent component
 defineExpose({
   openGenerationModal,
+  openAvatarGenerationModal,
   setFilterModel,
   filterModel,
   toggleKeptView,
@@ -1207,7 +1302,7 @@ defineExpose({
 }
 
 .gallery-item.processing-card .video-wrapper {
-  aspect-ratio: 16/9;
+  min-height: 200px;
 }
 
 .gallery-item.video-card {
@@ -1237,7 +1332,7 @@ defineExpose({
   align-items: center;
   gap: 4px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-  z-index: 2;
+  z-index: 4;
 }
 
 .upscale-icon {
@@ -1275,11 +1370,25 @@ defineExpose({
   width: 100%;
   height: auto;
   display: block;
-  object-fit: contain;
 }
 
 .preview-video {
   transition: opacity 0.3s;
+}
+
+/* 호버 시 비디오 전환 효과 */
+.hover-video {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  opacity: 1;
+  transition: opacity 0.3s ease-in-out;
+}
+
+.thumbnail-hidden {
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
 }
 
 .no-preview {
@@ -1288,8 +1397,7 @@ defineExpose({
   justify-content: center;
   opacity: 0.3;
   width: 100%;
-  min-height: 150px;
-  aspect-ratio: 16/9;
+  min-height: 200px;
   color: var(--text-secondary);
 }
 
@@ -1336,6 +1444,7 @@ defineExpose({
   padding: 12px;
   opacity: 0;
   transition: opacity 0.3s;
+  z-index: 3;
 }
 
 .gallery-item.video-card:hover .video-overlay-info {

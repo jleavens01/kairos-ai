@@ -78,8 +78,8 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
-      path: '/production',
-      name: 'production',
+      path: '/semoji',
+      name: 'semoji',
       component: () => import('../views/ProductionView.vue'),
       meta: { requiresAuth: true }
     },

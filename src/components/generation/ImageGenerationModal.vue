@@ -55,31 +55,39 @@
         <div class="form-group inline-group">
           <label class="inline-label">스타일</label>
           <div class="style-select-wrapper">
-            <div @click="toggleStyleDropdown" class="custom-style-select">
+            <div @click="toggleStyleDropdown" @touchend.prevent="toggleStyleDropdown" class="custom-style-select">
               <span v-if="selectedStyle">{{ selectedStyle.name }}</span>
               <span v-else class="placeholder">선택 안함</span>
               <span class="dropdown-arrow">▼</span>
             </div>
             <!-- 스타일 드롭다운 미리보기 -->
             <div v-if="isStyleDropdownOpen" class="style-dropdown-preview">
-              <div 
-                @click="selectStyleWithPreview('')"
-                class="style-option"
-                :class="{ selected: !selectedStyleId }"
-              >
-                <div class="no-style-placeholder">✕</div>
-                <span class="style-name">선택 안함</span>
+              <div v-if="loadingStyles" class="style-option loading-option">
+                <span class="style-name">스타일 로딩 중...</span>
               </div>
-              <div 
-                v-for="style in styles" 
-                :key="style.id"
-                @click="selectStyleWithPreview(style.id)"
-                class="style-option"
-                :class="{ selected: selectedStyleId === style.id }"
-              >
-                <img :src="style.base_image_url" :alt="style.name" class="style-thumb" />
-                <span class="style-name">{{ style.name }}</span>
-              </div>
+              <template v-else>
+                <div 
+                  @click="selectStyleWithPreview('')"
+                  class="style-option"
+                  :class="{ selected: !selectedStyleId }"
+                >
+                  <div class="no-style-placeholder">✕</div>
+                  <span class="style-name">선택 안함</span>
+                </div>
+                <div v-if="styles.length === 0" class="style-option">
+                  <span class="style-name">스타일을 불러올 수 없습니다</span>
+                </div>
+                <div 
+                  v-for="style in styles" 
+                  :key="style.id"
+                  @click="selectStyleWithPreview(style.id)"
+                  class="style-option"
+                  :class="{ selected: selectedStyleId === style.id }"
+                >
+                  <img :src="style.base_image_url" :alt="style.name" class="style-thumb" />
+                  <span class="style-name">{{ style.name }}</span>
+                </div>
+              </template>
             </div>
           </div>
           <div v-if="selectedStyle" class="style-preview-compact">
@@ -1544,7 +1552,26 @@ const loadStyles = async () => {
       .order('style_code', { ascending: true })
     
     if (error) throw error
-    styles.value = data || []
+    
+    // URL 오타 수정 로직
+    const correctedStyles = (data || []).map(style => {
+      if (style.style_code === 'style011') {
+        // 건강의벗 독자수필 스타일 - 대체 이미지 URL 사용
+        return {
+          ...style,
+          base_image_url: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgdmlld0JveD0iMCAwIDEwMCAxMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiBmaWxsPSIjRjVGNUY1Ii8+CjxwYXRoIGQ9Ik01MCAyMEM2MS4wNDU3IDIwIDcwIDI4Ljk1NDMgNzAgNDBWNjBDNzAgNzEuMDQ1NyA2MS4wNDU3IDgwIDUwIDgwQzM4Ljk1NDMgODAgMzAgNzEuMDQ1NyAzMCA2MFY0MEMzMCAyOC45NTQzIDM4Ljk1NDMgMjAgNTAgMjBaIiBzdHJva2U9IiM5MDkwOTAiIHN0cm9rZS13aWR0aD0iMiIgZmlsbD0ibm9uZSIvPgo8Y2lyY2xlIGN4PSI0NSIgY3k9IjM1IiByPSIzIiBmaWxsPSIjOTA5MDkwIi8+CjxjaXJjbGUgY3g9IjU1IiBjeT0iMzUiIHI9IjMiIGZpbGw9IiM5MDkwOTAiLz4KPHBhdGggZD0iTTQ1IDQ1QzQ1IDUwIDQ3LjUgNTIuNSA1MCA1Mi41QzUyLjUgNTIuNSA1NSA1MCA1NSA0NSIgc3Ryb2tlPSIjOTA5MDkwIiBzdHJva2Utd2lkdGg9IjIiIGZpbGw9Im5vbmUiLz4KPHRleHQgeD0iNTAiIHk9IjkyIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0ic2VyaWYiIGZvbnQtc2l6ZT0iMTAiIGZpbGw9IiM2MDYwNjAiPuyIndqwtOq4sOykhOyImDwvdGV4dD4KPHN2Zz4K'
+        }
+      }
+      if (style.base_image_url && style.base_image_url.includes('/sytle/')) {
+        return {
+          ...style,
+          base_image_url: style.base_image_url.replace('/sytle/', '/style/')
+        }
+      }
+      return style
+    })
+    
+    styles.value = correctedStyles
   } catch (error) {
     console.error('스타일 로드 실패:', error)
   } finally {
@@ -2889,11 +2916,18 @@ onMounted(async () => {
   }
 
   .style-dropdown-preview {
-    max-width: calc(100vw - 40px);
+    position: absolute;
+    top: calc(100% + 4px);
     left: 0;
     right: 0;
-    position: fixed;
-    z-index: 9999;
+    z-index: 10000;
+    max-width: calc(100vw - 60px);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    max-height: 300px;
+    overflow-y: auto;
   }
 
   .custom-style-select {

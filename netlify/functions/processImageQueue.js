@@ -106,7 +106,8 @@ export const handler = async (event) => {
             
             // 422 에러나 다른 FAL AI 에러 처리
             if (statusError.status === 422 || statusError.message?.includes('422')) {
-              // 422 Unprocessable Entity - 요청 검증 실패
+              console.log(`🚫 422 validation error for image ${image.id} - prompt: ${image.prompt?.substring(0, 50)}...`);
+              
               await supabaseAdmin
                 .from('gen_images')
                 .update({

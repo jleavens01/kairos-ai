@@ -78,6 +78,13 @@
             </button>
             <button 
               v-if="activeTab === 'media'"
+              @click="handleOpenAvatarVideoGeneration" 
+              class="tab-action-btn avatar-btn"
+            >
+              아바타 비디오
+            </button>
+            <button 
+              v-if="activeTab === 'media'"
               @click="toggleVideoKeptView" 
               class="tab-action-btn"
               :class="{ active: showVideoKeptOnly }"
@@ -340,6 +347,10 @@ const handleOpenVideoGeneration = () => {
   mediaViewRef.value?.openGenerationModal()
 }
 
+const handleOpenAvatarVideoGeneration = () => {
+  mediaViewRef.value?.openAvatarGenerationModal()
+}
+
 // 필터 핸들러
 const handleImageFilterChange = () => {
   imageGalleryRef.value?.setFilterCategory(imageFilterCategory.value)
@@ -501,6 +512,15 @@ const toggleVideoKeptView = () => {
 .tab-action-btn.active {
   background: linear-gradient(to right, #4ade80, #34d399);
   color: #1a1a1a;
+}
+
+.tab-action-btn.avatar-btn {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+
+.tab-action-btn.avatar-btn:hover {
+  background: linear-gradient(135deg, #e879f9 0%, #ef4444 100%);
+  box-shadow: 0 4px 12px rgba(245, 87, 108, 0.3);
 }
 
 .filter-select {
