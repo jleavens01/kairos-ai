@@ -2,14 +2,66 @@
   <div class="video-generation-gallery">
     <!-- 갤러리 섹션 -->
     <div class="gallery-section">
-      <!-- 컬럼 컨트롤 (모바일에서는 숨김) -->
-      <div v-if="(filteredVideos.length > 0 || processingVideos.length > 0) && !isMobile" class="gallery-controls">
-        <ColumnControl 
-          v-model="columnCount"
-          :min-columns="2"
-          :max-columns="6"
-          @change="updateColumnCount"
-        />
+      <!-- 상단 컨트롤 -->
+      <div v-if="(filteredVideos.length > 0 || processingVideos.length > 0)" class="gallery-header">
+        <!-- 선택 모드 컨트롤 -->
+        <div class="selection-controls">
+          <button 
+            @click="toggleSelectionMode"
+            class="btn-selection-toggle"
+            :class="{ active: selectionMode }"
+          >
+            <CheckSquare v-if="selectionMode" :size="16" />
+            <Square v-else :size="16" />
+            선택 모드
+          </button>
+          
+          <div v-if="selectionMode" class="selection-info">
+            <span class="selected-count">{{ selectedVideos.size }}개 선택됨</span>
+            <button 
+              @click="selectAllVideos"
+              class="btn-select-all"
+              v-if="selectedVideos.size < filteredVideos.length"
+            >
+              전체 선택
+            </button>
+            <button 
+              @click="clearSelection"
+              class="btn-clear-selection"
+              v-else
+            >
+              선택 해제
+            </button>
+          </div>
+          
+          <div v-if="selectionMode && selectedVideos.size > 0" class="batch-actions">
+            <button 
+              @click="downloadSelectedVideos"
+              class="btn-batch-download"
+              :disabled="downloadingBatch"
+            >
+              <Download :size="16" />
+              {{ downloadingBatch ? '다운로드 중...' : `선택된 ${selectedVideos.size}개 다운로드` }}
+            </button>
+            <button 
+              @click="deleteSelectedVideos"
+              class="btn-batch-delete"
+            >
+              <Trash2 :size="16" />
+              선택된 항목 삭제
+            </button>
+          </div>
+        </div>
+        
+        <!-- 컬럼 컨트롤 (모바일에서는 숨김) -->
+        <div v-if="!isMobile" class="column-control-wrapper">
+          <ColumnControl 
+            v-model="columnCount"
+            :min-columns="2"
+            :max-columns="6"
+            @change="updateColumnCount"
+          />
+        </div>
       </div>
       
       <!-- 필터는 상위 컴포넌트로 이동 -->
@@ -49,13 +101,23 @@
           class="gallery-item video-card"
           :class="{ 
             'failed-card': video.generation_status === 'failed',
-            'selected': isMobile && selectedVideo?.id === video.id
+            'selected': isMobile && selectedVideo?.id === video.id,
+            'selection-mode': selectionMode,
+            'video-selected': selectedVideos.has(video.id)
           }"
           @click="handleVideoClick(video)"
           @mouseenter="() => handleVideoHover(video.id, true)"
           @mouseleave="() => handleVideoHover(video.id, false)"
         >
           <div class="video-wrapper">
+            <!-- 선택 체크박스 -->
+            <div v-if="selectionMode" class="selection-checkbox" @click.stop="toggleVideoSelection(video)">
+              <input 
+                type="checkbox"
+                :checked="selectedVideos.has(video.id)"
+                @change="toggleVideoSelection(video)"
+              />
+            </div>
             <!-- 실패한 비디오 표시 -->
             <div v-if="video.generation_status === 'failed'" class="video-preview failed-preview">
               <div class="failed-content">
@@ -155,6 +217,11 @@
                 <p class="video-model">{{ getModelName(video.generation_model) }}</p>
                 <p class="video-duration">{{ formatDuration(video.duration_seconds) }}</p>
                 <p v-if="video.resolution" class="video-resolution">{{ video.resolution }}</p>
+                <p v-if="video.file_size || video.upscale_file_size" class="video-file-size" 
+                   :class="getFileSizeColorClass(video.upscale_file_size || video.file_size)">
+                  {{ formatFileSize(video.upscale_file_size || video.file_size) }}
+                  <span v-if="video.upscale_file_size && video.file_size" class="upscaled-badge">업스케일</span>
+                </p>
                 <div v-if="video.tags && video.tags.length > 0" class="video-tags">
                   <span 
                     v-for="(tag, index) in video.tags.slice(0, 3)" 
@@ -308,10 +375,11 @@ import VideoGenerationModal from './VideoGenerationModal.vue'
 import AvatarVideoGenerationModal from './AvatarVideoGenerationModal.vue'
 import VideoDetailModal from './VideoDetailModal.vue'
 import VideoUpscaleModal from './VideoUpscaleModal.vue'
-import { Plus, Link, Download, Trash2, Loader, Clock, AlertCircle, Video, Star, Archive, ChevronLeft, ChevronRight, ChevronFirst, ChevronLast } from 'lucide-vue-next'
+import { Plus, Link, Download, Trash2, Loader, Clock, AlertCircle, Video, Star, Archive, ChevronLeft, ChevronRight, ChevronFirst, ChevronLast, CheckSquare, Square } from 'lucide-vue-next'
 import SceneConnectionModal from './SceneConnectionModal.vue'
 import ColumnControl from '@/components/common/ColumnControl.vue'
 import LazyImage from '@/components/common/LazyImage.vue'
+import { formatFileSize, getFileSizeColorClass } from '@/utils/fileSize'
 
 const props = defineProps({
   projectId: {
@@ -345,6 +413,11 @@ const videoToDownload = ref(null)
 const selectedVideo = ref(null) // 모바일에서 선택된 비디오 추적
 const videoRefs = ref({})
 let pollingInterval = null
+
+// 일괄 선택 관련 상태
+const selectionMode = ref(false)
+const selectedVideos = ref(new Set())
+const downloadingBatch = ref(false)
 
 // 모달 상태를 store와 동기화
 watch(showGenerationModal, (isOpen) => {
@@ -577,6 +650,12 @@ const handleAvatarGenerationSuccess = async (result) => {
 }
 
 const handleVideoClick = (video) => {
+  // 선택 모드일 때는 선택 토글
+  if (selectionMode.value) {
+    toggleVideoSelection(video)
+    return
+  }
+  
   if (isMobile.value) {
     // 모바일에서는 첫 클릭은 선택, 이미 선택된 비디오를 다시 클릭하면 상세보기
     if (selectedVideo.value?.id === video.id) {
@@ -712,6 +791,146 @@ const performDownload = async (downloadType) => {
     link.download = `video_${video.id}.mp4`
     link.click()
     videoToDownload.value = null
+  }
+}
+
+// 일괄 선택 관련 함수들
+const toggleSelectionMode = () => {
+  selectionMode.value = !selectionMode.value
+  if (!selectionMode.value) {
+    selectedVideos.value.clear()
+  }
+}
+
+const toggleVideoSelection = (video) => {
+  if (selectedVideos.value.has(video.id)) {
+    selectedVideos.value.delete(video.id)
+  } else {
+    selectedVideos.value.add(video.id)
+  }
+}
+
+const selectAllVideos = () => {
+  filteredVideos.value.forEach(video => {
+    if (video.storage_video_url) { // 다운로드 가능한 비디오만 선택
+      selectedVideos.value.add(video.id)
+    }
+  })
+}
+
+const clearSelection = () => {
+  selectedVideos.value.clear()
+}
+
+const downloadSelectedVideos = async () => {
+  if (selectedVideos.value.size === 0) return
+  
+  downloadingBatch.value = true
+  
+  try {
+    // 프로젝트 정보 가져오기
+    const { data: projectData } = await supabase
+      .from('projects')
+      .select('name')
+      .eq('id', props.projectId)
+      .single()
+    
+    const projectName = projectData?.name || 'untitled'
+    const sanitizedProjectName = projectName.replace(/[^a-zA-Z0-9가-힣]/g, '_')
+    
+    // 선택된 비디오들 가져오기
+    const selectedVideoList = filteredVideos.value.filter(video => 
+      selectedVideos.value.has(video.id) && video.storage_video_url
+    )
+    
+    // 순차적으로 다운로드 (브라우저 제한으로 인해)
+    for (let i = 0; i < selectedVideoList.length; i++) {
+      const video = selectedVideoList[i]
+      
+      try {
+        // 업스케일 버전이 있으면 우선 다운로드
+        const videoUrl = video.upscale_video_url || video.storage_video_url
+        const versionSuffix = video.upscale_video_url ? '_upscaled' : ''
+        const sceneNumber = video.linked_scene_number || `video_${i + 1}`
+        
+        // 파일명 생성
+        const fileName = `${sanitizedProjectName}_${sceneNumber}${versionSuffix}.mp4`
+        
+        // 비디오 다운로드
+        const response = await fetch(videoUrl)
+        const blob = await response.blob()
+        const url = URL.createObjectURL(blob)
+        
+        const link = document.createElement('a')
+        link.href = url
+        link.download = fileName
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        
+        // 메모리 정리
+        URL.revokeObjectURL(url)
+        
+        // 다운로드 간 잠시 대기 (브라우저 제한 회피)
+        if (i < selectedVideoList.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500))
+        }
+      } catch (error) {
+        console.error(`Video download error for ${video.id}:`, error)
+        // 실패한 경우 기본 다운로드 시도
+        const link = document.createElement('a')
+        link.href = video.storage_video_url
+        link.download = `video_${video.id}.mp4`
+        link.click()
+      }
+    }
+    
+    // 다운로드 완료 후 선택 해제
+    selectedVideos.value.clear()
+    selectionMode.value = false
+    
+    // 성공 메시지 표시
+    const successMessage = `${selectedVideoList.length}개의 비디오 다운로드가 완료되었습니다.`
+    alert(successMessage)
+    
+  } catch (error) {
+    console.error('Batch download error:', error)
+    alert('일괄 다운로드 중 오류가 발생했습니다.')
+  } finally {
+    downloadingBatch.value = false
+  }
+}
+
+const deleteSelectedVideos = async () => {
+  if (selectedVideos.value.size === 0) return
+  
+  const confirmMessage = `선택된 ${selectedVideos.value.size}개의 비디오를 삭제하시겠습니까?`
+  if (!confirm(confirmMessage)) return
+  
+  try {
+    const selectedIds = Array.from(selectedVideos.value)
+    
+    // DB에서 삭제 (soft delete)
+    const { error } = await supabase
+      .from('generated_videos')
+      .update({ deleted_at: new Date().toISOString() })
+      .in('id', selectedIds)
+    
+    if (error) throw error
+    
+    // 로컬 상태에서 제거
+    videos.value = videos.value.filter(video => !selectedIds.includes(video.id))
+    
+    // 선택 해제
+    selectedVideos.value.clear()
+    selectionMode.value = false
+    
+    // 성공 메시지
+    alert(`${selectedIds.length}개의 비디오가 삭제되었습니다.`)
+    
+  } catch (error) {
+    console.error('Batch delete error:', error)
+    alert('비디오 삭제 중 오류가 발생했습니다.')
   }
 }
 
@@ -1136,6 +1355,18 @@ const handleMediaUpdate = (event) => {
   }
 }
 
+// 실패 복구 시스템 업데이트 처리
+const handleGenerationStatusUpdated = async (event) => {
+  const update = event.detail
+  console.log('Video generation status updated:', update)
+  
+  if (update.type === 'recovery') {
+    // 실패 복구에 의한 업데이트이므로 갤러리 새로고침
+    await fetchVideos()
+    console.log('Video gallery refreshed due to recovery system')
+  }
+}
+
 // Lifecycle
 onMounted(async () => {
   await fetchVideos()
@@ -1158,6 +1389,8 @@ onMounted(async () => {
   
   // 미디어 업데이트 이벤트 리스너 등록
   window.addEventListener('media-update', handleMediaUpdate)
+  // 실패 복구 시스템 이벤트 리스너 등록
+  window.addEventListener('generation-status-updated', handleGenerationStatusUpdated)
 })
 
 onUnmounted(() => {
@@ -1171,6 +1404,7 @@ onUnmounted(() => {
   
   // 이벤트 리스너 제거
   window.removeEventListener('media-update', handleMediaUpdate)
+  window.removeEventListener('generation-status-updated', handleGenerationStatusUpdated)
 })
 
 // projectId 변경 감지
@@ -1221,7 +1455,120 @@ defineExpose({
   margin-top: 0;
 }
 
-/* Gallery controls */
+/* Gallery header */
+.gallery-header {
+  margin-bottom: 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.selection-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.btn-selection-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 8px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-selection-toggle:hover {
+  background: var(--bg-tertiary);
+}
+
+.btn-selection-toggle.active {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.selection-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.selected-count {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.btn-select-all, .btn-clear-selection {
+  padding: 4px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-select-all:hover, .btn-clear-selection:hover {
+  background: var(--bg-tertiary);
+}
+
+.batch-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-batch-download, .btn-batch-delete {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-batch-download {
+  background: var(--primary-color);
+  color: white;
+}
+
+.btn-batch-download:hover:not(:disabled) {
+  background: var(--primary-dark);
+}
+
+.btn-batch-download:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-batch-delete {
+  background: #dc3545;
+  color: white;
+}
+
+.btn-batch-delete:hover {
+  background: #c82333;
+}
+
+.column-control-wrapper {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Gallery controls (기존 호환성 유지) */
 .gallery-controls {
   margin-bottom: 1rem;
   display: flex;
@@ -1315,6 +1662,34 @@ defineExpose({
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
   transform: scale(1.02);
   z-index: 10;
+}
+
+/* 선택 모드 스타일 */
+.gallery-item.selection-mode {
+  cursor: pointer;
+}
+
+.gallery-item.video-selected {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3);
+  transform: scale(1.02);
+}
+
+.selection-checkbox {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 5;
+  background: rgba(0, 0, 0, 0.7);
+  border-radius: 4px;
+  padding: 4px;
+}
+
+.selection-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--primary-color);
 }
 
 /* 업스케일 배지 */
@@ -1465,6 +1840,23 @@ defineExpose({
 .info-bottom p {
   margin: 4px 0;
   font-size: 0.85rem;
+}
+
+/* 비디오 파일 크기 스타일 */
+.video-file-size {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.upscaled-badge {
+  background: rgba(255, 255, 255, 0.2);
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 .btn-scene-link,

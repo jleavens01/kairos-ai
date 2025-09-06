@@ -1,0 +1,29 @@
+# Netlify 설정에 추가할 내용
+
+[dev]
+  framework = "#custom"
+  targetPort = 5173
+  
+[functions."*"]
+  format = "esm"
+  timeout = 60000
+
+# 주기적 백업 스케줄링 (Netlify Functions + 외부 Cron 서비스)
+# 1. Netlify에서는 직접 cron을 지원하지 않으므로
+# 2. GitHub Actions, Vercel Cron, 또는 외부 cron 서비스 사용
+
+# GitHub Actions 예시:
+# .github/workflows/backup.yml
+# name: Scheduled Backup
+# on:
+#   schedule:
+#     - cron: '0 */6 * * *'  # 6시간마다
+#   workflow_dispatch:  # 수동 실행 가능
+#
+# jobs:
+#   backup:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Trigger backup
+#         run: |
+#           curl -X POST "https://your-site.netlify.app/.netlify/functions/scheduledBackup"

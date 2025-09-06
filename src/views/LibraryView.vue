@@ -25,6 +25,8 @@
       v-model:searchQuery="searchQuery"
       v-model:sortBy="sortBy"
       v-model:viewMode="viewMode"
+      v-model:categoryFilter="categoryFilter"
+      :show-category-filter="activeTab === 'images'"
       @clear-search="clearSearch"
     />
 
@@ -68,7 +70,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useProjectsStore } from '@/stores/projects';
 import { Image, Video, Package } from 'lucide-vue-next';
 import LibraryControls from '@/components/library/LibraryControls.vue';
@@ -83,6 +85,7 @@ const activeTab = ref('images');
 const searchQuery = ref('');
 const sortBy = ref('created_at');
 const viewMode = ref('grid');
+const categoryFilter = ref('all'); // 이미지 카테고리 필터
 const loading = ref(false);
 const selectedItem = ref(null);
 const libraryItems = ref({
@@ -108,12 +111,21 @@ const filteredItems = computed(() => {
     items = libraryItems.value[activeTab.value] || [];
   }
   
+  // 이미지 카테고리 필터 (이미지 탭에서만 적용)
+  if (activeTab.value === 'images' && categoryFilter.value !== 'all') {
+    items = items.filter(item => {
+      const itemCategory = item.image_type || item.category;
+      return itemCategory === categoryFilter.value;
+    });
+  }
+  
   // 검색 필터
   if (searchQuery.value) {
     const query = searchQuery.value.toLowerCase();
     items = items.filter(item => {
       return item.prompt?.toLowerCase().includes(query) ||
-             item.tags?.some(tag => tag.toLowerCase().includes(query));
+             item.tags?.some(tag => tag.toLowerCase().includes(query)) ||
+             item.element_name?.toLowerCase().includes(query);
     });
   }
   
@@ -275,6 +287,13 @@ const loadLibraryItems = async () => {
     loading.value = false;
   }
 };
+
+// Watch for tab changes to reset category filter
+watch(activeTab, (newTab) => {
+  if (newTab !== 'images') {
+    categoryFilter.value = 'all';
+  }
+});
 
 // Lifecycle
 onMounted(() => {

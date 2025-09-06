@@ -179,7 +179,12 @@
                   </button>
                 </div>
                 <div class="info-bottom">
-                  <p class="image-model">{{ item.generation_model || 'Unknown' }}</p>
+                  <div class="model-size-row">
+                    <p class="image-model">{{ item.generation_model || 'Unknown' }}</p>
+                    <p v-if="item.file_size" class="image-size" :class="getFileSizeColorClass(item.file_size)">
+                      {{ formatFileSize(item.file_size) }}
+                    </p>
+                  </div>
                   <p v-if="item.element_name" class="image-character">
                     {{ item.element_name }}
                   </p>
@@ -294,6 +299,9 @@
       @connect-scene="connectToSceneFromDetail"
       @edit-image="handleEditImage"
       @generate-video="handleGenerateVideo"
+      @vectorize="handleVectorize"
+      @upscale="handleUpscale"
+      @remove-background="handleRemoveBackground"
     />
     <!-- 비디오 생성 모달 -->
     <VideoGenerationModal
@@ -322,6 +330,31 @@
       @close="showLibrarySelector = false"
       @select="handleLibraryImageSelect"
     />
+    
+    <!-- Recraft 편집 모달들 -->
+    <VectorizeModal
+      :show="showVectorizeModal"
+      :original-image="vectorizeImageData?.imageUrl"
+      :image-id="vectorizeImageData?.imageId"
+      @close="showVectorizeModal = false"
+      @success="handleVectorizeSuccess"
+    />
+    
+    <UpscaleModal
+      :show="showUpscaleModal"
+      :original-image="upscaleImageData?.imageUrl"
+      :image-id="upscaleImageData?.imageId"
+      @close="showUpscaleModal = false"
+      @success="handleUpscaleSuccess"
+    />
+    
+    <RemoveBackgroundModal
+      :show="showRemoveBackgroundModal"
+      :original-image="removeBackgroundImageData?.imageUrl"
+      :image-id="removeBackgroundImageData?.imageId"
+      @close="showRemoveBackgroundModal = false"
+      @success="handleRemoveBackgroundSuccess"
+    />
   </div>
 </template>
 <script setup>
@@ -337,8 +370,12 @@ import LibraryImageSelector from './LibraryImageSelector.vue'
 import { Link, Tag, Download, Trash2, Loader, Plus, User, Image, Star, Archive, FolderOpen, Settings } from 'lucide-vue-next'
 import TagEditModal from './TagEditModal.vue'
 import ImageDetailModal from './ImageDetailModal.vue'
+import VectorizeModal from './VectorizeModal.vue'
+import UpscaleModal from './UpscaleModal.vue'
+import RemoveBackgroundModal from './RemoveBackgroundModal.vue'
 import ColumnControl from '@/components/common/ColumnControl.vue'
 import LazyImage from '@/components/common/LazyImage.vue'
+import { formatFileSize, getFileSizeColorClass } from '@/utils/fileSize'
 import { usePagination } from '@/composables/usePagination'
 const props = defineProps({
   projectId: {
@@ -376,6 +413,15 @@ const showSceneModal = ref(false)
 const showTagModal = ref(false)
 const showDetailModal = ref(false)
 const showVideoModal = ref(false) // 비디오 생성 모달 상태
+
+// Recraft 편집 모달 상태들
+const showVectorizeModal = ref(false)
+const showUpscaleModal = ref(false)
+const showRemoveBackgroundModal = ref(false)
+const vectorizeImageData = ref(null)
+const upscaleImageData = ref(null)
+const removeBackgroundImageData = ref(null)
+
 const currentPrompt = ref('')
 const currentCharacter = ref('')
 const imageToConnect = ref(null)
@@ -1340,6 +1386,73 @@ const handleGenerateVideo = (videoData) => {
   // 비디오 생성 모달 열기
   showVideoModal.value = true
 }
+
+// Recraft 편집 핸들러들
+const handleVectorize = (image) => {
+  console.log('handleVectorize called with image:', image)
+  vectorizeImageData.value = {
+    imageUrl: image.imageUrl,
+    imageId: image.imageId
+  }
+  console.log('vectorizeImageData set to:', vectorizeImageData.value)
+  showVectorizeModal.value = true
+  showDetailModal.value = false
+}
+
+const handleUpscale = (image) => {
+  upscaleImageData.value = {
+    imageUrl: image.imageUrl,
+    imageId: image.imageId
+  }
+  showUpscaleModal.value = true
+  showDetailModal.value = false
+}
+
+const handleRemoveBackground = (image) => {
+  removeBackgroundImageData.value = {
+    imageUrl: image.imageUrl,
+    imageId: image.imageId
+  }
+  showRemoveBackgroundModal.value = true
+  showDetailModal.value = false
+}
+
+const handleVectorizeSuccess = (result) => {
+  console.log('Vectorize success:', result)
+  // 갤러리 새로고침하여 새 이미지 표시
+  fetchImages()
+  // 상세 모달이 열려있다면 처리된 이미지들 새로고침
+  if (showDetailModal.value && imageToView.value) {
+    // 약간의 딜레이 후 새로고침 (데이터베이스에 저장이 완료될 시간)
+    setTimeout(() => {
+      imageToView.value = { ...imageToView.value }
+    }, 1000)
+  }
+}
+
+const handleUpscaleSuccess = (result) => {
+  console.log('Upscale success:', result)
+  // 갤러리 새로고침하여 새 이미지 표시
+  fetchImages()
+  // 상세 모달이 열려있다면 처리된 이미지들 새로고침
+  if (showDetailModal.value && imageToView.value) {
+    setTimeout(() => {
+      imageToView.value = { ...imageToView.value }
+    }, 1000)
+  }
+}
+
+const handleRemoveBackgroundSuccess = (result) => {
+  console.log('Remove background success:', result)
+  // 갤러리 새로고침하여 새 이미지 표시
+  fetchImages()
+  // 상세 모달이 열려있다면 처리된 이미지들 새로고침
+  if (showDetailModal.value && imageToView.value) {
+    setTimeout(() => {
+      imageToView.value = { ...imageToView.value }
+    }, 1000)
+  }
+}
 const closeVideoModal = () => {
   showVideoModal.value = false
   videoPrompt.value = ''
@@ -1359,6 +1472,18 @@ const handleMediaUpdate = (event) => {
   if (update.event === 'image-completed' && update.project_id === props.projectId) {
     // 갤러리 새로고침
     fetchImages()
+  }
+}
+
+// 실패 복구 시스템 업데이트 처리
+const handleGenerationStatusUpdated = async (event) => {
+  const update = event.detail
+  console.log('Generation status updated:', update)
+  
+  if (update.type === 'recovery') {
+    // 실패 복구에 의한 업데이트이므로 갤러리 새로고침
+    await fetchImages()
+    console.log('Gallery refreshed due to recovery system')
   }
 }
 // 필터 변경 감지
@@ -1424,6 +1549,8 @@ onMounted(async () => {
   }
   // 미디어 업데이트 이벤트 리스너 등록
   window.addEventListener('media-update', handleMediaUpdate)
+  // 실패 복구 시스템 이벤트 리스너 등록
+  window.addEventListener('generation-status-updated', handleGenerationStatusUpdated)
 })
 // 컴포넌트 언마운트 시 폴링 중지
 onUnmounted(() => {
@@ -1436,6 +1563,7 @@ onUnmounted(() => {
   // }
   // 이벤트 리스너 제거
   window.removeEventListener('media-update', handleMediaUpdate)
+  window.removeEventListener('generation-status-updated', handleGenerationStatusUpdated)
   window.removeEventListener('resize', handleResize)
   window.removeEventListener('scroll', handleScroll)
   // 갤러리 리스너도 제거
@@ -1965,10 +2093,27 @@ defineExpose({
   color: white;
   text-shadow: 0 1px 3px rgba(0,0,0,0.8);
 }
+.model-size-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+  gap: 8px;
+}
+
 .info-bottom .image-model {
   font-size: 0.85rem;
   font-weight: 500;
-  margin-bottom: 4px;
+  margin-bottom: 0;
+}
+
+.info-bottom .image-size {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 4px;
+  white-space: nowrap;
 }
 .info-bottom .image-character {
   font-size: 0.9rem;

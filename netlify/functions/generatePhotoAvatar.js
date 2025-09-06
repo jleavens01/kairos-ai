@@ -140,18 +140,22 @@ export const handler = async (event, context) => {
     }
 
     // 성공 응답
-    console.log('Photo avatar generation successful:', heygenResult)
+    console.log('Photo avatar generation successful:', JSON.stringify(heygenResult, null, 2))
+    console.log('HeyGen result keys:', Object.keys(heygenResult))
+    console.log('HeyGen result data keys:', heygenResult.data ? Object.keys(heygenResult.data) : 'No data object')
     
     return {
       statusCode: 200,
       headers,
       body: JSON.stringify({
         success: true,
-        job_id: heygenResult.job_id || heygenResult.id,
+        job_id: heygenResult.data?.generation_id || heygenResult.generation_id || heygenResult.job_id || heygenResult.id,
+        generation_id: heygenResult.data?.generation_id || heygenResult.generation_id,
         message: 'Photo avatar generation started successfully',
         callback_id: heygenPayload.callback_id,
         estimated_time: 'Usually takes 1-3 minutes',
         status: 'processing',
+        data: heygenResult.data, // 원본 데이터도 포함
         request_params: {
           name: heygenPayload.name,
           age: heygenPayload.age,

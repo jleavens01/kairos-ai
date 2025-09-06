@@ -1,3 +1,80 @@
+// 보이스 설정 구성 함수
+const buildVoiceSettings = (voiceInput, voiceModel = null) => {
+  const baseSettings = {
+    type: voiceInput.type || 'text',
+    voice_id: voiceInput.voice_id,
+    input_text: voiceInput.input_text
+  }
+
+  // 텍스트 음성 설정
+  if (baseSettings.type === 'text') {
+    // 기본 설정
+    if (voiceInput.speed !== undefined) {
+      baseSettings.speed = Math.max(0.5, Math.min(1.5, voiceInput.speed))
+    }
+    
+    if (voiceInput.pitch !== undefined) {
+      baseSettings.pitch = Math.max(-50, Math.min(50, voiceInput.pitch))
+    }
+    
+    // 감정 설정 (지원하는 경우)
+    if (voiceInput.emotion && voiceModel?.supports_emotion) {
+      const supportedEmotions = ['Excited', 'Friendly', 'Serious', 'Soothing', 'Broadcaster']
+      if (supportedEmotions.includes(voiceInput.emotion)) {
+        baseSettings.emotion = voiceInput.emotion
+      }
+    }
+    
+    // 로케일 설정 (지원하는 경우)
+    if (voiceInput.locale && voiceModel?.supports_multilingual) {
+      baseSettings.locale = voiceInput.locale
+    }
+    
+    // ElevenLabs 설정
+    if (voiceModel?.provider === 'elevenlabs' && voiceInput.elevenlabs_settings) {
+      const elevenSettings = voiceInput.elevenlabs_settings
+      
+      baseSettings.elevenlabs_settings = {
+        model: elevenSettings.model || voiceModel.elevenlabs_model || 'eleven_turbo_v2_5',
+        similarity_boost: elevenSettings.similarity_boost !== undefined ? 
+          Math.max(0, Math.min(1, elevenSettings.similarity_boost)) : 
+          voiceModel.default_similarity_boost,
+        stability: elevenSettings.stability !== undefined ? 
+          Math.max(0, Math.min(1, elevenSettings.stability)) : 
+          voiceModel.default_stability,
+        style: elevenSettings.style !== undefined ? 
+          Math.max(0, Math.min(1, elevenSettings.style)) : 
+          voiceModel.default_style
+      }
+    }
+  }
+  
+  // 오디오 음성 설정
+  else if (baseSettings.type === 'audio') {
+    if (voiceInput.audio_url) {
+      baseSettings.audio_url = voiceInput.audio_url
+    } else if (voiceInput.audio_asset_id) {
+      baseSettings.audio_asset_id = voiceInput.audio_asset_id
+    }
+  }
+  
+  // 침묵 설정
+  else if (baseSettings.type === 'silence') {
+    baseSettings.duration = voiceInput.duration ? 
+      Math.max(1.0, Math.min(100.0, voiceInput.duration)) : 1.0
+  }
+
+  return baseSettings
+}
+
+// Supabase 클라이언트 import 추가
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  process.env.VITE_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+)
+
 export const handler = async (event, context) => {
   // CORS 헤더 설정
   const headers = {
@@ -96,13 +173,7 @@ export const handler = async (event, context) => {
           avatar_style: input.character.avatar_style || 'normal',
           offset: input.character.offset || { x: 0.0, y: 0.0 }
         },
-        voice: {
-          type: input.voice.type || 'text',
-          voice_id: input.voice.voice_id,
-          input_text: input.voice.input_text,
-          speed: input.voice.speed || 1.0,
-          pitch: input.voice.pitch || 0
-        },
+        voice: buildVoiceSettings(input.voice, input.voice_model),
         background: input.background || {
           type: 'color',
           value: '#f6f6fc'
@@ -156,8 +227,70 @@ export const handler = async (event, context) => {
       }
     }
 
-    // 성공 응답
+    // 성공 응답 - 데이터베이스에 저장
     console.log('Avatar video generation successful:', heygenResult)
+    
+    // 데이터베이스에 저장할 데이터 구성
+    const videoData = {
+      user_id: requestData.user_id, // 요청에서 user_id를 받아야 함
+      heygen_video_id: heygenResult.video_id,
+      callback_id: heygenPayload.callback_id,
+      
+      // 아바타 설정
+      avatar_id: firstInput.character.avatar_id,
+      avatar_style: firstInput.character.avatar_style || 'normal',
+      avatar_scale: firstInput.character.scale || 1.0,
+      
+      // 음성 설정
+      voice_id: firstInput.voice.voice_id,
+      voice_type: firstInput.voice.type || 'text',
+      input_text: firstInput.voice.input_text,
+      voice_speed: firstInput.voice.speed || 1.0,
+      voice_pitch: firstInput.voice.pitch || 0,
+      voice_emotion: firstInput.voice.emotion,
+      voice_locale: firstInput.voice.locale,
+      
+      // 비디오 설정
+      title: requestData.title || 'Avatar Video',
+      dimension_width: requestData.dimension?.width || 1280,
+      dimension_height: requestData.dimension?.height || 720,
+      has_caption: requestData.caption || false,
+      
+      // 배경 설정
+      background_type: firstInput.background?.type || 'color',
+      background_value: firstInput.background?.value || '#f6f6fc',
+      
+      // 초기 상태
+      status: 'processing',
+      progress: 0,
+      
+      // 메타데이터
+      generation_params: heygenPayload
+    }
+
+    // 데이터베이스에 저장 (user_id가 있는 경우만)
+    let dbResult = null
+    if (requestData.user_id) {
+      try {
+        const { data, error } = await supabase
+          .from('gen_heygen_videos')
+          .insert([videoData])
+          .select()
+          .single()
+
+        if (error) {
+          console.error('Database save error (non-fatal):', error)
+        } else {
+          dbResult = data
+          console.log('HeyGen video saved to database:', data.id)
+        }
+      } catch (dbError) {
+        console.error('Database save error (non-fatal):', dbError)
+        // DB 저장 실패해도 API 응답은 성공으로 처리
+      }
+    } else {
+      console.log('No user_id provided, skipping database save')
+    }
     
     return {
       statusCode: 200,
@@ -166,7 +299,9 @@ export const handler = async (event, context) => {
         success: true,
         video_id: heygenResult.video_id,
         message: 'Avatar video generation started successfully',
-        callback_id: heygenPayload.callback_id
+        callback_id: heygenPayload.callback_id,
+        database_id: dbResult?.id || null,
+        saved_to_db: !!dbResult
       })
     }
 

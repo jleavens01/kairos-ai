@@ -2,6 +2,12 @@
 import { createClient } from '@supabase/supabase-js';
 import jwt from 'jsonwebtoken';
 
+// Supabase 클라이언트 초기화
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
 export const handler = async (event) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
@@ -40,18 +46,54 @@ export const handler = async (event) => {
       projectId, 
       sceneId, 
       text,
-      voiceId = "W7FnAxJNpD5WGjrF5GLp", // 기본 음성 ID
-      modelId = "eleven_multilingual_v2",
+      voiceId = "elevenlabs_custom_korean_voice", // 사용자 커스텀 한국어 음성 (실제 voice_id로 업데이트 필요)
+      modelId = "eleven_turbo_v2_5", // 최신 모델 사용
       voiceSettings = {
-        stability: 0.5,
-        similarity_boost: 0.8,
-        style: 0.0,
+        stability: 0.60,      // 클론 음성 최적화
+        similarity_boost: 0.85, // 높은 유사성
+        style: 0.10,          // 낮은 스타일 강도 (자연스러움)
         use_speaker_boost: true
       }
     } = JSON.parse(event.body || '{}');
 
     if (!projectId || !sceneId || !text) {
       throw new Error('projectId, sceneId, and text are required.');
+    }
+
+    // 커스텀 음성 ID 가져오기 (한국어 우선)
+    let finalVoiceId = voiceId;
+    let finalModelId = modelId;
+    let finalVoiceSettings = voiceSettings;
+
+    if (voiceId === "elevenlabs_custom_korean_voice") {
+      try {
+        const { data: customVoice, error: voiceError } = await supabase
+          .from('voice_models')
+          .select('voice_id, elevenlabs_model, default_similarity_boost, default_stability, default_style')
+          .eq('category', 'personal')
+          .eq('provider', 'elevenlabs')
+          .eq('language', 'ko')
+          .eq('is_active', true)
+          .single();
+
+        if (!voiceError && customVoice && customVoice.voice_id !== 'elevenlabs_custom_korean_voice') {
+          finalVoiceId = customVoice.voice_id;
+          finalModelId = customVoice.elevenlabs_model || finalModelId;
+          finalVoiceSettings = {
+            ...finalVoiceSettings,
+            stability: customVoice.default_stability || finalVoiceSettings.stability,
+            similarity_boost: customVoice.default_similarity_boost || finalVoiceSettings.similarity_boost,
+            style: customVoice.default_style || finalVoiceSettings.style
+          };
+          console.log(`Using custom voice: ${finalVoiceId} with model: ${finalModelId}`);
+        } else {
+          console.warn('Custom voice not found or not updated, using fallback');
+          finalVoiceId = "W7FnAxJNpD5WGjrF5GLp"; // 기존 기본값으로 폴백
+        }
+      } catch (error) {
+        console.warn('Failed to fetch custom voice:', error.message);
+        finalVoiceId = "W7FnAxJNpD5WGjrF5GLp"; // 기존 기본값으로 폴백
+      }
     }
 
     // 텍스트 파싱 처리
@@ -112,14 +154,19 @@ export const handler = async (event) => {
     const apiKey = process.env.ELEVENLABS_API_KEY;
     if (!apiKey) throw new Error("Server configuration error: API key is missing.");
 
-    const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`;
+    const url = `https://api.elevenlabs.io/v1/text-to-speech/${finalVoiceId}?output_format=mp3_44100_128`;
     const body = JSON.stringify({
       text: processedText, // 파싱된 텍스트 사용
-      model_id: modelId,
-      voice_settings: voiceSettings
+      model_id: finalModelId,
+      voice_settings: finalVoiceSettings
     });
 
-    console.log('Calling ElevenLabs API with:', { voiceId, modelId, textLength: text.length });
+    console.log('Calling ElevenLabs API with:', { 
+      voiceId: finalVoiceId, 
+      modelId: finalModelId, 
+      textLength: text.length,
+      settings: finalVoiceSettings
+    });
 
     const response = await fetch(url, {
       method: 'POST',
@@ -184,11 +231,11 @@ export const handler = async (event) => {
         scene_id: sceneId,
         version: nextVersion,
         text: processedText, // 처리된 텍스트 저장
-        voice_id: voiceId,
-        model_id: modelId,
+        voice_id: finalVoiceId,
+        model_id: finalModelId,
         file_url: publicUrl,
         file_size: audioData.length,
-        voice_settings: voiceSettings,
+        voice_settings: finalVoiceSettings,
         created_by: user.sub
       })
       .select()

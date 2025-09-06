@@ -113,14 +113,30 @@
             </div>
             
             <!-- 일반 보기 모드 -->
-            <img 
-              v-else
-              :src="image.storage_image_url || image.result_image_url || image.thumbnail_url" 
-              :alt="image.prompt_used || 'AI Generated Image'"
-              class="detail-image"
-              @click="toggleZoom"
-              :class="{ 'zoomed': isZoomed }"
-            />
+            <div v-else class="image-viewer">
+              <!-- 이미지 미리보기 선택 -->
+              <div v-if="processedImages.length > 0" class="image-preview-selector">
+                <button 
+                  v-for="preview in imagePreviewOptions" 
+                  :key="preview.type"
+                  @click="setSelectedPreview(preview.type)"
+                  class="preview-btn"
+                  :class="{ active: selectedPreview === preview.type }"
+                  :title="preview.title"
+                >
+                  {{ preview.label }}
+                </button>
+              </div>
+              
+              <!-- 선택된 이미지 표시 -->
+              <img 
+                :src="computedSelectedImageUrl" 
+                :alt="image.prompt_used || 'AI Generated Image'"
+                class="detail-image"
+                @click="toggleZoom"
+                :class="{ 'zoomed': isZoomed }"
+              />
+            </div>
             
             <!-- 줌 인디케이터 -->
             <div v-if="!isZoomed && !isEditMode" class="zoom-hint">
@@ -189,6 +205,12 @@
               <div v-if="image.metadata?.image_size" class="info-item">
                 <span class="label">크기:</span>
                 <span class="value">{{ image.metadata.image_size }}</span>
+              </div>
+              <div v-if="image.file_size" class="info-item">
+                <span class="label">파일 크기:</span>
+                <span class="value" :class="getFileSizeColorClass(image.file_size)">
+                  {{ formatFileSize(image.file_size) }}
+                </span>
               </div>
               <div class="info-item">
                 <span class="label">생성일:</span>
@@ -289,6 +311,40 @@
                   <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
                 </svg>
               </button>
+              
+              <!-- Recraft 편집 옵션들 -->
+              <div class="button-divider"></div>
+              
+              <button @click="openVectorizeModal" class="icon-btn btn-recraft" title="벡터 변환 (SVG)">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
+                  <circle cx="12" cy="13" r="3"/>
+                  <path d="m9 16 2 2 4-4"/>
+                </svg>
+              </button>
+              
+              <button @click="openUpscaleModal" class="icon-btn btn-recraft" title="이미지 업스케일">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M8 3v3a2 2 0 0 1-2 2H3"/>
+                  <path d="M21 8h-3a2 2 0 0 1-2-2V3"/>
+                  <path d="M3 16h3a2 2 0 0 1 2 2v3"/>
+                  <path d="M16 21v-3a2 2 0 0 1 2-2h3"/>
+                </svg>
+              </button>
+              
+              <button @click="openRemoveBackgroundModal" class="icon-btn btn-recraft" title="배경 제거">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M9 12l2 2 4-4"/>
+                  <path d="M21 12c.552 0 1-.448 1-1s-.448-1-1-1-1 .448-1 1 .448 1 1 1z"/>
+                  <path d="M3 12c.552 0 1-.448 1-1s-.448-1-1-1-1 .448-1 1 .448 1 1 1z"/>
+                  <path d="M12 21c.552 0 1-.448 1-1s-.448-1-1-1-1 .448-1 1 .448 1 1 1z"/>
+                  <path d="M12 3c.552 0 1-.448 1-1s-.448-1-1-1-1 .448-1 1 .448 1 1 1z"/>
+                  <path d="M19.071 19.071c.391.391 1.024.391 1.414 0s.391-1.024 0-1.414-1.024-.391-1.414 0-.391 1.024 0 1.414z"/>
+                  <path d="M4.929 4.929c.391.391 1.024.391 1.414 0s.391-1.024 0-1.414-1.024-.391-1.414 0-.391 1.024 0 1.414z"/>
+                  <path d="M19.071 4.929c.391-.391.391-1.024 0-1.414s-1.024-.391-1.414 0-.391 1.024 0 1.414 1.024.391 1.414 0z"/>
+                  <path d="M4.929 19.071c.391-.391.391-1.024 0-1.414s-1.024-.391-1.414 0-.391 1.024 0 1.414 1.024.391 1.414 0z"/>
+                </svg>
+              </button>
             </div>
           </div>
         </div>
@@ -307,11 +363,12 @@
 </template>
 
 <script setup>
-import { ref, nextTick, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
 import { supabase } from '@/utils/supabase'
 import { createImageEditor, CROP_RATIOS, EDIT_MODES } from '@/utils/imageEditor'
 import { useAuthStore } from '@/stores/auth'
 import DrawCanvas from './DrawCanvas.vue'
+import { formatFileSize, getFileSizeColorClass } from '@/utils/fileSize'
 
 const props = defineProps({
   show: {
@@ -328,7 +385,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['close', 'update', 'edit-tags', 'connect-scene', 'edit-image', 'generate-video'])
+const emit = defineEmits(['close', 'update', 'edit-tags', 'connect-scene', 'edit-image', 'generate-video', 'vectorize', 'upscale', 'remove-background'])
 
 // Stores
 const authStore = useAuthStore()
@@ -351,6 +408,59 @@ const isEditingCategory = ref(false)
 const editingCategoryValue = ref('')
 const showDrawCanvas = ref(false)
 
+// 처리된 이미지들을 위한 상태
+const processedImages = ref([])
+const selectedPreview = ref('original')
+const selectedImageUrl = ref('')
+
+// Computed 속성들
+const imagePreviewOptions = computed(() => {
+  const options = [
+    {
+      type: 'original',
+      label: '원본',
+      title: '원본 이미지',
+      url: props.image.storage_image_url || props.image.result_image_url || props.image.thumbnail_url
+    }
+  ]
+
+  // 처리된 이미지들 추가
+  processedImages.value.forEach(processed => {
+    if (processed.type === 'vectorize') {
+      options.push({
+        type: 'vectorize',
+        label: '벡터',
+        title: 'SVG 벡터 이미지',
+        url: processed.url
+      })
+    } else if (processed.type === 'upscale') {
+      options.push({
+        type: 'upscale',
+        label: '업스케일',
+        title: `업스케일된 이미지 (${processed.upscale_factor || '4'}x)`,
+        url: processed.url
+      })
+    } else if (processed.type === 'remove_background') {
+      options.push({
+        type: 'background_removed',
+        label: '배경없음',
+        title: '배경이 제거된 이미지',
+        url: processed.url
+      })
+    }
+  })
+
+  return options
+})
+
+// 선택된 이미지 URL 계산
+const computedSelectedImageUrl = computed(() => {
+  const selectedOption = imagePreviewOptions.value.find(
+    option => option.type === selectedPreview.value
+  )
+  return selectedOption?.url || (props.image.storage_image_url || props.image.result_image_url || props.image.thumbnail_url)
+})
+
 // Methods
 const handleOverlayClick = () => {
   if (!isZoomed.value) {
@@ -362,6 +472,43 @@ const handleOverlayClick = () => {
 
 const toggleZoom = () => {
   isZoomed.value = !isZoomed.value
+}
+
+// 처리된 이미지들 조회
+const fetchProcessedImages = async () => {
+  try {
+    // gen_processed_images 테이블에서 모든 처리된 이미지 조회 (벡터화, 업스케일, 배경제거)
+    const { data, error } = await supabase
+      .from('gen_processed_images')
+      .select('*')
+      .eq('original_image_id', props.image.id)
+      .eq('status', 'completed')
+      .order('created_at', { ascending: false })
+    
+    if (error) {
+      console.error('Error fetching processed images:', error)
+      return
+    }
+
+    // process_type에 따라 타입 매핑하고 upscale_factor 추출
+    const mappedData = (data || []).map(item => ({
+      ...item,
+      type: item.process_type,
+      url: item.processed_image_url,
+      upscale_factor: item.metadata?.upscale_factor || 4 // 메타데이터에서 업스케일 팩터 추출
+    }))
+    
+    processedImages.value = mappedData
+    console.log('All processed images loaded:', processedImages.value)
+  } catch (error) {
+    console.error('Failed to fetch processed images:', error)
+  }
+}
+
+// 미리보기 선택
+const setSelectedPreview = (type) => {
+  selectedPreview.value = type
+  selectedImageUrl.value = computedSelectedImageUrl.value
 }
 
 const getCategoryLabel = (type) => {
@@ -1108,6 +1255,59 @@ const handleVideoGeneration = () => {
   emit('generate-video', videoData)
   emit('close')
 }
+
+// Recraft 편집 메서드들
+const openVectorizeModal = () => {
+  const imageData = {
+    imageUrl: props.image.storage_image_url || props.image.result_image_url || props.image.thumbnail_url,
+    imageId: props.image.id,
+    elementName: props.image.element_name || '',
+    projectId: props.image.project_id
+  }
+  
+  emit('vectorize', imageData)
+  emit('close')
+}
+
+const openUpscaleModal = () => {
+  const imageData = {
+    imageUrl: props.image.storage_image_url || props.image.result_image_url || props.image.thumbnail_url,
+    imageId: props.image.id,
+    elementName: props.image.element_name || '',
+    projectId: props.image.project_id
+  }
+  
+  emit('upscale', imageData)
+  emit('close')
+}
+
+const openRemoveBackgroundModal = () => {
+  const imageData = {
+    imageUrl: props.image.storage_image_url || props.image.result_image_url || props.image.thumbnail_url,
+    imageId: props.image.id,
+    elementName: props.image.element_name || '',
+    projectId: props.image.project_id
+  }
+  
+  emit('remove-background', imageData)
+  emit('close')
+}
+
+// Watch for image changes
+watch(() => props.image?.id, (newImageId) => {
+  if (newImageId) {
+    selectedPreview.value = 'original'
+    fetchProcessedImages()
+  }
+}, { immediate: true })
+
+// Initialize on mount
+onMounted(() => {
+  selectedPreview.value = 'original'
+  if (props.image?.id) {
+    fetchProcessedImages()
+  }
+})
 </script>
 
 <style scoped>
@@ -1357,11 +1557,20 @@ const handleVideoGeneration = () => {
 .action-buttons {
   display: flex;
   flex-direction: row;
+  align-items: center;
   gap: 8px;
   margin-top: 24px;
   padding-top: 24px;
   border-top: 1px solid var(--border-color);
   justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.button-divider {
+  width: 1px;
+  height: 30px;
+  background: var(--border-color);
+  margin: 0 4px;
 }
 
 .icon-btn {
@@ -1431,6 +1640,18 @@ const handleVideoGeneration = () => {
   background: #0891b2;
   border-color: #0891b2;
   box-shadow: 0 2px 8px rgba(6, 182, 212, 0.3);
+}
+
+.icon-btn.btn-recraft {
+  background: #6366f1;
+  color: white;
+  border-color: #6366f1;
+}
+
+.icon-btn.btn-recraft:hover {
+  background: #4f46e5;
+  border-color: #4f46e5;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
 }
 
 .icon-btn svg {
@@ -1771,5 +1992,54 @@ const handleVideoGeneration = () => {
     max-height: 100%;
     border-radius: 8px;
   }
+}
+
+/* 이미지 미리보기 선택 */
+.image-viewer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  height: 100%;
+}
+
+.image-preview-selector {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.preview-btn {
+  padding: 8px 16px;
+  border: 2px solid var(--border-color);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.preview-btn:hover {
+  border-color: var(--primary-color);
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.preview-btn.active {
+  border-color: var(--primary-color);
+  background: var(--primary-color);
+  color: white;
+}
+
+.preview-btn.active:hover {
+  background: var(--primary-hover);
 }
 </style>

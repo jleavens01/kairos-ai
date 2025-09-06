@@ -123,7 +123,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
-import { Search, X, Grid, List, Package, Sparkles, Image, Video } from 'lucide-vue-next';
+import { Search, X, Grid, List, Package, Package2, Sparkles, Image, Video, User, Mountain } from 'lucide-vue-next';
 import ExploreCard from '@/components/explore/ExploreCard.vue';
 import ExploreDetailModal from '@/components/explore/ExploreDetailModal.vue';
 import { supabase } from '@/utils/supabase';
@@ -148,6 +148,10 @@ let observer = null;
 const categories = [
   { id: 'all', name: '전체', icon: Sparkles },
   { id: 'images', name: '이미지', icon: Image },
+  { id: 'scene', name: '씬', icon: Image },
+  { id: 'character', name: '캐릭터', icon: User },
+  { id: 'background', name: '배경', icon: Mountain },
+  { id: 'object', name: '오브젝트', icon: Package2 },
   { id: 'videos', name: '비디오', icon: Video }
 ];
 
@@ -160,6 +164,10 @@ const filteredContent = computed(() => {
     content = content.filter(item => {
       if (selectedCategory.value === 'images') return item.type === 'image';
       if (selectedCategory.value === 'videos') return item.type === 'video';
+      // 이미지 세부 카테고리
+      if (['scene', 'character', 'background', 'object'].includes(selectedCategory.value)) {
+        return item.type === 'image' && (item.image_type || item.category) === selectedCategory.value;
+      }
       return true;
     });
   }

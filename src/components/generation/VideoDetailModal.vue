@@ -71,6 +71,21 @@
                 <span class="label">비율:</span>
                 <span class="value">{{ video.aspect_ratio }}</span>
               </div>
+              <div v-if="video.file_size || video.upscale_file_size" class="info-item file-size-info">
+                <span class="label">파일 크기:</span>
+                <div class="file-sizes">
+                  <span v-if="video.file_size" 
+                        class="value original-size" 
+                        :class="getFileSizeColorClass(video.file_size)">
+                    원본: {{ formatFileSize(video.file_size) }}
+                  </span>
+                  <span v-if="video.upscale_file_size" 
+                        class="value upscale-size" 
+                        :class="getFileSizeColorClass(video.upscale_file_size)">
+                    업스케일: {{ formatFileSize(video.upscale_file_size) }}
+                  </span>
+                </div>
+              </div>
               <div class="info-item">
                 <span class="label">생성일:</span>
                 <span class="value">{{ formatDate(video.created_at) }}</span>
@@ -258,6 +273,7 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { supabase } from '@/utils/supabase'
 import { VideoFrameExtractor } from '@/utils/videoFrameExtractor'
+import { formatFileSize, getFileSizeColorClass } from '@/utils/fileSize'
 
 const props = defineProps({
   show: {
@@ -1013,6 +1029,22 @@ watch(() => props.show, (newShow) => {
 .info-item .value {
   color: var(--text-primary);
   flex: 1;
+}
+
+/* 파일 크기 정보 스타일 */
+.info-item.file-size-info .value {
+  font-weight: 500;
+}
+
+.file-sizes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.file-sizes .value {
+  padding: 2px 0;
 }
 
 .favorite-btn {

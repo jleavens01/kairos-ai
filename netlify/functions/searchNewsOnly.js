@@ -133,6 +133,7 @@ export const handler = async (event, context) => {
       const naverClientId = process.env.NAVER_CLIENT_ID
       const naverClientSecret = process.env.NAVER_CLIENT_SECRET
       
+      if (naverClientId && naverClientSecret) {
         try {
           const searchQuery = encodeURIComponent(query)
           const naverApiUrl = `https://openapi.naver.com/v1/search/news.json?query=${searchQuery}&display=${Math.min(parseInt(maxResults) - newsResults.length, 100)}&start=1&sort=date`

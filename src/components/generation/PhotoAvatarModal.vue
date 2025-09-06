@@ -307,7 +307,7 @@ const formData = reactive({
   orientation: 'square',
   pose: 'half_body',
   style: 'Realistic',
-  appearance: ''
+  appearance: '자연스러운 표정의 사람' // 기본값 설정 (최소 1글자 이상 필요)
 })
 
 const canGenerate = computed(() => {
@@ -377,12 +377,34 @@ const generatePhotoAvatar = async () => {
     })
 
     const result = await response.json()
+    console.log('Photo avatar generation result structure:', JSON.stringify(result, null, 2))
+    console.log('Available keys:', Object.keys(result))
 
     if (!response.ok) {
       throw new Error(result.error || '아바타 생성에 실패했습니다.')
     }
 
-    jobId.value = result.job_id
+    // result 구조 확인하고 안전하게 접근 (여러 경로 시도)
+    const generationId = result.generation_id || 
+                        result.data?.generation_id || 
+                        result.job_id ||
+                        result.data?.job_id ||
+                        result.callback_id // 임시로 callback_id 사용
+                        
+    if (!generationId) {
+      console.error('No generation_id found in result:', result)
+      console.error('Available keys:', Object.keys(result))
+      // 일단 callback_id로도 시도해보기
+      if (result.callback_id) {
+        console.warn('Using callback_id as fallback:', result.callback_id)
+        jobId.value = result.callback_id
+      } else {
+        throw new Error('Generation ID not found in response')
+      }
+    } else {
+      console.log('Using generation_id:', generationId)
+      jobId.value = generationId
+    }
     generationStatus.value = {
       status: 'processing',
       progress: 25
@@ -425,9 +447,30 @@ const startStatusPolling = async () => {
       })
 
       const result = await response.json()
+      console.log('Photo avatar status check response:', { 
+        status: response.status, 
+        ok: response.ok, 
+        result 
+      })
 
       if (!response.ok) {
-        throw new Error(result.error || '상태 확인에 실패했습니다.')
+        console.error('Photo avatar status check failed:', result)
+        
+        // 404는 아직 아바타가 준비되지 않았을 수 있음
+        if (response.status === 404) {
+          console.warn('Avatar not ready yet, will retry...')
+          generationStatus.value = {
+            status: 'processing',
+            progress: Math.min(25 + (attempts * 3), 80),
+            error_message: null
+          }
+          
+          // 잠시 후 다시 시도
+          setTimeout(() => checkPhotoAvatarStatus(attempts + 1), 8000)
+          return
+        }
+        
+        throw new Error(result.error || result.message || '상태 확인에 실패했습니다.')
       }
 
       generationStatus.value = {

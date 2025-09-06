@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>File Size Utils Test</title>
+</head>
+<body>
+    <h1>File Size Utilities Test</h1>
+    <div id="results"></div>
+    
+    <script type="module">
+        // Test the file size formatting functions
+        import { formatFileSize, getFileSizeCategory, getFileSizeColorClass } from './src/utils/fileSize.js'
+        
+        const tests = [
+            { bytes: 1024, expected: "1 KB" },
+            { bytes: 1024 * 1024, expected: "1 MB" },
+            { bytes: 1024 * 1024 * 50, expected: "50 MB" },
+            { bytes: 1024 * 1024 * 1024, expected: "1 GB" },
+            { bytes: 512, expected: "512 B" },
+            { bytes: 1024 * 50, expected: "50 KB" }
+        ]
+        
+        const resultsDiv = document.getElementById('results')
+        let html = '<h2>Format Tests</h2>'
+        
+        tests.forEach(test => {
+            const result = formatFileSize(test.bytes)
+            const category = getFileSizeCategory(test.bytes)
+            const colorClass = getFileSizeColorClass(test.bytes)
+            
+            html += `<p>
+                ${test.bytes} bytes → ${result} 
+                (Category: ${category}, Color: ${colorClass})
+                ${result === test.expected ? '✅' : '❌ Expected: ' + test.expected}
+            </p>`
+        })
+        
+        resultsDiv.innerHTML = html
+    </script>
+</body>
+</html>

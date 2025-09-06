@@ -122,22 +122,30 @@
               >
                 <option 
                   v-for="voice in voicesByLanguage[language]" 
-                  :key="voice.id" 
-                  :value="voice.id"
+                  :key="voice.voice_id" 
+                  :value="voice.voice_id"
                 >
-                  {{ voice.name }} ({{ voice.gender }})
-                  {{ voice.emotion_support ? '🎭' : '' }}
-                  {{ voice.support_pause ? '⏸️' : '' }}
+                  {{ voice.voice_name }} ({{ voice.gender }})
+                  {{ voice.supports_emotion ? '🎭' : '' }}
+                  {{ voice.supports_pause ? '⏸️' : '' }}
+                  {{ voice.is_premium ? '👑' : '' }}
                 </option>
               </optgroup>
             </select>
             
             <!-- 선택된 음성 미리듣기 -->
-            <div v-if="selectedVoice && selectedVoice.preview_audio" class="mt-2">
+            <div v-if="selectedVoice && selectedVoice.preview_audio_url" class="mt-2">
               <audio controls class="w-full">
-                <source :src="selectedVoice.preview_audio" type="audio/mpeg">
+                <source :src="selectedVoice.preview_audio_url" type="audio/mpeg">
                 Your browser does not support the audio element.
               </audio>
+            </div>
+            
+            <!-- 음성 제공업체 정보 -->
+            <div v-if="selectedVoice" class="mt-2 text-xs text-gray-600">
+              <span class="bg-gray-100 px-2 py-1 rounded">{{ selectedVoice.provider.toUpperCase() }}</span>
+              <span v-if="selectedVoice.category" class="ml-2 bg-blue-100 text-blue-800 px-2 py-1 rounded">{{ selectedVoice.category }}</span>
+              <span v-if="selectedVoice.is_premium" class="ml-2 bg-yellow-100 text-yellow-800 px-2 py-1 rounded">PRO</span>
             </div>
           </div>
           
@@ -286,6 +294,135 @@
             />
           </div>
 
+          <!-- 음성 피치 (지원하는 경우) -->
+          <div v-if="selectedVoice?.supports_pitch" class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">
+              음성 피치: {{ formData.voicePitch }}
+            </label>
+            <input
+              v-model.number="formData.voicePitch"
+              type="range"
+              min="-50"
+              max="50"
+              step="1"
+              class="w-full"
+            />
+            <div class="flex justify-between text-xs text-gray-500 mt-1">
+              <span>낮음</span>
+              <span>기본</span>
+              <span>높음</span>
+            </div>
+          </div>
+
+          <!-- 감정 설정 (지원하는 경우) -->
+          <div v-if="selectedVoice?.supports_emotion && selectedVoice?.supported_emotions?.length" class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">감정</label>
+            <select
+              v-model="formData.voiceEmotion"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">기본</option>
+              <option 
+                v-for="emotion in selectedVoice.supported_emotions" 
+                :key="emotion" 
+                :value="emotion"
+              >
+                {{ emotion }}
+              </option>
+            </select>
+          </div>
+
+          <!-- 로케일 설정 (다국어 지원하는 경우) -->
+          <div v-if="selectedVoice?.supports_multilingual && selectedVoice?.supported_locales?.length" class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">발음 (로케일)</label>
+            <select
+              v-model="formData.voiceLocale"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">기본</option>
+              <option 
+                v-for="locale in selectedVoice.supported_locales" 
+                :key="locale" 
+                :value="locale"
+              >
+                {{ locale }}
+              </option>
+            </select>
+          </div>
+
+          <!-- ElevenLabs 고급 설정 -->
+          <div v-if="selectedVoice?.provider === 'elevenlabs'" class="mb-4 border rounded-lg p-4 bg-purple-50">
+            <h4 class="text-sm font-medium text-gray-700 mb-3 flex items-center">
+              <span class="bg-purple-100 text-purple-800 px-2 py-1 rounded text-xs mr-2">ElevenLabs</span>
+              고급 설정
+            </h4>
+            
+            <!-- ElevenLabs 모델 선택 -->
+            <div class="mb-3">
+              <label class="block text-sm font-medium text-gray-700 mb-1">모델</label>
+              <select
+                v-model="formData.elevenlabsModel"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+              >
+                <option 
+                  v-for="model in elevenLabsModels" 
+                  :key="model.value" 
+                  :value="model.value"
+                >
+                  {{ model.label }}
+                </option>
+              </select>
+            </div>
+
+            <!-- 유사성 (Similarity Boost) -->
+            <div class="mb-3">
+              <label class="block text-sm font-medium text-gray-700 mb-1">
+                유사성: {{ formData.elevenLabsSimilarity.toFixed(2) }}
+              </label>
+              <input
+                v-model.number="formData.elevenLabsSimilarity"
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                class="w-full"
+              />
+              <p class="text-xs text-gray-500 mt-1">원본 음성과의 유사도 조절</p>
+            </div>
+
+            <!-- 안정성 (Stability) -->
+            <div class="mb-3">
+              <label class="block text-sm font-medium text-gray-700 mb-1">
+                안정성: {{ formData.elevenLabsStability.toFixed(2) }}
+              </label>
+              <input
+                v-model.number="formData.elevenLabsStability"
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                class="w-full"
+              />
+              <p class="text-xs text-gray-500 mt-1">음성 생성 안정성 및 일관성</p>
+            </div>
+
+            <!-- 스타일 (Style) -->
+            <div class="mb-3">
+              <label class="block text-sm font-medium text-gray-700 mb-1">
+                스타일 강도: {{ formData.elevenLabsStyle.toFixed(2) }}
+              </label>
+              <input
+                v-model.number="formData.elevenLabsStyle"
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
+                class="w-full"
+              />
+              <p class="text-xs text-gray-500 mt-1">음성 스타일 표현 강도</p>
+            </div>
+          </div>
+
           <!-- 자막 설정 -->
           <div class="flex items-center">
             <input
@@ -326,10 +463,10 @@
     </div>
 
     <!-- 사진 아바타 생성 모달 -->
-    <PhotoAvatarModal
+    <PhotoAvatarWorkflowModal
       v-if="showPhotoAvatarModal"
       @close="showPhotoAvatarModal = false"
-      @avatar-generated="handleAvatarGenerated"
+      @complete="handlePhotoAvatarComplete"
     />
   </div>
 </template>
@@ -338,7 +475,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useGenerationStore } from '@/stores/generation'
 import { Plus } from 'lucide-vue-next'
-import PhotoAvatarModal from './PhotoAvatarModal.vue'
+import PhotoAvatarWorkflowModal from './PhotoAvatarWorkflowModal.vue'
 
 const emit = defineEmits(['close'])
 const generationStore = useGenerationStore()
@@ -361,14 +498,24 @@ const availableLanguages = ref([])
 
 // 선택된 음성 정보
 const selectedVoice = computed(() => {
-  return availableVoices.value.find(voice => voice.id === formData.voiceId)
+  return availableVoices.value.find(voice => voice.voice_id === formData.voiceId)
 })
+
+// ElevenLabs 모델 옵션
+const elevenLabsModels = [
+  { value: 'eleven_monolingual_v1', label: 'Monolingual V1' },
+  { value: 'eleven_multilingual_v1', label: 'Multilingual V1' },
+  { value: 'eleven_multilingual_v2', label: 'Multilingual V2' },
+  { value: 'eleven_turbo_v2', label: 'Turbo V2' },
+  { value: 'eleven_turbo_v2_5', label: 'Turbo V2.5 (권장)' }
+]
 
 const formData = reactive({
   title: '',
   avatarId: '',
   avatarType: 'avatar',
   voiceId: '',
+  voiceProvider: 'heygen',
   script: '',
   backgroundType: 'color',
   backgroundColor: '#f6f6fc',
@@ -377,7 +524,15 @@ const formData = reactive({
   width: 1280,
   height: 720,
   voiceSpeed: 1.0,
-  caption: false
+  voicePitch: 0,
+  voiceEmotion: '',
+  voiceLocale: '',
+  caption: false,
+  // ElevenLabs 설정
+  elevenlabsModel: 'eleven_turbo_v2_5',
+  elevenLabsSimilarity: 0.75,
+  elevenLabsStability: 0.50,
+  elevenLabsStyle: 0.00
 })
 
 const canGenerate = computed(() => {
@@ -413,8 +568,18 @@ const generateAvatarVideo = async () => {
           type: 'text',
           voice_id: formData.voiceId,
           input_text: formData.script,
-          speed: formData.voiceSpeed
+          speed: formData.voiceSpeed,
+          pitch: formData.voicePitch,
+          emotion: formData.voiceEmotion || undefined,
+          locale: formData.voiceLocale || undefined,
+          elevenlabs_settings: selectedVoice.value?.provider === 'elevenlabs' ? {
+            model: formData.elevenlabsModel,
+            similarity_boost: formData.elevenLabsSimilarity,
+            stability: formData.elevenLabsStability,
+            style: formData.elevenLabsStyle
+          } : undefined
         },
+        voice_model: selectedVoice.value,
         background: getBackgroundConfig()
       }]
     }
@@ -540,7 +705,8 @@ const loadVoices = async () => {
   voicesError.value = null
   
   try {
-    const response = await fetch('/.netlify/functions/getHeyGenVoices')
+    // 새로운 통합 보이스 API 사용
+    const response = await fetch('/.netlify/functions/getVoiceModels?provider=all&language=all')
     const result = await response.json()
     
     if (!response.ok) {
@@ -563,9 +729,11 @@ const loadVoices = async () => {
     // 첫 번째 음성을 기본 선택 (한국어 우선)
     if (availableVoices.value.length > 0 && !formData.voiceId) {
       const koreanVoices = availableVoices.value.filter(voice => 
-        voice.language.includes('Korean') || voice.language.includes('한국')
+        voice.language === 'ko'
       )
-      formData.voiceId = koreanVoices.length > 0 ? koreanVoices[0].id : availableVoices.value[0].id
+      const defaultVoice = koreanVoices.length > 0 ? koreanVoices[0] : availableVoices.value[0]
+      formData.voiceId = defaultVoice.voice_id
+      formData.voiceProvider = defaultVoice.provider
     }
     
     console.log(`Loaded ${availableVoices.value.length} voices in ${availableLanguages.value.length} languages`)
@@ -581,9 +749,11 @@ const loadVoices = async () => {
     
     if (fallbackData.voices.length > 0 && !formData.voiceId) {
       const koreanVoices = fallbackData.voices.filter(voice => 
-        voice.language.includes('Korean') || voice.language.includes('한국')
+        voice.language === 'ko'
       )
-      formData.voiceId = koreanVoices.length > 0 ? koreanVoices[0].id : fallbackData.voices[0].id
+      const defaultVoice = koreanVoices.length > 0 ? koreanVoices[0] : fallbackData.voices[0]
+      formData.voiceId = defaultVoice.voice_id
+      formData.voiceProvider = defaultVoice.provider
     }
     
     voicesError.value = `API 연결 실패 (테스트 데이터 사용): ${error.message}`
@@ -594,6 +764,13 @@ const loadVoices = async () => {
 
 const getFallbackAvatars = () => {
   return [
+    {
+      id: 'f68eecf1d1d04a1da4b1dc05d259aa4b',
+      name: '세상의모든지식',
+      type: 'avatar',
+      thumbnail: 'https://resource.heygen.com/avatar/v3/f68eecf1d1d04a1da4b1dc05d259aa4b/preview.webp',
+      premium: false
+    },
     {
       id: 'avatar_1',
       name: 'Sarah (테스트)',
@@ -628,78 +805,123 @@ const getFallbackAvatars = () => {
 const getFallbackVoices = () => {
   const voices = [
     {
-      id: 'voice_ko_1',
-      name: '지수 (여성)',
-      language: 'Korean',
+      voice_id: 'voice_ko_1',
+      voice_name: '지수 (여성)',
+      provider: 'heygen',
+      language: 'ko',
       gender: 'Female',
-      preview_audio: null,
-      support_pause: true,
-      emotion_support: true
+      supports_emotion: true,
+      supports_pause: true,
+      supports_pitch: false,
+      supports_multilingual: false,
+      supported_emotions: ['Excited', 'Friendly', 'Serious', 'Soothing', 'Broadcaster'],
+      category: 'professional',
+      is_premium: false,
+      preview_audio_url: null
     },
     {
-      id: 'voice_ko_2', 
-      name: '민호 (남성)',
-      language: 'Korean',
+      voice_id: 'voice_ko_2', 
+      voice_name: '민호 (남성)',
+      provider: 'heygen',
+      language: 'ko',
       gender: 'Male',
-      preview_audio: null,
-      support_pause: true,
-      emotion_support: false
+      supports_emotion: false,
+      supports_pause: true,
+      supports_pitch: false,
+      supports_multilingual: false,
+      category: 'professional',
+      is_premium: false,
+      preview_audio_url: null
     },
     {
-      id: 'voice_en_1',
-      name: 'Emma (Female)',
-      language: 'English',
+      voice_id: 'voice_en_1',
+      voice_name: 'Emma (Female)',
+      provider: 'heygen',
+      language: 'en',
       gender: 'Female',
-      preview_audio: null,
-      support_pause: true,
-      emotion_support: true
+      supports_emotion: true,
+      supports_pause: true,
+      supports_pitch: false,
+      supports_multilingual: false,
+      supported_emotions: ['Excited', 'Friendly', 'Serious', 'Soothing', 'Broadcaster'],
+      category: 'professional',
+      is_premium: false,
+      preview_audio_url: null
     },
     {
-      id: 'voice_en_2',
-      name: 'James (Male)', 
-      language: 'English',
+      voice_id: 'voice_en_2',
+      voice_name: 'James (Male)', 
+      provider: 'heygen',
+      language: 'en',
       gender: 'Male',
-      preview_audio: null,
-      support_pause: false,
-      emotion_support: false
+      supports_emotion: false,
+      supports_pause: false,
+      supports_pitch: false,
+      supports_multilingual: false,
+      category: 'professional',
+      is_premium: false,
+      preview_audio_url: null
+    },
+    // ElevenLabs 테스트 음성들
+    {
+      voice_id: 'elevenlabs_rachel',
+      voice_name: 'Rachel (ElevenLabs)',
+      provider: 'elevenlabs',
+      language: 'en',
+      gender: 'Female',
+      supports_emotion: false,
+      supports_pause: false,
+      supports_pitch: false,
+      supports_multilingual: true,
+      supported_locales: ['en-US', 'en-GB', 'en-AU'],
+      elevenlabs_model: 'eleven_turbo_v2_5',
+      default_similarity_boost: 0.75,
+      default_stability: 0.50,
+      default_style: 0.00,
+      category: 'professional',
+      is_premium: true,
+      preview_audio_url: null
     }
   ]
 
   const voicesByLanguage = {
-    'Korean': voices.filter(v => v.language === 'Korean'),
-    'English': voices.filter(v => v.language === 'English')
+    'ko': voices.filter(v => v.language === 'ko'),
+    'en': voices.filter(v => v.language === 'en')
   }
 
   return {
     voices,
     voices_by_language: voicesByLanguage,
-    languages: ['Korean', 'English']
+    languages: ['ko', 'en']
   }
 }
 
 const handleImageError = (event) => {
   // 이미지 로드 실패 시 기본 이미지나 플레이스홀더 표시
-  event.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgdmlld0JveD0iMCAwIDEwMCAxMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik01MCA3MEM2MS4wNDU3IDcwIDcwIDYxLjA0NTcgNzAgNTBDNzAgMzguOTU0MyA2MS4wNDU3IDMwIDUwIDMwQzM4Ljk1NDMgMzAgMzAgMzguOTU0MyAzMCA1MEMzMCA2MS4wNDU3IDM4Ljk1NDMgNzAgNTAgNzBaIiBmaWxsPSIjOTCA5N0FEIi8+Cjwvc3ZnPg=='
+  event.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"%3E%3Crect fill="%23f3f4f6" width="100" height="100"/%3E%3Ccircle cx="50" cy="45" r="15" fill="%239ca3af"/%3E%3Cpath d="M25 75 Q50 65 75 75" stroke="%239ca3af" stroke-width="2" fill="none"/%3E%3C/svg%3E'
 }
 
-const handleAvatarGenerated = (avatarData) => {
-  console.log('Avatar generated:', avatarData)
+const handlePhotoAvatarComplete = (result) => {
+  console.log('Photo avatar workflow completed:', result)
   
-  // 생성된 사진 아바타를 아바타 목록에 추가
-  const newAvatar = {
-    id: `photo_${Date.now()}`,
-    name: avatarData.name,
-    type: 'talking_photo',
-    thumbnail: avatarData.photo_urls[0], // 첫 번째 이미지를 썸네일로 사용
-    premium: false,
-    metadata: avatarData.metadata
+  if (result.type === 'photo_avatar' && result.video_url) {
+    // 생성된 사진 아바타를 아바타 목록에 추가
+    const newAvatar = {
+      id: `photo_${Date.now()}`,
+      name: result.metadata?.workflow?.step1?.name || 'Custom Photo Avatar',
+      type: 'talking_photo',
+      thumbnail: result.thumbnail_url || result.video_url, // 썸네일 또는 비디오 URL
+      premium: false,
+      metadata: result.metadata,
+      video_url: result.video_url
+    }
+    
+    availableAvatars.value.unshift(newAvatar)
+    
+    // 새로 생성된 아바타를 자동 선택
+    formData.avatarId = newAvatar.id
+    formData.avatarType = 'talking_photo'
   }
-  
-  availableAvatars.value.unshift(newAvatar)
-  
-  // 새로 생성된 아바타를 자동 선택
-  formData.avatarId = newAvatar.id
-  formData.avatarType = 'talking_photo'
   
   showPhotoAvatarModal.value = false
 }

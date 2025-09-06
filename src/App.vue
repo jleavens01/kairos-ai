@@ -20,11 +20,15 @@ import SideNav from '@/components/SideNav.vue';
 import { ref, onMounted, onUnmounted } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import { useThemeStore } from '@/stores/theme';
+import { useGlobalFailureRecovery } from '@/composables/useFailureRecovery';
 
 // auth 스토어를 가져옵니다.
 const authStore = useAuthStore();
 const themeStore = useThemeStore();
 const route = useRoute();
+
+// 글로벌 실패 복구 시스템 초기화
+const failureRecovery = useGlobalFailureRecovery();
 
 const isMobileNavOpen = ref(false); 
 const isMobile = ref(false);

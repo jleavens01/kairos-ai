@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { generateImage as generateGPTImage } from './generateGPTImage.js';
 import { generateImage as generateFluxImage } from './generateFluxImage.js';
 import { generateImage as generateGeminiEditImage } from './generateGeminiEditImage.js';
+import { generateImage as generateRecraftImage } from './generateRecraftImage.js';
 
 export const handler = async (event) => {
   const headers = {
@@ -75,6 +76,85 @@ export const handler = async (event) => {
             user,
             supabaseAdmin
           });
+          break;
+          
+        case 'recraft-v3':
+        case 'recraft-realistic':
+          result = await generateRecraftImage({
+            ...requestData,
+            user,
+            supabaseAdmin
+          });
+          break;
+          
+        case 'recraft-i2i':
+          // Recraft I2I는 첫 번째 참조 이미지를 변환
+          if (!requestData.referenceImages || requestData.referenceImages.length === 0) {
+            throw new Error('Recraft I2I requires at least one reference image');
+          }
+          
+          const i2iResponse = await fetch('/.netlify/functions/generateRecraftI2I', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': event.headers.authorization
+            },
+            body: JSON.stringify({
+              image_url: requestData.referenceImages[0],
+              prompt: requestData.prompt,
+              strength: requestData.parameters?.strength || '0.5',
+              style: requestData.parameters?.style || 'digital_illustration',
+              original_image_id: requestData.originalImageId // 원본 이미지 ID가 있으면 전달
+            })
+          });
+          
+          const i2iResult = await i2iResponse.json();
+          
+          if (!i2iResponse.ok) {
+            throw new Error(i2iResult.error || 'Recraft I2I transformation failed');
+          }
+          
+          // gen_images 테이블에 저장
+          const { data: insertData, error: insertError } = await supabaseAdmin
+            .from('gen_images')
+            .insert({
+              project_id: requestData.projectId,
+              image_type: requestData.category || 'scene',
+              element_name: requestData.characterName || 'I2I Transformed Image',
+              generation_status: 'completed',
+              result_image_url: i2iResult.transformed_url,
+              thumbnail_url: i2iResult.transformed_url,
+              prompt_used: requestData.prompt,
+              style_name: i2iResult.style,
+              generation_model: 'recraft-i2i',
+              generation_params: {
+                strength: i2iResult.strength,
+                style: i2iResult.style,
+                original_url: i2iResult.original_url
+              },
+              reference_image_url: requestData.referenceImages[0],
+              credits_cost: i2iResult.credit_cost || 80,
+              metadata: i2iResult.raw_response,
+              created_at: new Date().toISOString()
+            })
+            .select('*');
+          
+          if (insertError) {
+            console.error('Database insert error:', insertError);
+            throw new Error('Failed to save I2I result to database');
+          }
+          
+          result = {
+            success: true,
+            image_url: i2iResult.transformed_url,
+            image_id: insertData[0]?.id,
+            id: insertData[0]?.id,
+            image_type: requestData.category || 'scene',
+            category: requestData.category || 'scene',
+            status: 'completed',
+            model: 'recraft-i2i',
+            credit_cost: i2iResult.credit_cost || 80
+          };
           break;
           
         case 'stable-diffusion':

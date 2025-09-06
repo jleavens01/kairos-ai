@@ -80,6 +80,26 @@ export const handler = async (event) => {
           throw new Error('No video URL in webhook output');
         }
 
+        // 비디오 파일 사이즈 가져오기
+        let fileSize = null;
+
+        try {
+          const sizeResponse = await fetch('/.netlify/functions/getFileSize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: videoUrl, type: 'video' })
+          });
+
+          if (sizeResponse.ok) {
+            const sizeData = await sizeResponse.json();
+            if (sizeData.success) {
+              fileSize = sizeData.fileSize;
+            }
+          }
+        } catch (error) {
+          console.warn('Failed to get file size for video:', error.message);
+        }
+
         console.log(`Updating gen_videos for request_id: ${request_id}`);
         
         // 먼저 request_id로 비디오를 찾거나, upscale_request_id로 찾기
@@ -128,6 +148,7 @@ export const handler = async (event) => {
           updatePayload = {
             upscale_status: 'completed',
             upscale_video_url: videoUrl,
+            upscale_file_size: fileSize,
             upscaled_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           };
@@ -138,6 +159,7 @@ export const handler = async (event) => {
             generation_status: 'completed',
             result_video_url: videoUrl,
             storage_video_url: videoUrl,
+            file_size: fileSize,
             updated_at: new Date().toISOString()
           };
         }
@@ -171,12 +193,39 @@ export const handler = async (event) => {
           throw new Error('No image URL in webhook output');
         }
 
+        // 파일 사이즈와 메타데이터 가져오기
+        let fileSize = null;
+        let width = null;
+        let height = null;
+
+        try {
+          const sizeResponse = await fetch('/.netlify/functions/getFileSize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: imageUrl, type: 'image' })
+          });
+
+          if (sizeResponse.ok) {
+            const sizeData = await sizeResponse.json();
+            if (sizeData.success) {
+              fileSize = sizeData.fileSize;
+              width = sizeData.width;
+              height = sizeData.height;
+            }
+          }
+        } catch (error) {
+          console.warn('Failed to get file size for image:', error.message);
+        }
+
         const { error: dbError } = await supabase
           .from('gen_images')
           .update({
             generation_status: 'completed',
             result_image_url: imageUrl,
             storage_image_url: imageUrl,
+            file_size: fileSize,
+            width: width,
+            height: height,
             updated_at: new Date().toISOString()
           })
           .eq('request_id', request_id);

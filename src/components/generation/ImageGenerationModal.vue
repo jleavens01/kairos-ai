@@ -3,7 +3,26 @@
     <div class="modal-container" :class="{ 'expanded': showSidePanel }">
       <div class="modal-main-content">
         <div class="modal-header">
-          <h3>이미지 생성</h3>
+          <div class="header-left">
+            <h3>이미지 생성</h3>
+            <!-- T2I/I2I 스위처 -->
+            <div class="generation-mode-switcher">
+              <button 
+                @click="setGenerationMode('t2i')" 
+                class="mode-btn"
+                :class="{ active: generationMode === 't2i' }"
+              >
+                T2I
+              </button>
+              <button 
+                @click="setGenerationMode('i2i')" 
+                class="mode-btn"
+                :class="{ active: generationMode === 'i2i' }"
+              >
+                I2I
+              </button>
+            </div>
+          </div>
           <div class="header-actions">
             <button @click="toggleSidePanel" class="btn-toggle-panel" :class="{ active: showSidePanel }" title="사이드 패널 토글">
               <PanelRightOpen v-if="!showSidePanel" :size="20" />
@@ -19,11 +38,22 @@
           <div class="inline-item">
             <label class="inline-label">AI 모델</label>
             <select v-model="selectedModel" class="form-select">
-              <option value="gpt-image-1">GPT Image (기본)</option>
-              <option value="flux-pro">Flux Pro</option>
-              <option value="flux-kontext">Flux Kontext (참조 이미지 1개)</option>
-              <option value="flux-kontext-multi">Flux Kontext Multi (참조 이미지 여러개)</option>
-              <option value="gemini-25-flash-edit">Gemini 2.5 Flash Edit (이미지 편집 1-5개)</option>
+              <!-- T2I 모드일 때 -->
+              <template v-if="generationMode === 't2i'">
+                <option value="gpt-image-1">GPT Image (기본)</option>
+                <option value="flux-pro">Flux Pro</option>
+                <option value="gemini-25-flash-edit">Gemini 2.5 Flash Edit</option>
+                <option value="recraft-v3">Recraft V3 (최신)</option>
+                <option value="recraft-realistic">Recraft 사실적</option>
+              </template>
+              <!-- I2I 모드일 때 -->
+              <template v-else>
+                <option value="gpt-image-1">GPT Image (참조 이미지 1-5개)</option>
+                <option value="flux-kontext">Flux Kontext (참조 이미지 1개)</option>
+                <option value="flux-kontext-multi">Flux Kontext Multi (참조 이미지 여러개)</option>
+                <option value="gemini-25-flash-edit">Gemini 2.5 Flash Edit (이미지 편집 1-5개)</option>
+                <option value="recraft-i2i">Recraft I2I (이미지 변환)</option>
+              </template>
             </select>
           </div>
           <div class="inline-item">
@@ -35,7 +65,13 @@
                 <option value="1536x1024">가로형 (1536x1024)</option>
                 <option value="1024x1536">세로형 (1024x1536)</option>
               </template>
-              <!-- Flux 및 Gemini 모델용 비율 -->
+              <!-- Recraft 모델용 정확한 크기 -->
+              <template v-else-if="selectedModel.includes('recraft')">
+                <option v-for="size in recraftSizes" :key="size" :value="size">
+                  {{ size }} ({{ getSizeRatio(size) }})
+                </option>
+              </template>
+              <!-- Flux, Gemini 모델용 비율 -->
               <template v-else-if="selectedModel.includes('flux') || selectedModel.includes('gemini')">
                 <option value="21:9">울트라와이드 (21:9)</option>
                 <option value="16:9">와이드 (16:9)</option>
@@ -53,50 +89,76 @@
 
         <!-- 스타일 선택 -->
         <div class="form-group inline-group">
-          <label class="inline-label">스타일</label>
-          <div class="style-select-wrapper">
-            <div @click="toggleStyleDropdown" @touchend.prevent="toggleStyleDropdown" class="custom-style-select">
-              <span v-if="selectedStyle">{{ selectedStyle.name }}</span>
-              <span v-else class="placeholder">선택 안함</span>
-              <span class="dropdown-arrow">▼</span>
+          <!-- Recraft 모델용 스타일 선택 -->
+          <template v-if="selectedModel.includes('recraft')">
+            <div class="inline-item">
+              <label class="inline-label">스타일</label>
+              <select v-model="recraftStyle" @change="onRecraftStyleChange" class="form-select">
+                <option value="realistic_image">현실적 이미지</option>
+                <option value="digital_illustration">디지털 일러스트</option>
+                <option value="vector_illustration">벡터 일러스트</option>
+                <option v-if="selectedModel === 'recraft-v3'" value="logo_raster">로고 래스터</option>
+                <option v-if="selectedModel === 'recraft-v2'" value="icon">아이콘</option>
+              </select>
             </div>
-            <!-- 스타일 드롭다운 미리보기 -->
-            <div v-if="isStyleDropdownOpen" class="style-dropdown-preview">
-              <div v-if="loadingStyles" class="style-option loading-option">
-                <span class="style-name">스타일 로딩 중...</span>
+            <div class="inline-item" v-if="getAvailableSubstyles().length > 0">
+              <label class="inline-label">하위 스타일</label>
+              <select v-model="recraftSubstyle" class="form-select">
+                <option value="">기본</option>
+                <option v-for="substyle in getAvailableSubstyles()" :key="substyle" :value="substyle">
+                  {{ formatSubstyleName(substyle) }}
+                </option>
+              </select>
+            </div>
+          </template>
+          
+          <!-- 다른 모델용 기존 스타일 선택 -->
+          <template v-else>
+            <label class="inline-label">스타일</label>
+            <div class="style-select-wrapper">
+              <div @click="toggleStyleDropdown" @touchend.prevent="toggleStyleDropdown" class="custom-style-select">
+                <span v-if="selectedStyle">{{ selectedStyle.name }}</span>
+                <span v-else class="placeholder">선택 안함</span>
+                <span class="dropdown-arrow">▼</span>
               </div>
-              <template v-else>
-                <div 
-                  @click="selectStyleWithPreview('')"
-                  class="style-option"
-                  :class="{ selected: !selectedStyleId }"
-                >
-                  <div class="no-style-placeholder">✕</div>
-                  <span class="style-name">선택 안함</span>
+              <!-- 스타일 드롭다운 미리보기 -->
+              <div v-if="isStyleDropdownOpen" class="style-dropdown-preview">
+                <div v-if="loadingStyles" class="style-option loading-option">
+                  <span class="style-name">스타일 로딩 중...</span>
                 </div>
-                <div v-if="styles.length === 0" class="style-option">
-                  <span class="style-name">스타일을 불러올 수 없습니다</span>
-                </div>
-                <div 
-                  v-for="style in styles" 
-                  :key="style.id"
-                  @click="selectStyleWithPreview(style.id)"
-                  class="style-option"
-                  :class="{ selected: selectedStyleId === style.id }"
-                >
-                  <img :src="style.base_image_url" :alt="style.name" class="style-thumb" />
-                  <span class="style-name">{{ style.name }}</span>
-                </div>
-              </template>
+                <template v-else>
+                  <div 
+                    @click="selectStyleWithPreview('')"
+                    class="style-option"
+                    :class="{ selected: !selectedStyleId }"
+                  >
+                    <div class="no-style-placeholder">✕</div>
+                    <span class="style-name">선택 안함</span>
+                  </div>
+                  <div v-if="styles.length === 0" class="style-option">
+                    <span class="style-name">스타일을 불러올 수 없습니다</span>
+                  </div>
+                  <div 
+                    v-for="style in styles" 
+                    :key="style.id"
+                    @click="selectStyleWithPreview(style.id)"
+                    class="style-option"
+                    :class="{ selected: selectedStyleId === style.id }"
+                  >
+                    <img :src="style.base_image_url" :alt="style.name" class="style-thumb" />
+                    <span class="style-name">{{ style.name }}</span>
+                  </div>
+                </template>
+              </div>
             </div>
-          </div>
-          <div v-if="selectedStyle" class="style-preview-compact">
-            <img :src="selectedStyle.base_image_url" :alt="selectedStyle.name" />
-          </div>
+            <div v-if="selectedStyle" class="style-preview-compact">
+              <img :src="selectedStyle.base_image_url" :alt="selectedStyle.name" />
+            </div>
+          </template>
         </div>
 
-        <!-- 참조 이미지 (GPT 및 Flux 모델용) -->
-        <div v-if="showReferenceImages" class="form-group">
+        <!-- 참조 이미지 (I2I 모드에서만 표시) -->
+        <div v-if="generationMode === 'i2i'" class="form-group">
           <div class="inline-group">
             <label class="inline-label">참조 이미지</label>
             <!-- 참조 이미지 소스 선택 탭 -->
@@ -151,7 +213,15 @@
                     <span>업로드 중...</span>
                   </div>
                 </div>
-                <button @click="removeReferenceImage(index)" class="btn-remove-image">✕</button>
+                <div class="image-actions">
+                  <button @click="editReferenceImage(index)" class="btn-edit-image" title="그리기 편집">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M12 19l7-7 3 3-7 7-3-3z"/>
+                      <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
+                    </svg>
+                  </button>
+                  <button @click="removeReferenceImage(index)" class="btn-remove-image">✕</button>
+                </div>
               </div>
             </div>
           </div>
@@ -471,6 +541,21 @@
           </div>
         </div> <!-- advanced-params end -->
 
+        <!-- Recraft 모델 파라미터 -->
+        <div v-if="selectedModel.includes('recraft')" class="advanced-params">
+          <h4>고급 설정</h4>
+          
+          <div class="param-group">
+            <label>네거티브 프롬프트</label>
+            <textarea 
+              v-model="negativePrompt"
+              class="form-textarea"
+              rows="2"
+              placeholder="생성하지 않을 요소들을 입력하세요 (선택사항)"
+            />
+          </div>
+        </div>
+
         <div class="modal-footer">
           <button @click="close" class="btn-secondary">취소</button>
           <button 
@@ -513,6 +598,15 @@
       </div>
     </div> <!-- modal-container end -->
   </div> <!-- modal-overlay end -->
+  
+  <!-- DrawCanvas 모달 -->
+  <div v-if="showDrawCanvas" class="draw-canvas-modal">
+    <DrawCanvas
+      :imageUrl="editingImageUrl"
+      @save="handleDrawCanvasSave"
+      @close="closeDrawCanvas"
+    />
+  </div>
 </template>
 
 <script setup>
@@ -523,6 +617,7 @@ import { useProjectsStore } from '@/stores/projects'
 import { X, Plus, PanelRightOpen, PanelRightClose, Upload, Library, Link, FolderOpen, Film } from 'lucide-vue-next'
 import PresetManageModal from './PresetManageModal.vue'
 import ImageGenerationSidePanel from './ImageGenerationSidePanel.vue'
+import DrawCanvas from './DrawCanvas.vue'
 
 const props = defineProps({
   show: {
@@ -569,6 +664,9 @@ const productionStore = useProductionStore()
 const projectsStore = useProjectsStore()
 
 // Form data
+// Generation Mode (T2I/I2I)
+const generationMode = ref('t2i') // 기본값: T2I
+
 const prompt = ref(props.initialPrompt)
 const selectedModel = ref(props.initialModel || 'gpt-image-1')
 const referenceImages = ref([])
@@ -588,6 +686,11 @@ const currentProjectOnly = ref(true)
 const includeKept = ref(false) // 보관함 포함 옵션 (기본값: false)
 const libraryImages = ref([])
 const loadingLibrary = ref(false)
+
+// DrawCanvas 관련 변수
+const showDrawCanvas = ref(false)
+const editingImageUrl = ref('')
+const editingImageIndex = ref(-1)
 
 // Storyboard tab
 const storyboardImages = ref([])
@@ -617,12 +720,35 @@ const isStyleDropdownOpen = ref(false)
 // Flux parameters
 const guidanceScale = ref(3.5)
 const safetyTolerance = ref(2)
+const seed = ref('')
+
+// Recraft parameters
+const recraftStyle = ref('realistic_image')
+const recraftSubstyle = ref('')
+const negativePrompt = ref('')
+
+// Recraft 스타일 데이터
+const recraftV3Styles = {
+  realistic_image: ['b_and_w', 'enterprise', 'evening_light', 'faded_nostalgia', 'forest_life', 'hard_flash', 'hdr', 'motion_blur', 'mystic_naturalism', 'natural_light', 'natural_tones', 'organic_calm', 'real_life_glow', 'retro_realism', 'retro_snapshot', 'studio_portrait', 'urban_drama', 'village_realism', 'warm_folk'],
+  digital_illustration: ['2d_art_poster', '2d_art_poster_2', 'antiquarian', 'bold_fantasy', 'child_book', 'cover', 'crosshatch', 'digital_engraving', 'engraving_color', 'expressionism', 'freehand_details', 'grain', 'grain_20', 'graphic_intensity', 'hand_drawn', 'hand_drawn_outline', 'handmade_3d', 'hard_comics', 'infantile_sketch', 'long_shadow', 'modern_folk', 'multicolor', 'neon_calm', 'noir', 'nostalgic_pastel', 'outline_details', 'pastel_gradient', 'pastel_sketch', 'pixel_art', 'plastic', 'pop_art', 'pop_renaissance', 'seamless', 'street_art', 'tablet_sketch', 'urban_glow', 'urban_sketching', 'young_adult_book', 'young_adult_book_2'],
+  vector_illustration: ['bold_stroke', 'chemistry', 'colored_stencil', 'cosmics', 'cutout', 'depressive', 'editorial', 'emotional_flat', 'engraving', 'line_art', 'line_circuit', 'linocut', 'marker_outline', 'mosaic', 'naivector', 'roundish_flat', 'seamless', 'segmented_colors', 'sharp_contrast', 'thin', 'vector_photo', 'vivid_shapes'],
+  logo_raster: ['emblem_graffiti', 'emblem_pop_art', 'emblem_punk', 'emblem_stamp', 'emblem_vintage']
+}
+
+const recraftV2Styles = {
+  realistic_image: ['b_and_w', 'enterprise', 'hard_flash', 'hdr', 'motion_blur', 'natural_light', 'studio_portrait'],
+  digital_illustration: ['2d_art_poster', '2d_art_poster_2', '3d', '80s', 'engraving_color', 'glow', 'grain', 'hand_drawn', 'hand_drawn_outline', 'handmade_3d', 'infantile_sketch', 'kawaii', 'pixel_art', 'plastic', 'psychedelic', 'seamless', 'voxel', 'watercolor'],
+  vector_illustration: ['cartoon', 'doodle_line_art', 'engraving', 'flat_2', 'kawaii', 'line_art', 'line_circuit', 'linocut', 'seamless'],
+  icon: ['broken_line', 'colored_outline', 'colored_shapes', 'colored_shapes_gradient', 'doodle_fill', 'doodle_offset_fill', 'offset_fill', 'outline', 'outline_gradient', 'pictogram']
+}
+
+// Recraft 이미지 크기
+const recraftSizes = ['1024x1024', '1365x1024', '1024x1365', '1536x1024', '1024x1536', '1820x1024', '1024x1820', '1024x2048', '2048x1024', '1434x1024', '1024x1434', '1024x1280', '1280x1024', '1024x1707', '1707x1024']
 
 // Side panel state - 데스크톱에서는 기본적으로 열림
 const isMobile = window.innerWidth <= 768
 const showSidePanel = ref(!isMobile)
 const allScenes = ref([])
-const seed = ref(null)
 
 // Preset data
 const showPresetModal = ref(false)
@@ -639,6 +765,19 @@ watch(() => props.characterName, (newVal) => {
     characterName.value = newVal
     category.value = 'character'
   }
+})
+
+// 모델 변경 시 generation mode 자동 업데이트
+watch(selectedModel, (newModel) => {
+  const t2iOnlyModels = ['flux-pro', 'recraft-v3', 'recraft-realistic']
+  const i2iOnlyModels = ['flux-kontext', 'flux-kontext-multi', 'recraft-i2i']
+  
+  if (t2iOnlyModels.includes(newModel)) {
+    generationMode.value = 't2i'
+  } else if (i2iOnlyModels.includes(newModel)) {
+    generationMode.value = 'i2i'
+  }
+  // gpt-image-1, gemini-25-flash-edit는 T2I/I2I 모두 지원하므로 현재 모드 유지
 })
 
 // 라이브러리 탭이 변경될 때 이미지 로드
@@ -670,20 +809,53 @@ watch(selectedModel, (newModel) => {
   if (!project.value?.last_image_size) {
     if (newModel === 'gpt-image-1') {
       imageSize.value = '1024x1024'
-    } else if (newModel.includes('flux')) {
+    } else if (newModel.includes('flux') || newModel.includes('gemini')) {
       imageSize.value = '1:1'
+    } else if (newModel.includes('recraft')) {
+      imageSize.value = '1024x1024'  // Recraft 기본 크기
     }
   }
 })
 
 // Computed
 const canGenerate = computed(() => {
-  return prompt.value.trim().length > 0 && !generating.value
+  // 기본 조건: 프롬프트 있고, 생성 중이 아님
+  const hasPrompt = prompt.value.trim().length > 0
+  const notGenerating = !generating.value
+  
+  // I2I 전용 모델인 경우 참조 이미지가 필수
+  if (requiresReferenceImages.value) {
+    const hasReferenceImages = referenceImages.value.length > 0
+    return hasPrompt && notGenerating && hasReferenceImages
+  }
+  
+  // T2I 지원 모델인 경우 참조 이미지는 선택사항
+  return hasPrompt && notGenerating
 })
 
 const showReferenceImages = computed(() => {
-  // GPT Image, Flux, Gemini 모델들 모두 참조 이미지 지원
-  return selectedModel.value === 'gpt-image-1' || selectedModel.value.includes('flux') || selectedModel.value.includes('gemini')
+  // GPT Image, Flux, Gemini, Recraft 모델들 모두 참조 이미지 지원
+  return selectedModel.value === 'gpt-image-1' || 
+         selectedModel.value.includes('flux') || 
+         selectedModel.value.includes('gemini') ||
+         selectedModel.value.includes('recraft')
+})
+
+// 모델별 이미지 첨부 필수 여부
+const requiresReferenceImages = computed(() => {
+  // I2I 전용 모델들 - 이미지 첨부가 필수
+  return selectedModel.value === 'flux-kontext' ||
+         selectedModel.value === 'flux-kontext-multi' ||
+         selectedModel.value === 'gemini-25-flash-edit' ||
+         selectedModel.value === 'recraft-i2i'
+})
+
+// T2I 지원 모델들 - 이미지 첨부가 선택사항
+const supportsTextToImage = computed(() => {
+  return selectedModel.value === 'gpt-image-1' ||
+         selectedModel.value === 'flux-pro' ||
+         selectedModel.value === 'recraft-v3' ||
+         selectedModel.value === 'recraft-realistic'
 })
 
 const canAddMoreImages = computed(() => {
@@ -709,6 +881,55 @@ const getMaxImages = () => {
 // Methods
 const close = () => {
   emit('close')
+}
+
+// Recraft 관련 메소드
+const getSizeRatio = (size) => {
+  const [width, height] = size.split('x').map(Number)
+  const gcd = (a, b) => b === 0 ? a : gcd(b, a % b)
+  const divisor = gcd(width, height)
+  const ratioW = width / divisor
+  const ratioH = height / divisor
+  
+  if (ratioW === ratioH) return '정사각형'
+  return ratioW > ratioH ? '가로형' : '세로형'
+}
+
+const getAvailableSubstyles = () => {
+  if (!selectedModel.value.includes('recraft')) return []
+  
+  const currentStyles = selectedModel.value === 'recraft-v3' ? recraftV3Styles : recraftV2Styles
+  return currentStyles[recraftStyle.value] || []
+}
+
+const formatSubstyleName = (substyle) => {
+  return substyle.replace(/_/g, ' ')
+    .replace(/\b\w/g, l => l.toUpperCase())
+}
+
+const onRecraftStyleChange = () => {
+  // 스타일 변경 시 하위 스타일 초기화
+  recraftSubstyle.value = ''
+}
+
+// Generation mode methods
+const setGenerationMode = (mode) => {
+  generationMode.value = mode
+  
+  // 모드 변경 시 적절한 모델로 자동 설정
+  if (mode === 't2i') {
+    // T2I 모드로 변경 시 - GPT Image를 기본으로
+    if (!['gpt-image-1', 'flux-pro', 'gemini-25-flash-edit', 'recraft-v3', 'recraft-realistic'].includes(selectedModel.value)) {
+      selectedModel.value = 'gpt-image-1'
+    }
+    // 참조 이미지 초기화
+    referenceImages.value = []
+  } else {
+    // I2I 모드로 변경 시 - GPT Image를 기본으로
+    if (!['gpt-image-1', 'flux-kontext', 'flux-kontext-multi', 'gemini-25-flash-edit', 'recraft-i2i'].includes(selectedModel.value)) {
+      selectedModel.value = 'gpt-image-1'
+    }
+  }
 }
 
 // Side panel methods
@@ -770,6 +991,60 @@ const viewImage = (image) => {
 
 const removeReferenceImage = (index) => {
   referenceImages.value.splice(index, 1)
+}
+
+// 참조 이미지 편집 (그리기)
+const editReferenceImage = (index) => {
+  const image = referenceImages.value[index]
+  if (image && (image.url || image.preview)) {
+    editingImageUrl.value = image.url || image.preview
+    editingImageIndex.value = index
+    showDrawCanvas.value = true
+  }
+}
+
+// DrawCanvas 닫기
+const closeDrawCanvas = () => {
+  showDrawCanvas.value = false
+  editingImageUrl.value = ''
+  editingImageIndex.value = -1
+}
+
+// DrawCanvas 저장 처리
+const handleDrawCanvasSave = async (data) => {
+  try {
+    // base64 이미지를 blob으로 변환
+    const base64Data = data.imageData.split(',')[1]
+    const byteCharacters = atob(base64Data)
+    const byteNumbers = new Array(byteCharacters.length)
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i)
+    }
+    const byteArray = new Uint8Array(byteNumbers)
+    const blob = new Blob([byteArray], { type: 'image/png' })
+    
+    // blob URL 생성
+    const blobUrl = URL.createObjectURL(blob)
+    
+    // 참조 이미지 업데이트
+    if (editingImageIndex.value >= 0) {
+      referenceImages.value[editingImageIndex.value] = {
+        ...referenceImages.value[editingImageIndex.value],
+        url: blobUrl,
+        preview: blobUrl,
+        blob: blob,
+        isEdited: true
+      }
+    }
+    
+    // DrawCanvas 닫기
+    closeDrawCanvas()
+    
+    alert('그리기가 적용되었습니다.')
+  } catch (error) {
+    console.error('그리기 저장 실패:', error)
+    alert('그리기 저장에 실패했습니다: ' + error.message)
+  }
 }
 
 // 드래그앤드롭 핸들러
@@ -1439,6 +1714,15 @@ const generateImage = async () => {
       if (seed.value) {
         parameters.seed = seed.value
       }
+    } else if (selectedModel.value.includes('recraft')) {
+      parameters.style = recraftStyle.value
+      if (recraftSubstyle.value) {
+        parameters.substyle = recraftSubstyle.value
+      }
+      if (negativePrompt.value.trim()) {
+        parameters.negative_prompt = negativePrompt.value.trim()
+      }
+      parameters.model = selectedModel.value === 'recraft-v3' ? 'recraftv3' : 'recraftv2'
     }
 
     // 참조 이미지 URL 추출
@@ -1559,7 +1843,7 @@ const loadStyles = async () => {
         // 건강의벗 독자수필 스타일 - 대체 이미지 URL 사용
         return {
           ...style,
-          base_image_url: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgdmlld0JveD0iMCAwIDEwMCAxMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxMDAiIGhlaWdodD0iMTAwIiBmaWxsPSIjRjVGNUY1Ii8+CjxwYXRoIGQ9Ik01MCAyMEM2MS4wNDU3IDIwIDcwIDI4Ljk1NDMgNzAgNDBWNjBDNzAgNzEuMDQ1NyA2MS4wNDU3IDgwIDUwIDgwQzM4Ljk1NDMgODAgMzAgNzEuMDQ1NyAzMCA2MFY0MEMzMCAyOC45NTQzIDM4Ljk1NDMgMjAgNTAgMjBaIiBzdHJva2U9IiM5MDkwOTAiIHN0cm9rZS13aWR0aD0iMiIgZmlsbD0ibm9uZSIvPgo8Y2lyY2xlIGN4PSI0NSIgY3k9IjM1IiByPSIzIiBmaWxsPSIjOTA5MDkwIi8+CjxjaXJjbGUgY3g9IjU1IiBjeT0iMzUiIHI9IjMiIGZpbGw9IiM5MDkwOTAiLz4KPHBhdGggZD0iTTQ1IDQ1QzQ1IDUwIDQ3LjUgNTIuNSA1MCA1Mi41QzUyLjUgNTIuNSA1NSA1MCA1NSA0NSIgc3Ryb2tlPSIjOTA5MDkwIiBzdHJva2Utd2lkdGg9IjIiIGZpbGw9Im5vbmUiLz4KPHRleHQgeD0iNTAiIHk9IjkyIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmb250LWZhbWlseT0ic2VyaWYiIGZvbnQtc2l6ZT0iMTAiIGZpbGw9IiM2MDYwNjAiPuyIndqwtOq4sOykhOyImDwvdGV4dD4KPHN2Zz4K'
+          base_image_url: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"%3E%3Crect fill="%23f5f5f5" width="100" height="100"/%3E%3Ctext x="50" y="50" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" font-size="12" fill="%23606060"%3E%EC%8A%A4%ED%83%80%EC%9D%BC%3C/text%3E%3C/svg%3E'
         }
       }
       if (style.base_image_url && style.base_image_url.includes('/sytle/')) {
@@ -1758,6 +2042,44 @@ onMounted(async () => {
   align-items: center;
   padding: 20px;
   border-bottom: 1px solid var(--border-color);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.generation-mode-switcher {
+  display: flex;
+  background: #f1f5f9;
+  border-radius: 8px;
+  padding: 2px;
+  border: 1px solid #e2e8f0;
+}
+
+.mode-btn {
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 40px;
+}
+
+.mode-btn:hover {
+  color: #475569;
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.mode-btn.active {
+  background: #3b82f6;
+  color: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .header-actions {
@@ -2035,6 +2357,54 @@ onMounted(async () => {
 .btn-remove-image:hover {
   background: #dc2626;
   transform: scale(1.1);
+}
+
+/* 이미지 액션 버튼들 */
+.image-actions {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  display: flex;
+  gap: 5px;
+}
+
+.btn-edit-image {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(59, 130, 246, 0.9);
+  color: white;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  padding: 4px;
+}
+
+.btn-edit-image:hover {
+  background: #2563eb;
+  transform: scale(1.1);
+}
+
+.btn-edit-image svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* DrawCanvas 모달 */
+.draw-canvas-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.8);
 }
 
 /* URL 입력 섹션 */
@@ -3035,6 +3405,26 @@ onMounted(async () => {
   .select-copy-buttons button {
     width: 100%;
   }
+
+  /* T2I/I2I 스위처 모바일 스타일 */
+  .modal-header-content {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+
+  .generation-mode-switcher {
+    margin-left: 0;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .mode-btn {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.85rem;
+    padding: 8px 12px;
+  }
 }
 
 @media (max-width: 480px) {
@@ -3083,6 +3473,31 @@ onMounted(async () => {
   .style-option .no-style-placeholder {
     width: 32px;
     height: 32px;
+  }
+
+  /* T2I/I2I 스위처 매우 작은 화면 스타일 */
+  .modal-header-content {
+    flex-direction: column;
+    gap: 8px;
+    align-items: stretch;
+  }
+
+  .modal-header h3 {
+    font-size: 1rem;
+    margin: 0;
+  }
+
+  .generation-mode-switcher {
+    margin-left: 0;
+    width: 100%;
+    gap: 4px;
+  }
+
+  .mode-btn {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.8rem;
+    padding: 6px 10px;
   }
 }
 </style>

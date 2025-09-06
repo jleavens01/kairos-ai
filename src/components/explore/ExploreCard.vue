@@ -8,14 +8,27 @@
         :alt="item.prompt"
         loading="lazy"
       >
-      <video 
-        v-else-if="item.type === 'video' && item.video_url"
-        :src="item.video_url"
-        muted
-        loop
-        @mouseenter="$event.target.play()"
-        @mouseleave="$event.target.pause()"
-      />
+      <!-- 비디오는 썸네일 이미지로 표시 (리소스 절약) -->
+      <div 
+        v-else-if="item.type === 'video'"
+        class="video-thumbnail"
+      >
+        <img 
+          v-if="item.reference_image_url" 
+          :src="item.reference_image_url" 
+          :alt="item.prompt"
+          loading="lazy"
+          class="thumbnail-image"
+        >
+        <div v-else class="video-placeholder">
+          <Video :size="48" />
+          <span class="placeholder-text">비디오</span>
+        </div>
+        <!-- 비디오 표시 아이콘 -->
+        <div class="video-indicator">
+          <Play :size="24" />
+        </div>
+      </div>
       <div v-else class="placeholder">
         <component :is="getTypeIcon(item.type)" :size="32" />
       </div>
@@ -66,7 +79,7 @@
 </template>
 
 <script setup>
-import { Heart, Bookmark, Eye, Image, Video } from 'lucide-vue-next';
+import { Heart, Bookmark, Eye, Image, Video, Play } from 'lucide-vue-next';
 
 defineProps({
   item: Object
@@ -145,11 +158,64 @@ const formatDate = (dateString) => {
   width: 100%;
 }
 
-.card-media img,
-.card-media video {
+.card-media img {
   width: 100%;
   height: auto;
   display: block;
+}
+
+/* 비디오 썸네일 */
+.video-thumbnail {
+  position: relative;
+  width: 100%;
+}
+
+.thumbnail-image {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.video-placeholder {
+  width: 100%;
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  gap: 8px;
+}
+
+.placeholder-text {
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+/* 비디오 표시 아이콘 */
+.video-indicator {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(10px);
+  opacity: 0.9;
+  transition: all 0.3s;
+}
+
+.explore-card:hover .video-indicator {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1.1);
+  background: rgba(0, 0, 0, 0.8);
 }
 
 .placeholder {

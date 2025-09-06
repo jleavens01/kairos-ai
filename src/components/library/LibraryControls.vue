@@ -17,6 +17,21 @@
         <X :size="16" />
       </button>
     </div>
+
+    <!-- 이미지 카테고리 필터 (이미지 탭에서만 표시) -->
+    <div v-if="showCategoryFilter" class="category-filter-section">
+      <div class="category-buttons">
+        <button 
+          v-for="category in imageCategories"
+          :key="category.id"
+          :class="['category-button', { active: categoryFilter === category.id }]"
+          @click="$emit('update:categoryFilter', category.id)"
+        >
+          <component :is="category.icon" :size="16" />
+          {{ category.name }}
+        </button>
+      </div>
+    </div>
     
     <div class="filter-section">
       <select 
@@ -50,15 +65,26 @@
 </template>
 
 <script setup>
-import { Search, X, Grid, List } from 'lucide-vue-next';
+import { Search, X, Grid, List, Image, User, Mountain, Package2 } from 'lucide-vue-next';
 
 defineProps({
   searchQuery: String,
   sortBy: String,
-  viewMode: String
+  viewMode: String,
+  showCategoryFilter: Boolean,
+  categoryFilter: String
 });
 
-defineEmits(['update:searchQuery', 'update:sortBy', 'update:viewMode', 'clear-search']);
+defineEmits(['update:searchQuery', 'update:sortBy', 'update:viewMode', 'update:categoryFilter', 'clear-search']);
+
+// 이미지 카테고리 정의
+const imageCategories = [
+  { id: 'all', name: '전체', icon: Package2 },
+  { id: 'scene', name: '씬', icon: Image },
+  { id: 'character', name: '캐릭터', icon: User },
+  { id: 'background', name: '배경', icon: Mountain },
+  { id: 'object', name: '오브젝트', icon: Package2 }
+];
 </script>
 
 <style scoped>
@@ -178,6 +204,46 @@ defineEmits(['update:searchQuery', 'update:sortBy', 'update:viewMode', 'clear-se
   color: var(--primary-color);
 }
 
+/* 카테고리 필터 */
+.category-filter-section {
+  margin: 10px 0;
+  width: 100%;
+}
+
+.category-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.category-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.category-button:hover {
+  background: var(--bg-primary);
+  border-color: var(--primary-color);
+  color: var(--text-primary);
+}
+
+.category-button.active {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+  color: white;
+  box-shadow: 0 2px 8px rgba(74, 222, 128, 0.3);
+}
+
 /* 모바일 반응형 */
 @media (max-width: 768px) {
   .library-controls {
@@ -192,6 +258,18 @@ defineEmits(['update:searchQuery', 'update:sortBy', 'update:viewMode', 'clear-se
   .filter-section {
     width: 100%;
     justify-content: space-between;
+  }
+  
+  .category-buttons {
+    justify-content: center;
+  }
+  
+  .category-button {
+    flex: 1;
+    min-width: auto;
+    justify-content: center;
+    padding: 8px 12px;
+    font-size: 0.85rem;
   }
 }
 </style>

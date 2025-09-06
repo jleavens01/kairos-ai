@@ -118,14 +118,6 @@
             <h4>예상 결과</h4>
             <div class="estimation-grid">
               <div class="estimation-item">
-                <span class="label">출력 해상도:</span>
-                <span class="value">{{ estimatedResolution }}</span>
-              </div>
-              <div class="estimation-item">
-                <span class="label">출력 FPS:</span>
-                <span class="value">{{ enableInterpolation ? targetFps : (video.fps || 30) }}</span>
-              </div>
-              <div class="estimation-item">
                 <span class="label">예상 처리 시간:</span>
                 <span class="value">{{ estimatedTime }}분</span>
               </div>
@@ -141,12 +133,7 @@
         <div class="warning-message">
           <span class="warning-icon">⚠️</span>
           <div>
-            <strong>주의사항:</strong>
-            <ul>
-              <li>업스케일 처리는 시간이 오래 걸릴 수 있습니다</li>
-              <li>원본 비디오의 품질이 좋을수록 결과가 좋습니다</li>
-              <li>8x 업스케일은 매우 높은 처리 시간이 필요합니다</li>
-            </ul>
+            <strong>주의사항:</strong> 결과물의 최대 크기가 4K를 넘길 수 없으니 적당한 배수를 선택하세요
           </div>
         </div>
       </div>
@@ -576,14 +563,16 @@ const startUpscale = async () => {
 }
 
 .estimation-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px;
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
 }
 
 .estimation-item {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
   font-size: 13px;
 }
 
