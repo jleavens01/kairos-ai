@@ -3,7 +3,7 @@
 
 import fs from 'fs';
 
-const AVATAR_ID = 'f68eecf1d1d04a1da4b1dc05d259aa4b';
+const AVATAR_ID = 'f9ed7e3d4bc14f209094c8affd6e24d4';
 
 async function testHeyGenSimple() {
   console.log('🎬 HeyGen 아바타 테스트 시작...');

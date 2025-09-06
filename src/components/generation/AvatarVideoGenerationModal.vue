@@ -765,10 +765,10 @@ const loadVoices = async () => {
 const getFallbackAvatars = () => {
   return [
     {
-      id: 'f68eecf1d1d04a1da4b1dc05d259aa4b',
+      id: 'f9ed7e3d4bc14f209094c8affd6e24d4',
       name: '세상의모든지식',
       type: 'avatar',
-      thumbnail: 'https://resource.heygen.com/avatar/v3/f68eecf1d1d04a1da4b1dc05d259aa4b/preview.webp',
+      thumbnail: 'https://resource.heygen.com/avatar/v3/f9ed7e3d4bc14f209094c8affd6e24d4/preview.webp',
       premium: false
     },
     {
