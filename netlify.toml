@@ -53,11 +53,10 @@
   timeout = 60000
   format = "esm"
 
-# 스토리보드 생성 함수 - Supabase와 이미지 생성만 필요
+# 주요 함수들에 대해 환경 변수 명시적 지정 (4KB 제한 준수)
 [functions.storyboardGenerator]
   environment = { SUPABASE_URL = "", SUPABASE_SERVICE_ROLE_KEY = "", VITE_SUPABASE_URL = "", FAL_API_KEY = "" }
 
-# 비디오 생성 함수들 - 각각 필요한 API 키만 지정
 [functions.generateVideoAsync]
   environment = { SUPABASE_URL = "", SUPABASE_SERVICE_ROLE_KEY = "", VITE_SUPABASE_URL = "", FAL_API_KEY = "", GENERATIVE_LANGUAGE_API_KEY = "" }
 
@@ -67,9 +66,18 @@
 [functions.generateFluxImage]
   environment = { SUPABASE_URL = "", SUPABASE_SERVICE_ROLE_KEY = "", VITE_SUPABASE_URL = "", FAL_API_KEY = "" }
 
-# 기본적인 체크 함수들 - 최소 환경 변수만
 [functions.check-job-status]
   environment = { FAL_API_KEY = "" }
 
 [functions.checkApiKeys]
   environment = { SUPABASE_URL = "", SUPABASE_SERVICE_ROLE_KEY = "" }
+
+# 원고 분석 함수들
+[functions.analyze-script-quick]
+  environment = { SUPABASE_URL = "", SUPABASE_SERVICE_ROLE_KEY = "", VITE_SUPABASE_URL = "", GENERATIVE_LANGUAGE_API_KEY = "" }
+
+[functions.analyze-script-async]
+  environment = { SUPABASE_URL = "", SUPABASE_SERVICE_ROLE_KEY = "", VITE_SUPABASE_URL = "", GENERATIVE_LANGUAGE_API_KEY = "" }
+
+[functions.analyze-script]
+  environment = { SUPABASE_URL = "", SUPABASE_SERVICE_ROLE_KEY = "", VITE_SUPABASE_URL = "", GENERATIVE_LANGUAGE_API_KEY = "" }
