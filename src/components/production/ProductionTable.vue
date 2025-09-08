@@ -7,11 +7,11 @@
         <span class="selection-count">{{ selectedScenes.length }}개 씬 선택됨</span>
       </div>
       <div class="selection-buttons">
-        <button @click="handleCharacterExtraction" class="btn-character">
-          👥 캐릭터 추출
-        </button>
-        <button @click="handleReferenceKeywordExtraction" class="btn-reference-keywords">
-          🔍 자료 키워드 추출
+        <button @click="playBatchTTS" class="btn-play-tts">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+          </svg>
+          TTS 일괄 듣기
         </button>
         <button @click="generateBatchTTS" class="btn-tts">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -396,7 +396,13 @@
                   </div>
                 </div>
                 
-                <span v-if="!hasAnyAssets(scene)" class="empty-hint">에셋 정보 없음</span>
+                <span 
+                  v-if="!hasAnyAssets(scene)" 
+                  class="empty-hint clickable-hint"
+                  @click="handleEmptyAssetClick(scene)"
+                >
+                  {{ getEmptyAssetHintText() }}
+                </span>
               </div>
             </td>
             <td class="tts-col" :data-label="isMobile ? '' : 'TTS 컨트롤'">
@@ -1010,6 +1016,52 @@ const hasAnyAssets = (scene) => {
   return hasCharacters || hasBackgrounds || hasProps || hasReferenceData
 }
 
+// 에셋 관련 새로운 함수들
+const getEmptyAssetHintText = () => {
+  const activeFilters = getActiveFilterCount()
+  if (activeFilters === 1) {
+    const activeFilter = getSingleActiveFilter()
+    return `${activeFilter} 추가하기`
+  }
+  return '에셋 정보 없음'
+}
+
+const getActiveFilterCount = () => {
+  let count = 0
+  if (assetFilter.value.characters) count++
+  if (assetFilter.value.backgrounds) count++
+  if (assetFilter.value.props) count++
+  if (assetFilter.value.referenceSources) count++
+  return count
+}
+
+const getSingleActiveFilter = () => {
+  if (assetFilter.value.characters) return '캐릭터'
+  if (assetFilter.value.backgrounds) return '배경'
+  if (assetFilter.value.props) return '소품'
+  if (assetFilter.value.referenceSources) return '참고자료'
+  return ''
+}
+
+const handleEmptyAssetClick = (scene) => {
+  const activeFilters = getActiveFilterCount()
+  if (activeFilters !== 1) {
+    return // 필터가 정확히 하나만 활성화된 경우에만 처리
+  }
+  
+  const activeFilter = getSingleActiveFilter()
+  
+  // 각 에셋 타입별로 인라인 편집 시작
+  if (activeFilter === '캐릭터') {
+    startCharactersEdit(scene)
+  } else if (activeFilter === '배경') {
+    startBackgroundsEdit(scene)
+  } else if (activeFilter === '소품') {
+    startPropsEdit(scene)
+  }
+  // 참고자료는 자동 추출이므로 수동 편집 비활성화
+}
+
 // 호버 관련 함수들
 const setHoveredItem = (itemId) => {
   hoveredItemId.value = itemId
@@ -1408,103 +1460,100 @@ const saveTTSDuration = async (sceneId, duration, version) => {
   }
 }
 
-// 일괄 TTS 생성 함수
-const handleCharacterExtraction = () => {
-  if (props.selectedScenes.length === 0) {
-    alert('캐릭터를 추출할 씬을 선택해주세요.')
-    return
-  }
-  emit('character-extraction')
-}
+// TTS 일괄 듣기 기능
+let currentAudioPlayer = null
+let ttsPlaylist = []
+let currentTrackIndex = 0
 
-const handleReferenceKeywordExtraction = async () => {
+const playBatchTTS = async () => {
   if (props.selectedScenes.length === 0) {
-    alert('자료 키워드를 추출할 씬을 선택해주세요.')
+    alert('TTS를 들을 씬을 선택해주세요.')
     return
   }
   
-  try {
-    // 로딩 표시
-    const loadingMessage = '자료 키워드 추출을 시작합니다...'
-    console.log(loadingMessage)
-    
-    // Supabase 세션 확인
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session) {
-      alert('로그인이 필요합니다.')
-      return
-    }
-    
-    // 비동기 API 호출 (웹훅 방식)
-    const response = await fetch('/.netlify/functions/extractReferenceKeywordsAsync', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session.access_token}`
-      },
-      body: JSON.stringify({
-        projectId: props.projectId,
-        sheetIds: props.selectedScenes
+  // 선택된 씬들 중 TTS가 있는 씬만 필터링
+  const scenesWithTTS = []
+  for (const sceneId of props.selectedScenes) {
+    const scene = props.scenes.find(s => s.id === sceneId)
+    if (scene && scene.tts_audio_url) {
+      scenesWithTTS.push({
+        id: scene.id,
+        sceneNumber: scene.scene_number,
+        text: scene.original_script_text,
+        audioUrl: scene.tts_audio_url
       })
-    })
-    
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.error || '키워드 추출 시작에 실패했습니다')
     }
-    
-    const result = await response.json()
-    console.log('키워드 추출 시작:', result)
-    
-    // 성공 메시지
-    if (result.success) {
-      alert(`${props.selectedScenes.length}개 씬의 키워드 추출이 시작되었습니다.\n백그라운드에서 처리되며, 완료되면 자동으로 반영됩니다.`)
-      
-      // 선택 해제
-      clearSelection()
-      
-      // 작업 상태 체크 (5초마다)
-      const checkJobStatus = setInterval(async () => {
-        try {
-          const { data: project } = await supabase
-            .from('projects')
-            .select('metadata')
-            .eq('id', props.projectId)
-            .single()
-          
-          const job = project?.metadata?.keyword_extraction_jobs?.[result.jobId]
-          
-          if (job) {
-            if (job.status === 'completed') {
-              clearInterval(checkJobStatus)
-              console.log('키워드 추출 완료!')
-              // 프로덕션 시트 다시 로드하여 새로운 키워드 표시
-              await productionStore.fetchProductionSheets(props.projectId)
-            } else if (job.status === 'failed') {
-              clearInterval(checkJobStatus)
-              console.error('키워드 추출 실패:', job.error)
-              alert('키워드 추출에 실패했습니다.')
-            } else {
-              // 진행 상황 표시 (옵션)
-              console.log(`진행 중: ${job.processedSheets}/${job.totalSheets}`)
-            }
-          }
-        } catch (error) {
-          console.error('Job status check error:', error)
-        }
-      }, 5000)
-      
-      // 최대 5분 후 체크 중지
-      setTimeout(() => {
-        clearInterval(checkJobStatus)
-      }, 300000)
-    }
-    
-  } catch (error) {
-    console.error('자료 키워드 추출 오류:', error)
-    alert(`자료 키워드 추출 실패: ${error.message}`)
   }
+  
+  if (scenesWithTTS.length === 0) {
+    // TTS가 없으면 먼저 생성하도록 안내
+    const confirmGenerate = confirm('선택된 씬에 TTS가 없습니다. TTS를 먼저 생성하시겠습니까?')
+    if (confirmGenerate) {
+      generateBatchTTS()
+    }
+    return
+  }
+  
+  // 씬 번호순으로 정렬
+  scenesWithTTS.sort((a, b) => a.sceneNumber - b.sceneNumber)
+  
+  // 플레이리스트 설정
+  ttsPlaylist = scenesWithTTS
+  currentTrackIndex = 0
+  
+  // 재생 시작
+  playNextTrack()
 }
+
+const playNextTrack = () => {
+  if (currentTrackIndex >= ttsPlaylist.length) {
+    console.log('TTS 일괄 재생 완료')
+    return
+  }
+  
+  const currentTrack = ttsPlaylist[currentTrackIndex]
+  console.log(`재생 중: 씬 ${currentTrack.sceneNumber} - ${currentTrack.text.substring(0, 50)}...`)
+  
+  // 기존 플레이어 정리
+  if (currentAudioPlayer) {
+    currentAudioPlayer.pause()
+    currentAudioPlayer.removeEventListener('ended', onTrackEnded)
+    currentAudioPlayer.removeEventListener('error', onTrackError)
+  }
+  
+  // 새 오디오 플레이어 생성
+  currentAudioPlayer = new Audio(currentTrack.audioUrl)
+  currentAudioPlayer.addEventListener('ended', onTrackEnded)
+  currentAudioPlayer.addEventListener('error', onTrackError)
+  
+  // 재생
+  currentAudioPlayer.play().catch(error => {
+    console.error('Audio play error:', error)
+    // 에러 발생 시 다음 트랙으로
+    currentTrackIndex++
+    playNextTrack()
+  })
+}
+
+const onTrackEnded = () => {
+  currentTrackIndex++
+  playNextTrack()
+}
+
+const onTrackError = (error) => {
+  console.error('Audio error:', error)
+  currentTrackIndex++
+  playNextTrack()
+}
+
+// 컴포넌트 언마운트 시 오디오 정리
+onUnmounted(() => {
+  if (currentAudioPlayer) {
+    currentAudioPlayer.pause()
+    currentAudioPlayer.removeEventListener('ended', onTrackEnded)
+    currentAudioPlayer.removeEventListener('error', onTrackError)
+  }
+})
 
 const generateBatchTTS = async () => {
   if (props.selectedScenes.length === 0) {
@@ -2752,6 +2801,21 @@ defineExpose({ deleteSelectedScenes })
   font-style: italic;
   font-size: 0.85rem;
   cursor: pointer;
+}
+
+.clickable-hint {
+  color: var(--primary);
+  border: 1px dashed var(--primary);
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-style: normal;
+}
+
+.clickable-hint:hover {
+  background-color: var(--primary);
+  color: white;
 }
 
 /* Tags */
