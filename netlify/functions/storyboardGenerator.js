@@ -1,7 +1,7 @@
 // AI 콘텐츠 제작 - 스토리보드 생성
 // 원고를 바탕으로 시각적 스토리보드 생성 (기존 시스템 활용)
 import { createClient } from '@supabase/supabase-js';
-import { generateImage } from '../generateFluxImage.js'; // 기존 이미지 생성 활용
+import { generateImage } from './generateFluxImage.js'; // 기존 이미지 생성 활용
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
