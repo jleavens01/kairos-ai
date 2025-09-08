@@ -10,6 +10,9 @@
 
 [build.environment]
   NODE_VERSION = "20"
+  # 빌드 시에는 Vite 환경 변수만 필요 (클라이언트 사이드)
+  VITE_SUPABASE_URL = ""
+  VITE_SUPABASE_ANON_KEY = ""
 
 [dev]
   # 'netlify dev' 명령어를 실행할 때 사용되는 로컬 개발 서버 명령어입니다.
@@ -45,8 +48,28 @@
   # 모든 함수에 대해 esbuild 번들러를 사용하도록 지정합니다.
   node_bundler = "esbuild"
 
+# 기본 함수 설정
 [functions."*"]
-  # 타임아웃을 60초로 설정합니다 (최대 60초까지 가능)
   timeout = 60000
-  # ES Module 형식 사용 (import/export 지원)
   format = "esm"
+
+# 스토리보드 생성 함수 - Supabase와 이미지 생성만 필요
+[functions.storyboardGenerator]
+  environment = { SUPABASE_URL = "", SUPABASE_SERVICE_ROLE_KEY = "", VITE_SUPABASE_URL = "", FAL_API_KEY = "" }
+
+# 비디오 생성 함수들 - 각각 필요한 API 키만 지정
+[functions.generateVideoAsync]
+  environment = { SUPABASE_URL = "", SUPABASE_SERVICE_ROLE_KEY = "", VITE_SUPABASE_URL = "", FAL_API_KEY = "", GENERATIVE_LANGUAGE_API_KEY = "" }
+
+[functions.generateGptImage]
+  environment = { SUPABASE_URL = "", SUPABASE_SERVICE_ROLE_KEY = "", VITE_SUPABASE_URL = "", OPENAI_API_KEY = "" }
+
+[functions.generateFluxImage]
+  environment = { SUPABASE_URL = "", SUPABASE_SERVICE_ROLE_KEY = "", VITE_SUPABASE_URL = "", FAL_API_KEY = "" }
+
+# 기본적인 체크 함수들 - 최소 환경 변수만
+[functions.check-job-status]
+  environment = { FAL_API_KEY = "" }
+
+[functions.checkApiKeys]
+  environment = { SUPABASE_URL = "", SUPABASE_SERVICE_ROLE_KEY = "" }
