@@ -665,7 +665,7 @@ const projectsStore = useProjectsStore()
 
 // Form data
 // Generation Mode (T2I/I2I)
-const generationMode = ref('t2i') // 기본값: T2I
+const generationMode = ref('i2i') // 기본값: I2I로 변경
 
 const prompt = ref(props.initialPrompt)
 const selectedModel = ref(props.initialModel || 'gpt-image-1')
@@ -1013,18 +1013,9 @@ const closeDrawCanvas = () => {
 // DrawCanvas 저장 처리
 const handleDrawCanvasSave = async (data) => {
   try {
-    // base64 이미지를 blob으로 변환
-    const base64Data = data.imageData.split(',')[1]
-    const byteCharacters = atob(base64Data)
-    const byteNumbers = new Array(byteCharacters.length)
-    for (let i = 0; i < byteCharacters.length; i++) {
-      byteNumbers[i] = byteCharacters.charCodeAt(i)
-    }
-    const byteArray = new Uint8Array(byteNumbers)
-    const blob = new Blob([byteArray], { type: 'image/png' })
-    
-    // blob URL 생성
-    const blobUrl = URL.createObjectURL(blob)
+    // DrawCanvas에서 전달된 파일을 직접 사용
+    const blob = data.file || data.blob
+    const blobUrl = data.url || URL.createObjectURL(blob)
     
     // 참조 이미지 업데이트
     if (editingImageIndex.value >= 0) {
@@ -2295,7 +2286,7 @@ onMounted(async () => {
   justify-content: center;
   background: var(--bg-tertiary);
   border-radius: 6px;
-  overflow: hidden;
+  overflow: visible; /* Changed from hidden to visible to show action buttons */
 }
 
 .image-preview-wrapper {
@@ -2366,6 +2357,7 @@ onMounted(async () => {
   right: 5px;
   display: flex;
   gap: 5px;
+  z-index: 10; /* Ensure buttons appear above image */
 }
 
 .btn-edit-image {

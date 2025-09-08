@@ -71,7 +71,7 @@ export const handler = async (event, context) => {
     const heygenResponse = await fetch(`https://api.heygen.com/v1/video_status.get?video_id=${requestData.video_id}`, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${heygenApiKey}`,
+        'x-api-key': heygenApiKey,
         'Accept': 'application/json'
       }
     })

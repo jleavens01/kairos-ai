@@ -47,7 +47,7 @@
             <div
               v-for="avatar in availableAvatars"
               :key="avatar.id"
-              @click="formData.avatarId = avatar.id; formData.avatarType = avatar.type"
+              @click="selectAvatar(avatar)"
               :class="[
                 'border-2 rounded-lg p-3 cursor-pointer transition-all relative',
                 formData.avatarId === avatar.id
@@ -71,10 +71,16 @@
                 <span :class="[
                   'text-xs px-1 py-0.5 rounded',
                   avatar.type === 'talking_photo' 
-                    ? 'bg-green-100 text-green-800' 
+                    ? 'bg-green-100 text-green-800'
+                    : avatar.type === 'photo_avatar_group'
+                    ? 'bg-purple-100 text-purple-800' 
                     : 'bg-blue-100 text-blue-800'
                 ]">
-                  {{ avatar.type === 'talking_photo' ? 'Photo' : 'Avatar' }}
+                  {{ 
+                    avatar.type === 'talking_photo' ? 'Photo' 
+                    : avatar.type === 'photo_avatar_group' ? 'Custom'
+                    : 'Avatar' 
+                  }}
                 </span>
               </div>
             </div>
@@ -272,10 +278,20 @@
               @change="updateResolution"
               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="1920x1080">1920x1080 (Full HD)</option>
-              <option value="1280x720">1280x720 (HD)</option>
-              <option value="720x1280">720x1280 (모바일 세로)</option>
-              <option value="1080x1920">1080x1920 (모바일 세로 HD)</option>
+              <!-- Photo Avatar는 세로형 우선 -->
+              <template v-if="isPhotoAvatar">
+                <option value="720x1280">720x1280 (세로 HD) 📱</option>
+                <option value="1080x1920">1080x1920 (세로 Full HD) 📱</option>
+                <option value="1280x720">1280x720 (가로 HD)</option>
+                <option value="1920x1080">1920x1080 (가로 Full HD)</option>
+              </template>
+              <!-- 일반 Avatar는 가로형 우선 -->
+              <template v-else>
+                <option value="1920x1080">1920x1080 (Full HD)</option>
+                <option value="1280x720">1280x720 (HD)</option>
+                <option value="720x1280">720x1280 (모바일 세로)</option>
+                <option value="1080x1920">1080x1920 (모바일 세로 HD)</option>
+              </template>
             </select>
           </div>
 
@@ -476,12 +492,29 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useGenerationStore } from '@/stores/generation'
 import { Plus } from 'lucide-vue-next'
 import PhotoAvatarWorkflowModal from './PhotoAvatarWorkflowModal.vue'
+import { getRecommendedVoicesForAvatar } from '@/utils/kairosAvatars'
 
-const emit = defineEmits(['close'])
+const props = defineProps({
+  projectId: {
+    type: String,
+    required: false
+  },
+  defaultAvatarId: {
+    type: String,
+    required: false
+  },
+  isPhotoAvatar: {
+    type: Boolean,
+    default: false
+  }
+})
+
+const emit = defineEmits(['close', 'generated'])
 const generationStore = useGenerationStore()
 
 const isGenerating = ref(false)
-const selectedResolution = ref('1280x720')
+// Photo Avatar는 세로형, 일반 Avatar는 가로형 기본값
+const selectedResolution = ref(props.isPhotoAvatar ? '720x1280' : '1280x720')
 const showPhotoAvatarModal = ref(false)
 
 // 로딩 상태
@@ -518,11 +551,11 @@ const formData = reactive({
   voiceProvider: 'heygen',
   script: '',
   backgroundType: 'color',
-  backgroundColor: '#f6f6fc',
+  backgroundColor: props.isPhotoAvatar ? '#ffffff' : '#f6f6fc',  // Photo Avatar는 흰색 배경
   backgroundUrl: '',
   videoPlayStyle: 'loop',
-  width: 1280,
-  height: 720,
+  width: props.isPhotoAvatar ? 720 : 1280,
+  height: props.isPhotoAvatar ? 1280 : 720,
   voiceSpeed: 1.0,
   voicePitch: 0,
   voiceEmotion: '',
@@ -552,6 +585,7 @@ const generateAvatarVideo = async () => {
 
   try {
     const payload = {
+      project_id: props.projectId, // 프로젝트 ID 추가
       title: formData.title || '아바타 비디오',
       caption: formData.caption,
       dimension: {
@@ -559,7 +593,16 @@ const generateAvatarVideo = async () => {
         height: formData.height
       },
       video_inputs: [{
-        character: {
+        character: props.isPhotoAvatar ? {
+          type: 'talking_photo',
+          talking_photo_id: formData.avatarId,
+          scale: 1.0,
+          talking_photo_style: 'natural',  // 원본 형태 유지
+          talking_style: 'stable',
+          expression: 'default',
+          super_resolution: false,
+          matting: true  // 배경 분리 활성화
+        } : {
           type: 'avatar',
           avatar_id: formData.avatarId,
           scale: 1.0
@@ -660,10 +703,11 @@ const loadAvatars = async () => {
       throw new Error(result.error || 'Failed to load avatars')
     }
     
-    // 아바타와 토킹 포토 합치기
+    // 모든 아바타 타입 합치기
     let allAvatars = [
       ...result.avatars.map(avatar => ({ ...avatar, type: 'avatar' })),
-      ...result.talking_photos.map(photo => ({ ...photo, type: 'talking_photo' }))
+      ...result.talking_photos.map(photo => ({ ...photo, type: 'talking_photo' })),
+      ...(result.photo_avatar_groups || []).map(group => ({ ...group, type: 'photo_avatar_group' }))
     ]
     
     // API에서 데이터가 없는 경우 테스트 데이터 사용
@@ -705,26 +749,27 @@ const loadVoices = async () => {
   voicesError.value = null
   
   try {
-    // 새로운 통합 보이스 API 사용
+    // 모든 음성 모델 로드 (HeyGen + ElevenLabs)
     const response = await fetch('/.netlify/functions/getVoiceModels?provider=all&language=all')
     const result = await response.json()
+    
+    console.log('getVoiceModels API response:', result)
     
     if (!response.ok) {
       throw new Error(result.error || 'Failed to load voices')
     }
     
-    // API에서 데이터가 없는 경우 테스트 데이터 사용
-    if (result.voices.length === 0) {
-      console.warn('No voices from HeyGen API, using fallback data')
-      const fallbackData = getFallbackVoices()
-      availableVoices.value = fallbackData.voices
-      voicesByLanguage.value = fallbackData.voices_by_language
-      availableLanguages.value = fallbackData.languages
-    } else {
-      availableVoices.value = result.voices
-      voicesByLanguage.value = result.voices_by_language
-      availableLanguages.value = result.languages
+    // API 응답에서 voices 배열 확인
+    const voices = result.voices || []
+    console.log(`API returned ${voices.length} voices`)
+    
+    if (voices.length === 0) {
+      throw new Error('No voices available from API')
     }
+    
+    availableVoices.value = voices
+    voicesByLanguage.value = result.voices_by_language || {}
+    availableLanguages.value = result.languages || []
     
     // 첫 번째 음성을 기본 선택 (한국어 우선)
     if (availableVoices.value.length > 0 && !formData.voiceId) {
@@ -734,29 +779,20 @@ const loadVoices = async () => {
       const defaultVoice = koreanVoices.length > 0 ? koreanVoices[0] : availableVoices.value[0]
       formData.voiceId = defaultVoice.voice_id
       formData.voiceProvider = defaultVoice.provider
+      
+      console.log('Selected default voice:', defaultVoice.voice_name, defaultVoice.voice_id, 'provider:', defaultVoice.provider)
     }
     
     console.log(`Loaded ${availableVoices.value.length} voices in ${availableLanguages.value.length} languages`)
     
   } catch (error) {
     console.error('Failed to load voices:', error)
+    voicesError.value = `음성 모델 로드 실패: ${error.message}`
     
-    // 에러 발생시 폴백 데이터 사용
-    const fallbackData = getFallbackVoices()
-    availableVoices.value = fallbackData.voices
-    voicesByLanguage.value = fallbackData.voices_by_language
-    availableLanguages.value = fallbackData.languages
-    
-    if (fallbackData.voices.length > 0 && !formData.voiceId) {
-      const koreanVoices = fallbackData.voices.filter(voice => 
-        voice.language === 'ko'
-      )
-      const defaultVoice = koreanVoices.length > 0 ? koreanVoices[0] : fallbackData.voices[0]
-      formData.voiceId = defaultVoice.voice_id
-      formData.voiceProvider = defaultVoice.provider
-    }
-    
-    voicesError.value = `API 연결 실패 (테스트 데이터 사용): ${error.message}`
+    // 최소한의 기본 음성으로 설정 (데이터베이스에 세모지 음성이 있어야 함)
+    availableVoices.value = []
+    voicesByLanguage.value = {}
+    availableLanguages.value = []
   } finally {
     loadingVoices.value = false
   }
@@ -802,103 +838,35 @@ const getFallbackAvatars = () => {
   ]
 }
 
-const getFallbackVoices = () => {
-  const voices = [
-    {
-      voice_id: 'voice_ko_1',
-      voice_name: '지수 (여성)',
-      provider: 'heygen',
-      language: 'ko',
-      gender: 'Female',
-      supports_emotion: true,
-      supports_pause: true,
-      supports_pitch: false,
-      supports_multilingual: false,
-      supported_emotions: ['Excited', 'Friendly', 'Serious', 'Soothing', 'Broadcaster'],
-      category: 'professional',
-      is_premium: false,
-      preview_audio_url: null
-    },
-    {
-      voice_id: 'voice_ko_2', 
-      voice_name: '민호 (남성)',
-      provider: 'heygen',
-      language: 'ko',
-      gender: 'Male',
-      supports_emotion: false,
-      supports_pause: true,
-      supports_pitch: false,
-      supports_multilingual: false,
-      category: 'professional',
-      is_premium: false,
-      preview_audio_url: null
-    },
-    {
-      voice_id: 'voice_en_1',
-      voice_name: 'Emma (Female)',
-      provider: 'heygen',
-      language: 'en',
-      gender: 'Female',
-      supports_emotion: true,
-      supports_pause: true,
-      supports_pitch: false,
-      supports_multilingual: false,
-      supported_emotions: ['Excited', 'Friendly', 'Serious', 'Soothing', 'Broadcaster'],
-      category: 'professional',
-      is_premium: false,
-      preview_audio_url: null
-    },
-    {
-      voice_id: 'voice_en_2',
-      voice_name: 'James (Male)', 
-      provider: 'heygen',
-      language: 'en',
-      gender: 'Male',
-      supports_emotion: false,
-      supports_pause: false,
-      supports_pitch: false,
-      supports_multilingual: false,
-      category: 'professional',
-      is_premium: false,
-      preview_audio_url: null
-    },
-    // ElevenLabs 테스트 음성들
-    {
-      voice_id: 'elevenlabs_rachel',
-      voice_name: 'Rachel (ElevenLabs)',
-      provider: 'elevenlabs',
-      language: 'en',
-      gender: 'Female',
-      supports_emotion: false,
-      supports_pause: false,
-      supports_pitch: false,
-      supports_multilingual: true,
-      supported_locales: ['en-US', 'en-GB', 'en-AU'],
-      elevenlabs_model: 'eleven_turbo_v2_5',
-      default_similarity_boost: 0.75,
-      default_stability: 0.50,
-      default_style: 0.00,
-      category: 'professional',
-      is_premium: true,
-      preview_audio_url: null
-    }
-  ]
-
-  const voicesByLanguage = {
-    'ko': voices.filter(v => v.language === 'ko'),
-    'en': voices.filter(v => v.language === 'en')
-  }
-
-  return {
-    voices,
-    voices_by_language: voicesByLanguage,
-    languages: ['ko', 'en']
-  }
-}
+// getFallbackVoices 함수 제거됨 - 이제 voice_models 테이블에서만 음성 데이터를 로드
 
 const handleImageError = (event) => {
   // 이미지 로드 실패 시 기본 이미지나 플레이스홀더 표시
   event.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"%3E%3Crect fill="%23f3f4f6" width="100" height="100"/%3E%3Ccircle cx="50" cy="45" r="15" fill="%239ca3af"/%3E%3Cpath d="M25 75 Q50 65 75 75" stroke="%239ca3af" stroke-width="2" fill="none"/%3E%3C/svg%3E'
+}
+
+// 아바타 선택 시 추천 음성 자동 설정
+const selectAvatar = (avatar) => {
+  // 아바타 기본 정보 설정
+  formData.avatarId = avatar.id
+  formData.avatarType = avatar.type
+  
+  // 해당 아바타의 추천 음성 가져오기
+  const recommendedVoices = getRecommendedVoicesForAvatar(avatar.id)
+  
+  if (recommendedVoices.length > 0) {
+    const firstRecommendedVoiceId = recommendedVoices[0]
+    
+    // 로드된 음성 목록에서 해당 음성 찾기
+    const matchingVoice = availableVoices.value.find(voice => voice.voice_id === firstRecommendedVoiceId)
+    
+    if (matchingVoice) {
+      formData.voiceId = matchingVoice.voice_id
+      console.log(`아바타 ${avatar.name} 선택 → 추천 음성 ${matchingVoice.voice_name} (${matchingVoice.voice_id}) 자동 설정`)
+    } else {
+      console.log(`추천 음성 ${firstRecommendedVoiceId}을 음성 목록에서 찾을 수 없습니다.`)
+    }
+  }
 }
 
 const handlePhotoAvatarComplete = (result) => {
@@ -931,6 +899,18 @@ const closeModal = () => {
 }
 
 onMounted(async () => {
+  // 기본 아바타 ID 설정
+  if (props.defaultAvatarId) {
+    formData.avatarId = props.defaultAvatarId
+    // isPhotoAvatar prop을 기반으로 avatarType 설정
+    if (props.isPhotoAvatar) {
+      formData.avatarType = 'photo_avatar_group'
+    } else {
+      formData.avatarType = 'avatar'
+    }
+    console.log('Set default avatar ID:', props.defaultAvatarId, 'avatarType:', formData.avatarType, 'isPhotoAvatar:', props.isPhotoAvatar)
+  }
+
   // 아바타와 음성 목록을 병렬로 로드
   await Promise.all([
     loadAvatars(),

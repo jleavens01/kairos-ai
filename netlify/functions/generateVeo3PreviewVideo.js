@@ -1,7 +1,7 @@
-// Google Veo3 Preview 모델을 사용한 비디오 생성
+// FAL AI Veo3 Standard Image-to-Video 모델을 사용한 비디오 생성
 import { createClient } from '@supabase/supabase-js';
 import jwt from 'jsonwebtoken';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { fal } from '@fal-ai/client';
 
 const VIDEO_GENERATION_COST = 3000; // Veo3 Preview 비용
 
@@ -59,6 +59,17 @@ export const handler = async (event) => {
       .update({ credits: userProfile.credits - VIDEO_GENERATION_COST })
       .eq('user_id', user.sub);
 
+    // FAL API 키 확인
+    const falApiKey = process.env.FAL_API_KEY;
+    if (!falApiKey) {
+      throw new Error('FAL API 키가 설정되지 않았습니다.');
+    }
+
+    // FAL 클라이언트 설정
+    fal.config({
+      credentials: falApiKey
+    });
+
     // 요청 데이터 파싱
     const requestBody = JSON.parse(event.body);
     const { 
@@ -66,9 +77,9 @@ export const handler = async (event) => {
       videoId,  // gen_videos 테이블의 ID
       imageUrl,  // 참조 이미지 (image-to-video)
       prompt,  // 프롬프트
-      negativePrompt = '',  // 네거티브 프롬프트
-      aspectRatio = '16:9',  // 화면 비율
-      personGeneration = 'allow_adult',  // 사람 생성 제어
+      duration = "8s",  // 비디오 길이 (8s, 15s 지원)
+      generateAudio = true,  // 오디오 생성 여부
+      resolution = "720p",  // 해상도 (720p, 1080p)
       parameters = {}
     } = requestBody;
 
@@ -76,86 +87,34 @@ export const handler = async (event) => {
       throw new Error('필수 파라미터가 누락되었습니다.');
     }
 
-    console.log('Google Veo3 Preview video generation request:', {
+    console.log('FAL AI Veo3 Standard video generation request:', {
       projectId,
       videoId,
       prompt: prompt.substring(0, 50) + '...',
       imageUrl: imageUrl.substring(0, 50) + '...',
-      aspectRatio,
-      personGeneration
+      duration,
+      generateAudio,
+      resolution
     });
 
-    // Google Generative AI 초기화
-    const apiKey = process.env.GOOGLE_API_KEY || process.env.GENERATIVE_LANGUAGE_API_KEY;
-    if (!apiKey) {
-      throw new Error('Google API 키가 설정되지 않았습니다.');
-    }
-    
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const generationId = `fal_veo3_${Date.now()}_${Math.random().toString(36).substring(7)}`;
 
-    // 이미지 다운로드 및 파일 객체 생성
-    const imageResponse = await fetch(imageUrl);
-    if (!imageResponse.ok) {
-      throw new Error('이미지를 다운로드할 수 없습니다.');
-    }
-    
-    const imageBuffer = await imageResponse.arrayBuffer();
-    const imageFile = {
-      buffer: Buffer.from(imageBuffer),
-      mimeType: 'image/jpeg'
-    };
-    console.log('Image downloaded, size:', imageBuffer.byteLength);
 
-    // Veo3 프롬프트 구성 - 네거티브 프롬프트 포함
-    const finalPrompt = prompt;
-    const finalNegativePrompt = negativePrompt || 'low quality, blurry, distorted, graphic effects not mentioned, excessive movement, overacting';
-    
-    console.log('Final prompt to Veo3 Preview:', finalPrompt);
-    console.log('Negative prompt:', finalNegativePrompt);
-    
-    // Veo3 Preview 모델 설정 및 비디오 생성 요청
-    console.log('Requesting video generation with Veo3 Preview...');
-    
-    // 비디오 생성 요청 구성
-    // Veo3에서는 personGeneration이 image-to-video일 때 allow_adult만 가능
-    const config = {
-      negativePrompt: finalNegativePrompt,
-      aspectRatio: '16:9',  // Veo3는 16:9만 지원
-      personGeneration: 'allow_adult'  // image-to-video는 allow_adult만 가능
-    };
-
-    // 비디오 생성 요청 (Veo3는 아직 공식 API 미지원, 임시 처리)
-    // TODO: Veo3 공식 API 출시 시 업데이트 필요
-    console.log('Veo3 Preview generation request prepared:', {
-      model: "veo-3.0-generate-preview",
-      prompt: finalPrompt.substring(0, 100) + '...',
-      config: config
-    });
-    
-    // 현재는 임시로 생성 ID만 생성
-    const generationId = `veo3preview_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-
-    // gen_videos 테이블 업데이트 (processing 상태로) - 파라미터 저장
+    // gen_videos 테이블 업데이트 (processing 상태로)
     const { error: updateError } = await supabaseAdmin
       .from('gen_videos')
       .update({
         generation_status: 'processing',
         request_id: generationId,
         credits_used: VIDEO_GENERATION_COST,
-        negative_prompt: finalNegativePrompt,
-        aspect_ratio: aspectRatio,
-        person_generation: personGeneration,
-        model_version: 'veo-3.0-preview-001',
-        api_response: { text: response.text() },
+        model_version: 'fal-ai/veo3/image-to-video',
         metadata: {
           ...requestBody,
-          veo3_response: response.text(),
-          model: 'veo-3.0-preview-001',
+          model: 'fal-ai/veo3/image-to-video',
           imageUrl: imageUrl,
-          aspectRatio: aspectRatio,
-          personGeneration: personGeneration,
-          negativePrompt: finalNegativePrompt,
+          duration: duration,
+          generateAudio: generateAudio,
+          resolution: resolution,
           status: 'processing',
           startedAt: new Date().toISOString(),
           userId: user.sub,
@@ -169,21 +128,102 @@ export const handler = async (event) => {
       throw new Error('비디오 생성 정보 업데이트에 실패했습니다.');
     }
 
-    // 비동기로 폴링하여 완료 확인 (백그라운드 작업)
-    pollVeo3Operation(genAI, generationId, videoId, supabaseAdmin, user.sub).catch(console.error);
+    // FAL AI Veo3 Standard 비디오 생성 요청
+    console.log('Requesting video generation with FAL AI Veo3 Standard...');
+    
+    try {
+      const result = await fal.subscribe("fal-ai/veo3/image-to-video", {
+        input: {
+          prompt: prompt,
+          image_url: imageUrl,
+          duration: duration,
+          generate_audio: generateAudio,
+          resolution: resolution
+        },
+        logs: true,
+        onQueueUpdate: (update) => {
+          if (update.status === "IN_PROGRESS") {
+            console.log('FAL AI progress logs:', update.logs?.map(log => log.message).join(' '));
+          }
+        },
+      });
 
-    // 응답 반환
-    return {
-      statusCode: 200,
-      headers,
-      body: JSON.stringify({
-        id: videoId,
-        generationId: generationId,
-        status: 'processing',
-        message: 'Google Veo3 Preview 비디오 생성이 시작되었습니다. 약 1-3분 소요됩니다.',
-        model: 'veo-3.0-preview-001'
-      })
-    };
+      console.log('FAL AI Veo3 Standard generation completed:', result.requestId);
+
+      // 성공 시 gen_videos 테이블 업데이트
+      const { error: finalUpdateError } = await supabaseAdmin
+        .from('gen_videos')
+        .update({
+          generation_status: 'completed',
+          video_url: result.data.video.url,
+          api_response: result.data,
+          metadata: {
+            ...requestBody,
+            model: 'fal-ai/veo3/image-to-video',
+            falRequestId: result.requestId,
+            videoUrl: result.data.video.url,
+            completedAt: new Date().toISOString(),
+            duration: duration,
+            generateAudio: generateAudio,
+            resolution: resolution,
+            status: 'completed',
+            userId: user.sub,
+            creditsCost: VIDEO_GENERATION_COST
+          },
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', videoId);
+
+      if (finalUpdateError) {
+        console.error('Final update error:', finalUpdateError);
+      }
+
+      // 선택적으로 Storage에 비디오 다운로드
+      try {
+        await downloadToStorage(result.data.video.url, videoId, user.sub, supabaseAdmin, projectId);
+      } catch (storageError) {
+        console.error('Failed to download to storage:', storageError);
+        // Storage 실패는 전체 프로세스를 중단하지 않음
+      }
+
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          id: videoId,
+          generationId: generationId,
+          falRequestId: result.requestId,
+          status: 'completed',
+          videoUrl: result.data.video.url,
+          message: 'FAL AI Veo3 Standard 비디오 생성이 완료되었습니다.',
+          model: 'fal-ai/veo3/image-to-video'
+        })
+      };
+
+    } catch (falError) {
+      console.error('FAL AI generation error:', falError);
+      
+      // 실패 시 gen_videos 테이블 업데이트
+      await supabaseAdmin
+        .from('gen_videos')
+        .update({
+          generation_status: 'failed',
+          api_response: { error: falError.message },
+          metadata: {
+            ...requestBody,
+            model: 'fal-ai/veo3/image-to-video',
+            error: falError.message,
+            failedAt: new Date().toISOString(),
+            status: 'failed',
+            userId: user.sub,
+            creditsCost: VIDEO_GENERATION_COST
+          },
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', videoId);
+
+      throw new Error(`FAL AI 비디오 생성 실패: ${falError.message}`);
+    }
 
   } catch (error) {
     console.error("Veo3 Preview Video Generation Error:", error);
@@ -210,147 +250,32 @@ export const handler = async (event) => {
   }
 };
 
-// 백그라운드에서 Veo3 작업 상태 폴링
-async function pollVeo3Operation(genAI, generationId, videoId, supabaseAdmin, userId) {
-  let attempts = 0;
-  const maxAttempts = 20; // 최대 3분 (9초 * 20) - Veo3는 더 빠름
-  
-  while (attempts < maxAttempts) {
-    await new Promise((resolve) => setTimeout(resolve, 9000)); // 9초 대기
-    
-    try {
-      console.log(`Polling attempt ${attempts + 1} for Veo3 Preview generation`);
-      
-      // 중간 상태 업데이트
-      await supabaseAdmin
-        .from('gen_videos')
-        .update({
-          metadata: {
-            operationStatus: 'processing',
-            lastPolled: new Date().toISOString(),
-            attempts: attempts + 1
-          },
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', videoId);
-      
-      // Veo3 Preview는 일반적으로 더 빠르게 생성됨
-      if (attempts === 0) {
-        // 실제 Veo3 API는 비디오 URL을 직접 반환할 것임
-        const videoUrl = `https://storage.googleapis.com/veo3-preview-generated/${generationId}.mp4`;
-        
-        // gen_videos 테이블 업데이트 (completed 상태로)
-        await supabaseAdmin
-          .from('gen_videos')
-          .update({
-            generation_status: 'completed',
-            video_url: videoUrl,
-            metadata: {
-              operationStatus: 'completed',
-              completedAt: new Date().toISOString(),
-              finalUri: videoUrl,
-              generationId: generationId
-            },
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', videoId);
-        
-        console.log('Video generation completed successfully:', videoUrl);
-        
-        // Storage에 자동으로 다운로드 (선택사항)
-        try {
-          await downloadToStorage(videoUrl, videoId, userId, supabaseAdmin);
-        } catch (error) {
-          console.error('Failed to auto-download to Storage:', error);
-        }
-        
-        break;
-      }
-    } catch (pollError) {
-      console.error('Polling error:', pollError);
-    }
-    
-    attempts++;
-  }
 
-  // 타임아웃 처리
-  if (attempts >= maxAttempts) {
-    await supabaseAdmin
-      .from('gen_videos')
-      .update({
-        generation_status: 'failed',
-        metadata: {
-          operationStatus: 'timeout',
-          failedAt: new Date().toISOString(),
-          error: 'Operation timed out after ' + attempts + ' attempts',
-          attempts: attempts
-        },
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', videoId);
-    
-    console.error('Video generation timed out after', attempts, 'attempts');
-  }
-}
-
-// Storage에 비디오 다운로드 (Veo2와 동일한 함수 재사용)
-async function downloadToStorage(videoUrl, videoId, userId, supabaseAdmin) {
-  console.log('Auto-downloading Veo3 Preview video to Storage...');
-  
-  // gen_videos에서 project_id 가져오기
-  const { data: videoData } = await supabaseAdmin
-    .from('gen_videos')
-    .select('project_id')
-    .eq('id', videoId)
-    .single();
-  
-  if (!videoData?.project_id) {
-    throw new Error('Project ID not found');
-  }
+// Storage에 비디오 다운로드
+async function downloadToStorage(videoUrl, videoId, userId, supabaseAdmin, projectId) {
+  console.log('Auto-downloading Veo3 Standard video to Storage...');
   
   const fileName = `video_${videoId}_${Date.now()}.mp4`;
-  const filePath = `${videoData.project_id}/videos/${fileName}`;
+  const filePath = `${projectId}/videos/${fileName}`;
   
   // 비디오 다운로드
-  const apiKey = process.env.GOOGLE_API_KEY || process.env.GENERATIVE_LANGUAGE_API_KEY;
-  
-  const videoResponse = await fetch(videoUrl, {
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'x-goog-api-key': apiKey
-    }
-  });
+  const videoResponse = await fetch(videoUrl);
   
   if (!videoResponse.ok) {
-    // URL 파라미터로 재시도
-    const retryResponse = await fetch(`${videoUrl}?key=${apiKey}`);
-    if (!retryResponse.ok) {
-      throw new Error(`Failed to download video: ${retryResponse.status}`);
-    }
-    const videoBuffer = await retryResponse.buffer();
-    
-    // Supabase Storage에 업로드
-    const { error: uploadError } = await supabaseAdmin.storage
-      .from('gen-videos')
-      .upload(filePath, videoBuffer, {
-        contentType: 'video/mp4',
-        upsert: true
-      });
-    
-    if (uploadError) throw uploadError;
-  } else {
-    const videoBuffer = await videoResponse.buffer();
-    
-    // Supabase Storage에 업로드
-    const { error: uploadError } = await supabaseAdmin.storage
-      .from('gen-videos')
-      .upload(filePath, videoBuffer, {
-        contentType: 'video/mp4',
-        upsert: true
-      });
-    
-    if (uploadError) throw uploadError;
+    throw new Error(`Failed to download video: ${videoResponse.status}`);
   }
+  
+  const videoBuffer = await videoResponse.arrayBuffer();
+  
+  // Supabase Storage에 업로드
+  const { error: uploadError } = await supabaseAdmin.storage
+    .from('gen-videos')
+    .upload(filePath, videoBuffer, {
+      contentType: 'video/mp4',
+      upsert: true
+    });
+  
+  if (uploadError) throw uploadError;
   
   // Storage URL 생성
   const { data: urlData } = supabaseAdmin.storage

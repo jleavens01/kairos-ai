@@ -23,7 +23,6 @@ const videoGalleryRef = ref(null)
 // Expose method for parent component
 defineExpose({
   openGenerationModal: () => videoGalleryRef.value?.openGenerationModal(),
-  openAvatarGenerationModal: () => videoGalleryRef.value?.openAvatarGenerationModal(),
   setFilterModel: (model) => videoGalleryRef.value?.setFilterModel(model),
   filterModel: () => videoGalleryRef.value?.filterModel,
   toggleKeptView: (showKept) => videoGalleryRef.value?.toggleKeptView(showKept)

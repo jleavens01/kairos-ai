@@ -144,11 +144,15 @@ export const handler = async (event, context) => {
       }
     }
 
-    if (!firstInput.character.avatar_id) {
+    // Photo Avatar인지 확인
+    const isPhotoAvatar = firstInput.character.type === 'talking_photo'
+    const avatarId = isPhotoAvatar ? firstInput.character.talking_photo_id : firstInput.character.avatar_id
+    
+    if (!avatarId) {
       return {
         statusCode: 400,
         headers,
-        body: JSON.stringify({ error: 'Avatar ID is required' })
+        body: JSON.stringify({ error: `${isPhotoAvatar ? 'Talking Photo ID' : 'Avatar ID'} is required` })
       }
     }
 
@@ -165,20 +169,52 @@ export const handler = async (event, context) => {
       title: requestData.title || 'Avatar Video',
       caption: requestData.caption || false,
       dimension: requestData.dimension || { width: 1280, height: 720 },
-      video_inputs: requestData.video_inputs.map(input => ({
-        character: {
-          type: input.character.type || 'avatar',
-          avatar_id: input.character.avatar_id,
-          scale: input.character.scale || 1.0,
-          avatar_style: input.character.avatar_style || 'normal',
-          offset: input.character.offset || { x: 0.0, y: 0.0 }
-        },
-        voice: buildVoiceSettings(input.voice, input.voice_model),
-        background: input.background || {
-          type: 'color',
-          value: '#f6f6fc'
+      video_inputs: requestData.video_inputs.map(input => {
+        // Photo Avatar의 경우 talking_photo 타입 사용
+        const isPhotoAvatar = input.character.is_photo_avatar || 
+                             input.character.type === 'talking_photo' ||
+                             input.character.avatar_type === 'photo_avatar_group'
+
+
+        if (isPhotoAvatar) {
+          return {
+            character: {
+              type: 'talking_photo',
+              talking_photo_id: input.character.talking_photo_id || input.character.avatar_id,
+              scale: input.character.scale || 1.0,
+              talking_photo_style: input.character.talking_photo_style || 'square',
+              offset: input.character.offset || { x: 0.0, y: 0.0 },
+              talking_style: input.character.talking_style || 'stable',
+              expression: input.character.expression || 'default',
+              super_resolution: input.character.super_resolution || false,
+              matting: input.character.matting || false
+            },
+            voice: buildVoiceSettings(input.voice, input.voice_model),
+            background: input.background || {
+              type: 'color',
+              value: '#f6f6fc'
+            }
+          }
+        } else {
+          // 일반 아바타의 경우 기존 방식 사용
+          return {
+            character: {
+              type: 'avatar',
+              avatar_id: input.character.avatar_id,
+              scale: input.character.scale || 1.0,
+              avatar_style: input.character.avatar_style || 'normal',
+              offset: input.character.offset || { x: 0.0, y: 0.0 },
+              matting: input.character.matting || false,
+              circle_background_color: input.character.circle_background_color
+            },
+            voice: buildVoiceSettings(input.voice, input.voice_model),
+            background: input.background || {
+              type: 'color',
+              value: '#f6f6fc'
+            }
+          }
         }
-      })),
+      }),
       callback_id: requestData.callback_id || `avatar_${Date.now()}`
     }
 
@@ -188,7 +224,7 @@ export const handler = async (event, context) => {
     const heygenResponse = await fetch('https://api.heygen.com/v2/video/generate', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${heygenApiKey}`,
+        'x-api-key': heygenApiKey,
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
@@ -233,6 +269,7 @@ export const handler = async (event, context) => {
     // 데이터베이스에 저장할 데이터 구성
     const videoData = {
       user_id: requestData.user_id, // 요청에서 user_id를 받아야 함
+      project_id: requestData.project_id, // 프로젝트 ID 추가
       heygen_video_id: heygenResult.video_id,
       callback_id: heygenPayload.callback_id,
       

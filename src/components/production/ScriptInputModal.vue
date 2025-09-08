@@ -23,13 +23,21 @@
           </div>
           
           <!-- 로딩 상태 -->
-          <div v-if="loading" class="loading-status">
+          <div v-if="isAnalyzing" class="loading-status">
             <div class="loading-spinner"></div>
-            <p>{{ statusMessage }}</p>
+            <p>{{ currentStep || statusMessage }}</p>
             <div class="progress-bar">
               <div class="progress-fill" :style="{ width: progress + '%' }"></div>
             </div>
-            <span class="progress-text">{{ progress }}%</span>
+            <div class="progress-info">
+              <span class="progress-text">{{ progress }}%</span>
+              <span v-if="remainingTime" class="remaining-time">
+                예상 남은 시간: {{ formatTime(remainingTime) }}
+              </span>
+            </div>
+            <div v-if="currentJob?.totalScenes" class="scene-count">
+              생성된 씬 수: {{ currentJob.totalScenes }}개
+            </div>
           </div>
           
           <!-- 에러 메시지 -->
@@ -47,9 +55,9 @@
         <button 
           @click="handleAnalyze" 
           class="btn-analyze"
-          :disabled="loading || !scriptText.trim() || scriptText.length > 10000"
+          :disabled="isAnalyzing || !scriptText.trim() || scriptText.length > 10000"
         >
-          {{ loading ? '처리 중...' : '씬 나누기 시작 (캐릭터 추출 없음)' }}
+          {{ isAnalyzing ? '분석 중...' : '고급 시나리오 분석 시작 (연출가이드 포함)' }}
         </button>
       </div>
     </div>
@@ -57,8 +65,9 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useProductionStore } from '@/stores/production'
+import { useScriptAnalysis } from '@/composables/useScriptAnalysis'
 
 const props = defineProps({
   show: {
@@ -74,24 +83,53 @@ const props = defineProps({
 const emit = defineEmits(['close', 'success'])
 
 const productionStore = useProductionStore()
+const {
+  isAnalyzing,
+  progress,
+  currentStep,
+  currentJob,
+  remainingTime,
+  analysisResult,
+  error,
+  isCompleted,
+  startAnalysis,
+  resetAnalysis
+} = useScriptAnalysis()
 
 // State
 const scriptText = ref('')
 const loading = ref(false)
-const error = ref('')
 const statusMessage = ref('')
-const progress = ref(0)
+
+// 분석 완료 감지
+watch(isCompleted, (completed) => {
+  if (completed && analysisResult.value) {
+    statusMessage.value = `분석 완료! ${analysisResult.value.totalScenes}개 씬이 생성되었습니다.`
+    setTimeout(() => {
+      emit('success', analysisResult.value)
+      handleClose()
+    }, 1000)
+  }
+})
 
 // Methods
 const handleClose = () => {
-  if (!loading.value) {
+  if (!isAnalyzing.value) {
+    resetAnalysis()
     emit('close')
     // Reset form
     scriptText.value = ''
-    error.value = ''
-    progress.value = 0
     statusMessage.value = ''
   }
+}
+
+const formatTime = (seconds) => {
+  if (seconds < 60) {
+    return `${seconds}초`
+  }
+  const minutes = Math.floor(seconds / 60)
+  const remainingSeconds = seconds % 60
+  return `${minutes}분 ${remainingSeconds}초`
 }
 
 const handleAnalyze = async () => {
@@ -100,39 +138,25 @@ const handleAnalyze = async () => {
     return
   }
   
-  if (scriptText.value.length > 10000) {
-    error.value = '원고는 10,000자를 초과할 수 없습니다.'
+  if (scriptText.value.length > 50000) { // 제한 완화
+    error.value = '원고는 50,000자를 초과할 수 없습니다.'
     return
   }
   
-  loading.value = true
-  error.value = ''
-  progress.value = 0
-  statusMessage.value = '씬 나누기 작업을 시작하고 있습니다...'
-  
   try {
-    // 1단계: 씬 나누기만 수행
-    const result = await productionStore.splitScenes(
+    statusMessage.value = '고급 시나리오 분석을 시작합니다...'
+    
+    await startAnalysis(
       props.projectId,
-      scriptText.value
+      scriptText.value,
+      'documentary' // 다큐멘터리 분석 타입
     )
     
-    progress.value = 100
+    statusMessage.value = '분석 작업이 시작되었습니다. 진행상황을 확인하세요.'
     
-    if (result.success) {
-      statusMessage.value = '씬 나누기가 완료되었습니다!'
-      setTimeout(() => {
-        emit('success', result.data)
-      }, 500)
-    } else {
-      throw new Error(result.error || '씬 나누기 중 오류가 발생했습니다.')
-    }
   } catch (err) {
-    console.error('씬 나누기 실패:', err)
-    error.value = err.message || '씬 나누기에 실패했습니다. 다시 시도해주세요.'
-  } finally {
-    loading.value = false
-    progress.value = 0
+    console.error('분석 시작 실패:', err)
+    // error는 composable에서 자동으로 설정됨
   }
 }
 </script>
@@ -403,6 +427,44 @@ const handleAnalyze = async () => {
   .creation-modes {
     flex-direction: column;
     gap: 12px;
+  }
+}
+
+/* 새로운 비동기 분석 관련 스타일 */
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.remaining-time {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.scene-count {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background-color: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 4px;
+  color: #22c55e;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.loading-status .scene-count {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
   }
 }
 </style>

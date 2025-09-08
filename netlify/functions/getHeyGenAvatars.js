@@ -36,52 +36,83 @@ export const handler = async (event, context) => {
       }
     }
 
-    // HeyGen API 호출 - 아바타 목록 가져오기
-    console.log('Fetching HeyGen avatars list')
+    // HeyGen API 호출 - 아바타 목록과 Photo Avatar Groups 병렬로 가져오기
+    console.log('Fetching HeyGen avatars and photo avatar groups')
 
-    const heygenResponse = await fetch('https://api.heygen.com/v2/avatars', {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${heygenApiKey}`,
-        'Accept': 'application/json'
-      }
-    })
+    const [avatarResponse, photoGroupResponse] = await Promise.all([
+      // 일반 아바타와 토킹포토 가져오기
+      fetch('https://api.heygen.com/v2/avatars', {
+        method: 'GET',
+        headers: {
+          'x-api-key': heygenApiKey,
+          'Accept': 'application/json'
+        }
+      }),
+      // Photo Avatar Groups 가져오기 (include_public=false로 사용자 생성 아바타만)
+      fetch('https://api.heygen.com/v2/avatar_group.list?include_public=false', {
+        method: 'GET',
+        headers: {
+          'x-api-key': heygenApiKey,
+          'Accept': 'application/json'
+        }
+      })
+    ])
 
-    const responseText = await heygenResponse.text()
-    console.log('HeyGen avatars API response status:', heygenResponse.status)
-    console.log('HeyGen avatars API response text:', responseText.substring(0, 500))
+    // 일반 아바타 응답 처리
+    const avatarResponseText = await avatarResponse.text()
+    console.log('HeyGen avatars API response status:', avatarResponse.status)
+    console.log('HeyGen avatars API response text:', avatarResponseText.substring(0, 500))
 
-    let heygenResult
+    let avatarResult
     try {
-      heygenResult = JSON.parse(responseText)
+      avatarResult = JSON.parse(avatarResponseText)
     } catch (parseError) {
       console.error('Failed to parse HeyGen avatars API response:', parseError)
       return {
         statusCode: 500,
         headers,
         body: JSON.stringify({
-          error: 'Invalid response format from HeyGen API',
-          details: responseText.substring(0, 200)
+          error: 'Invalid response format from HeyGen avatars API',
+          details: avatarResponseText.substring(0, 200)
         })
       }
     }
 
-    if (!heygenResponse.ok) {
-      console.error('HeyGen avatars API error:', heygenResult)
+    if (!avatarResponse.ok) {
+      console.error('HeyGen avatars API error:', avatarResult)
       return {
-        statusCode: heygenResponse.status,
+        statusCode: avatarResponse.status,
         headers,
         body: JSON.stringify({
           error: 'HeyGen avatars API request failed',
-          message: heygenResult.message || heygenResult.error || 'Unknown error',
-          details: heygenResult
+          message: avatarResult.message || avatarResult.error || 'Unknown error',
+          details: avatarResult
         })
       }
     }
 
+    // Photo Avatar Groups 응답 처리
+    const photoGroupResponseText = await photoGroupResponse.text()
+    console.log('HeyGen photo groups API response status:', photoGroupResponse.status)
+    console.log('HeyGen photo groups API response text:', photoGroupResponseText.substring(0, 500))
+
+    let photoGroupResult
+    try {
+      photoGroupResult = JSON.parse(photoGroupResponseText)
+    } catch (parseError) {
+      console.warn('Failed to parse HeyGen photo groups API response:', parseError)
+      photoGroupResult = { data: { avatar_group_list: [] } } // fallback
+    }
+
+    if (!photoGroupResponse.ok) {
+      console.warn('HeyGen photo groups API error:', photoGroupResult)
+      photoGroupResult = { data: { avatar_group_list: [] } } // fallback
+    }
+
     // 아바타 데이터 정리 및 변환
-    const avatars = heygenResult.avatars || []
-    const talkingPhotos = heygenResult.talking_photos || []
+    const avatars = avatarResult.avatars || []
+    const talkingPhotos = avatarResult.talking_photos || []
+    const photoGroups = photoGroupResult.data?.avatar_group_list || []
 
     const processedAvatars = avatars.map(avatar => ({
       id: avatar.avatar_id,
@@ -100,16 +131,31 @@ export const handler = async (event, context) => {
       type: 'talking_photo'
     }))
 
+    // Photo Avatar Groups 처리 (ready 상태인 것만 포함)
+    const processedPhotoGroups = photoGroups
+      .filter(group => group.train_status === 'ready')
+      .map(group => ({
+        id: group.id,
+        name: group.name,
+        thumbnail: group.preview_image,
+        type: 'photo_avatar_group',
+        train_status: group.train_status,
+        num_looks: group.num_looks,
+        created_at: group.created_at
+      }))
+
     // 성공 응답
     const response = {
       success: true,
       avatars: processedAvatars,
       talking_photos: processedTalkingPhotos,
+      photo_avatar_groups: processedPhotoGroups,
       total_avatars: processedAvatars.length,
-      total_talking_photos: processedTalkingPhotos.length
+      total_talking_photos: processedTalkingPhotos.length,
+      total_photo_avatar_groups: processedPhotoGroups.length
     }
 
-    console.log(`Successfully fetched ${processedAvatars.length} avatars and ${processedTalkingPhotos.length} talking photos`)
+    console.log(`Successfully fetched ${processedAvatars.length} avatars, ${processedTalkingPhotos.length} talking photos, and ${processedPhotoGroups.length} photo avatar groups`)
     
     return {
       statusCode: 200,

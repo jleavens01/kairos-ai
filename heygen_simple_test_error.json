@@ -1,8 +1,0 @@
-{
-  "success": false,
-  "error": "API 오류: HeyGen API request failed",
-  "avatarId": "f9ed7e3d4bc14f209094c8affd6e24d4",
-  "avatarName": "세상의모든지식",
-  "text": "안녕하세요. 세상의모든지식 입니다. 지금은 테스트 중입니다.",
-  "timestamp": "2025-09-06T07:10:40.755Z"
-}

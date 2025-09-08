@@ -48,19 +48,19 @@ export const handler = async (event, context) => {
       }
     }
 
-    // 필수 필드 검증
-    if (!requestData.video_id) {
+    // group_id 확인
+    if (!requestData.group_id) {
       return {
         statusCode: 400,
         headers,
-        body: JSON.stringify({ error: 'video_id is required' })
+        body: JSON.stringify({ error: 'group_id is required' })
       }
     }
 
-    // HeyGen API 호출 - 비디오 상태 확인
-    console.log('Checking HeyGen video status for ID:', requestData.video_id)
+    // HeyGen API 호출 - Photo Avatar Group의 모든 아바타 가져오기
+    console.log('Fetching HeyGen photo avatar group:', requestData.group_id)
 
-    const heygenResponse = await fetch(`https://api.heygen.com/v1/video_status.get?video_id=${requestData.video_id}`, {
+    const heygenResponse = await fetch(`https://api.heygen.com/v2/avatars/avatar_group/${requestData.group_id}`, {
       method: 'GET',
       headers: {
         'x-api-key': heygenApiKey,
@@ -69,83 +69,52 @@ export const handler = async (event, context) => {
     })
 
     const responseText = await heygenResponse.text()
-    console.log('HeyGen status API response status:', heygenResponse.status)
-    console.log('HeyGen status API response text:', responseText)
+    console.log('HeyGen photo avatar group API response status:', heygenResponse.status)
+    console.log('HeyGen photo avatar group API response:', responseText.substring(0, 500))
 
     let heygenResult
     try {
       heygenResult = JSON.parse(responseText)
     } catch (parseError) {
-      console.error('Failed to parse HeyGen status API response:', parseError)
+      console.error('Failed to parse HeyGen photo avatar group API response:', parseError)
       return {
         statusCode: 500,
         headers,
         body: JSON.stringify({
           error: 'Invalid response format from HeyGen API',
-          details: responseText
+          details: responseText.substring(0, 200)
         })
       }
     }
 
     if (!heygenResponse.ok) {
-      console.error('HeyGen status API error:', heygenResult)
+      console.error('HeyGen photo avatar group API error:', heygenResult)
       return {
         statusCode: heygenResponse.status,
         headers,
         body: JSON.stringify({
-          error: 'HeyGen status API request failed',
+          error: 'HeyGen photo avatar group API request failed',
           message: heygenResult.message || heygenResult.error || 'Unknown error',
           details: heygenResult
         })
       }
     }
 
-    // HeyGen API 응답 구조에 따라 상태 매핑
-    const videoData = heygenResult.data || heygenResult
-    let status = 'processing'
-    let videoUrl = null
-    let thumbnailUrl = null
-    let duration = null
-    let errorMessage = null
-
-    // HeyGen 상태 매핑
-    if (videoData.status) {
-      switch (videoData.status.toLowerCase()) {
-        case 'completed':
-        case 'success':
-          status = 'completed'
-          videoUrl = videoData.video_url || videoData.video_url_get || videoData.url
-          thumbnailUrl = videoData.thumbnail_url || videoData.thumbnail
-          duration = videoData.duration
-          break
-        case 'processing':
-        case 'pending':
-        case 'in_progress':
-          status = 'processing'
-          break
-        case 'failed':
-        case 'error':
-          status = 'failed'
-          errorMessage = videoData.error_message || videoData.message || 'Video generation failed'
-          break
-        default:
-          status = 'processing'
-      }
-    }
-
     // 성공 응답
+    const avatarList = heygenResult.data?.talking_photo_list || []
     const response = {
       success: true,
-      video_id: requestData.video_id,
-      status,
-      video_url: videoUrl,
-      thumbnail_url: thumbnailUrl,
-      duration,
-      error_message: errorMessage,
-      raw_response: videoData
+      group_id: requestData.group_id,
+      avatars: avatarList.map(avatar => ({
+        id: avatar.id,
+        name: avatar.name || 'Look ' + (avatarList.indexOf(avatar) + 1),
+        preview_image_url: avatar.preview_image_url,
+        is_public: avatar.is_public
+      })),
+      total: avatarList.length
     }
 
-    console.log('HeyGen status check successful:', response)
+    console.log(`Successfully fetched ${avatarList.length} avatars in group:`, requestData.group_id)
     
     return {
       statusCode: 200,
@@ -154,7 +123,7 @@ export const handler = async (event, context) => {
     }
 
   } catch (error) {
-    console.error('HeyGen status check error:', error)
+    console.error('Get HeyGen photo avatar group error:', error)
     
     return {
       statusCode: 500,

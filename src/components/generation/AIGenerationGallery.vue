@@ -78,6 +78,7 @@
           <option value="character">캐릭터</option>
           <option value="background">배경</option>
           <option value="object">오브젝트</option>
+          <option value="reference">자료</option>
         </select>
       </div>
       <div v-if="loading && images.length === 0" class="loading-state">
@@ -396,7 +397,8 @@ const categoryFilters = [
   { value: 'scene', label: '씬' },
   { value: 'character', label: '캐릭터' },
   { value: 'background', label: '배경' },
-  { value: 'object', label: '오브젝트' }
+  { value: 'object', label: '오브젝트' },
+  { value: 'reference', label: '자료' }
 ]
 const showKeptOnly = ref(false) // 보관함 보기 상태
 // 페이지네이션 상태
@@ -760,43 +762,89 @@ const fetchCharacterImages = async () => {
     characterImagesForSuggestions.value = []
   }
 }
-// 페이지별 이미지 로드 (갤러리용)
+// 페이지별 이미지 로드 (갤러리용 - AI 생성 이미지 + 저장된 자료 이미지)
 const fetchImages = async () => {
   loading.value = true
   try {
     const from = (currentPage.value - 1) * pageSize.value
     const to = from + pageSize.value - 1
-    // 쿼리 빌드
-    let query = supabase
+    
+    // 1. AI 생성 이미지 조회 (gen_images)
+    let genImagesQuery = supabase
       .from('gen_images')
-      .select('*', { count: 'exact' })
+      .select('*')
       .eq('project_id', props.projectId)
+    
     // 보관함 필터 적용
     if (showKeptOnly.value) {
-      query = query.eq('is_kept', true)
+      genImagesQuery = genImagesQuery.eq('is_kept', true)
     } else {
-      query = query.or('is_kept.is.null,is_kept.eq.false')
+      genImagesQuery = genImagesQuery.or('is_kept.is.null,is_kept.eq.false')
     }
+    
     // 카테고리 필터 적용
     if (filterCategory.value) {
-      query = query.eq('image_type', filterCategory.value)
+      genImagesQuery = genImagesQuery.eq('image_type', filterCategory.value)
     }
-    // 정렬 및 페이지네이션
-    const { data, error, count } = await query
+    
+    const { data: genImages, error: genError } = await genImagesQuery
       .order('created_at', { ascending: false })
-      .range(from, to)
-    if (error) throw error
-    images.value = data || []
-    totalCount.value = count || 0
+    
+    if (genError) throw genError
+    
+    // 2. 저장된 자료 이미지 조회 (reference_materials - 이미지만)
+    let refImagesQuery = supabase
+      .from('reference_materials')
+      .select('*')
+      .eq('project_id', props.projectId)
+      .not('storage_url', 'is', null) // 이미지가 있는 것만
+    
+    // reference_materials는 보관함 필터 없음 (항상 표시)
+    // 카테고리 필터도 적용하지 않음 (자료는 별도 분류)
+    
+    const { data: refImages, error: refError } = await refImagesQuery
+      .order('created_at', { ascending: false })
+    
+    if (refError) throw refError
+    
+    // 3. 저장된 자료를 gen_images 형식으로 변환
+    const convertedRefImages = (refImages || []).map(refImage => ({
+      id: `ref_${refImage.id}`, // 충돌 방지를 위해 접두사 추가
+      project_id: refImage.project_id,
+      image_type: 'reference', // 새로운 타입 추가
+      element_name: refImage.title,
+      prompt: refImage.title,
+      storage_image_url: refImage.storage_url,
+      thumbnail_url: refImage.thumbnail_url,
+      generation_status: 'completed',
+      created_at: refImage.created_at,
+      updated_at: refImage.updated_at,
+      is_kept: false,
+      // 자료 고유 필드
+      source_type: refImage.source_type,
+      source_url: refImage.source_url,
+      metadata: refImage.metadata,
+      is_reference: true // 자료인지 구분하는 플래그
+    }))
+    
+    // 4. 두 데이터 합치고 정렬
+    const allImages = [...(genImages || []), ...convertedRefImages]
+    allImages.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    
+    // 5. 페이지네이션 적용
+    const paginatedImages = allImages.slice(from, from + pageSize.value)
+    
+    images.value = paginatedImages
+    totalCount.value = allImages.length
+    
     // 프로덕션 시트에서 캐릭터 확인
-    // Debug log removed
     const allCharacters = new Set()
     productionStore.productionSheets.forEach(sheet => {
       if (sheet.characters && Array.isArray(sheet.characters)) {
         sheet.characters.forEach(char => allCharacters.add(char))
       }
     })
-    // Debug log removed
+    
   } catch (error) {
     console.error('Error fetching images:', error)
     images.value = []
@@ -1637,7 +1685,8 @@ defineExpose({
   setFilterCategory,
   filterCategory,
   toggleKeptView,
-  refreshScrollListener: setupScrollListener
+  refreshScrollListener: setupScrollListener,
+  fetchImages // 자료 저장 후 새로고침용
 })
 </script>
 <style scoped>

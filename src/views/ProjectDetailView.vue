@@ -78,13 +78,6 @@
             </button>
             <button 
               v-if="activeTab === 'media'"
-              @click="handleOpenAvatarVideoGeneration" 
-              class="tab-action-btn avatar-btn"
-            >
-              아바타 비디오
-            </button>
-            <button 
-              v-if="activeTab === 'media'"
               @click="toggleVideoKeptView" 
               class="tab-action-btn"
               :class="{ active: showVideoKeptOnly }"
@@ -123,6 +116,7 @@
             <ReferenceView 
               ref="referenceViewRef"
               :project-id="projectId"
+              @materialSaved="handleMaterialSaved"
             />
           </div>
 
@@ -138,6 +132,14 @@
           <div v-if="activeTab === 'media'" class="media-section">
             <MediaView 
               ref="mediaViewRef"
+              :project-id="projectId" 
+            />
+          </div>
+
+          <!-- 아바타 탭 -->
+          <div v-if="activeTab === 'avatar'" class="avatar-section">
+            <AvatarView 
+              ref="avatarViewRef"
               :project-id="projectId" 
             />
           </div>
@@ -186,6 +188,7 @@ import ProductionSheet from '@/components/production/ProductionSheet.vue'
 import ReferenceView from '@/views/ReferenceView.vue'
 import AIGenerationGallery from '@/components/generation/AIGenerationGallery.vue'
 import MediaView from '@/components/project/MediaView.vue'
+import AvatarView from '@/views/AvatarView.vue'
 import { Archive } from 'lucide-vue-next'
 
 const route = useRoute()
@@ -200,7 +203,7 @@ const error = ref('')
 // URL 쿼리에서 탭 상태 가져오기 (기본값: production)
 const getInitialTab = () => {
   const tabFromQuery = route.query.tab
-  const validTabs = ['production', 'reference', 'generate', 'media', 'settings']
+  const validTabs = ['production', 'reference', 'generate', 'media', 'avatar', 'settings']
   return validTabs.includes(tabFromQuery) ? tabFromQuery : 'production'
 }
 
@@ -210,6 +213,7 @@ const tabs = [
   { id: 'reference', label: '자료', mobileLabel: '자료' },
   { id: 'generate', label: '이미지', mobileLabel: '이미지' },
   { id: 'media', label: '비디오', mobileLabel: '비디오' },
+  { id: 'avatar', label: '아바타', mobileLabel: '아바타' },
   { id: 'settings', label: '설정', mobileLabel: '⚙️' }
 ]
 
@@ -239,6 +243,7 @@ const productionSheetRef = ref(null)
 const referenceViewRef = ref(null)
 const imageGalleryRef = ref(null)
 const mediaViewRef = ref(null)
+const avatarViewRef = ref(null)
 
 // 프로젝트 로드 함수
 const loadProject = async (projectId) => {
@@ -310,6 +315,15 @@ const handleProductionUpdate = () => {
   console.log('스토리보드가 업데이트되었습니다.')
 }
 
+// 자료 저장 완료 시 이미지 갤러리 새로고침
+const handleMaterialSaved = (data) => {
+  console.log('자료가 저장되었습니다:', data)
+  // 이미지 갤러리 새로고침
+  if (imageGalleryRef.value && typeof imageGalleryRef.value.fetchImages === 'function') {
+    imageGalleryRef.value.fetchImages()
+  }
+}
+
 const updateStatus = async () => {
   await projectsStore.updateProject(project.value.id, {
     status: project.value.status
@@ -345,10 +359,6 @@ const handleOpenImageGeneration = () => {
 
 const handleOpenVideoGeneration = () => {
   mediaViewRef.value?.openGenerationModal()
-}
-
-const handleOpenAvatarVideoGeneration = () => {
-  mediaViewRef.value?.openAvatarGenerationModal()
 }
 
 // 필터 핸들러

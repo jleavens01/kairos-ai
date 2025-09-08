@@ -36,13 +36,13 @@ export const handler = async (event, context) => {
       }
     }
 
-    // HeyGen API 호출 - 음성 목록 가져오기
-    console.log('Fetching HeyGen voices list')
+    // HeyGen API 호출 - 음성 목록 가져오기 (locales 엔드포인트 사용)
+    console.log('Fetching HeyGen voices list from locales endpoint')
 
-    const heygenResponse = await fetch('https://api.heygen.com/v2/voices', {
+    const heygenResponse = await fetch('https://api.heygen.com/v2/voices/locales', {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${heygenApiKey}`,
+        'x-api-key': heygenApiKey,
         'Accept': 'application/json'
       }
     })

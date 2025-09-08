@@ -74,9 +74,9 @@ export const useGenerationStore = defineStore('generation', {
           created_at: new Date().toISOString()
         }
 
-        // Supabase에 저장 (generations 테이블 가정)
+        // Supabase에 저장 (gen_videos 테이블 사용)
         const { data, error } = await supabase
-          .from('generations')
+          .from('gen_videos')
           .insert(newImage)
           .select()
           .single()
@@ -115,7 +115,7 @@ export const useGenerationStore = defineStore('generation', {
 
         // Supabase에 저장
         const { data, error } = await supabase
-          .from('generations')
+          .from('gen_videos')
           .insert(newVideo)
           .select()
           .single()
@@ -139,26 +139,38 @@ export const useGenerationStore = defineStore('generation', {
         const { data: user } = await supabase.auth.getUser()
         if (!user.user) throw new Error('User not authenticated')
 
+        // gen_heygen_videos 테이블 구조에 맞게 데이터 구성
         const newAvatarVideo = {
           user_id: user.user.id,
-          type: 'avatar_video',
+          heygen_video_id: avatarVideoData.heygen_video_id,
+          callback_id: avatarVideoData.callback_id || null,
+          avatar_id: avatarVideoData.avatar_id,
+          voice_id: avatarVideoData.voice_id || avatarVideoData.metadata?.voice_id,
+          title: avatarVideoData.title || null,
+          input_text: avatarVideoData.script || avatarVideoData.input_text,
           status: avatarVideoData.status || 'processing',
-          title: avatarVideoData.title,
-          metadata: {
-            heygen_video_id: avatarVideoData.heygen_video_id,
-            avatar_id: avatarVideoData.avatar_id,
-            script: avatarVideoData.script,
-            voice_id: avatarVideoData.metadata?.voice_id,
-            dimensions: avatarVideoData.metadata?.dimensions,
-            background: avatarVideoData.metadata?.background,
-            ...avatarVideoData.metadata
-          },
-          created_at: new Date().toISOString()
+          
+          // 비디오 설정
+          dimension_width: avatarVideoData.metadata?.dimensions?.width || 1280,
+          dimension_height: avatarVideoData.metadata?.dimensions?.height || 720,
+          
+          // 배경 설정
+          background_type: avatarVideoData.metadata?.background?.type || 'color',
+          background_value: avatarVideoData.metadata?.background?.value || '#f6f6fc',
+          
+          // 음성 설정
+          voice_type: 'text',
+          voice_speed: avatarVideoData.metadata?.voice_speed || 1.0,
+          voice_emotion: avatarVideoData.metadata?.voice_emotion || null,
+          voice_locale: avatarVideoData.metadata?.voice_locale || null,
+          
+          // 메타데이터 저장 (전체 요청 파라미터)
+          generation_params: avatarVideoData.metadata || {}
         }
 
-        // Supabase에 저장
+        // Supabase에 저장 (아바타 비디오는 gen_heygen_videos 테이블 사용)
         const { data, error } = await supabase
-          .from('generations')
+          .from('gen_heygen_videos')
           .insert(newAvatarVideo)
           .select()
           .single()
@@ -186,18 +198,28 @@ export const useGenerationStore = defineStore('generation', {
         this.loading.videos = true
         this.loading.avatarVideos = true
 
-        const { data, error } = await supabase
-          .from('generations')
+        // gen_videos 테이블에서 이미지와 비디오 로드
+        const { data: genVideosData, error: genVideosError } = await supabase
+          .from('gen_videos')
           .select('*')
           .eq('user_id', user.user.id)
           .order('created_at', { ascending: false })
 
-        if (error) throw error
+        if (genVideosError) throw genVideosError
+
+        // gen_heygen_videos 테이블에서 아바타 비디오 로드
+        const { data: heygenVideosData, error: heygenVideosError } = await supabase
+          .from('gen_heygen_videos')
+          .select('*')
+          .eq('user_id', user.user.id)
+          .order('created_at', { ascending: false })
+
+        if (heygenVideosError) throw heygenVideosError
 
         // 타입별로 분류
-        this.images = data.filter(item => item.type === 'image')
-        this.videos = data.filter(item => item.type === 'video')
-        this.avatarVideos = data.filter(item => item.type === 'avatar_video')
+        this.images = genVideosData.filter(item => item.type === 'image')
+        this.videos = genVideosData.filter(item => item.type === 'video')
+        this.avatarVideos = heygenVideosData || []
 
       } catch (error) {
         console.error('Failed to load generations:', error)
@@ -224,7 +246,7 @@ export const useGenerationStore = defineStore('generation', {
         }
 
         const { data, error } = await supabase
-          .from('generations')
+          .from('gen_heygen_videos')
           .update(updates)
           .eq('id', id)
           .select()
@@ -292,10 +314,21 @@ export const useGenerationStore = defineStore('generation', {
     // 생성물 삭제
     async deleteGeneration(id, type) {
       try {
-        const { error } = await supabase
-          .from('generations')
-          .delete()
-          .eq('id', id)
+        let error
+        
+        if (type === 'avatar_video') {
+          // 아바타 비디오는 gen_heygen_videos 테이블에서 삭제
+          ({ error } = await supabase
+            .from('gen_heygen_videos')
+            .delete()
+            .eq('id', id))
+        } else {
+          // 이미지와 비디오는 gen_videos 테이블에서 삭제
+          ({ error } = await supabase
+            .from('gen_videos')
+            .delete()
+            .eq('id', id))
+        }
 
         if (error) throw error
 

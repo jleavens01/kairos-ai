@@ -113,12 +113,8 @@ const handleScriptAnalyzed = async (data) => {
   // 스토어 업데이트
   await loadProductionData()
   
-  // 씬 나누기 완료 후 캐릭터 추출 모달 자동 표시
-  if (data?.scenes?.length > 0) {
-    setTimeout(() => {
-      showCharacterModal.value = true
-    }, 500)
-  }
+  // 1단계 분석이 성공적이므로 캐릭터 추출 모달 자동 표시 제거
+  // 필요시 수동으로 캐릭터 추출 가능
 }
 
 const handleCharactersExtracted = async (data) => {

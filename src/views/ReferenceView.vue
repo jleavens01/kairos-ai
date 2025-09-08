@@ -90,6 +90,9 @@ const props = defineProps({
   }
 })
 
+// Emits
+const emit = defineEmits(['materialSaved'])
+
 const referenceStore = useReferenceStore()
 const projectsStore = useProjectsStore()
 const route = useRoute()
@@ -151,7 +154,7 @@ const handleSaveMaterial = async (material) => {
     title: material.title,
     source_type: material.source_type,
     source_url: material.url || material.source_url,
-    storage_url: material.image || material.thumbnail,  // image_url 대신 storage_url 사용
+    storage_url: material.original || material.image || material.thumbnail,  // 원본 > 중간 > 썸네일 순으로 우선순위
     thumbnail_url: material.thumbnail || material.image,
     metadata: metadata,
     is_favorite: false,
@@ -168,6 +171,8 @@ const handleSaveMaterial = async (material) => {
     console.log('자료가 저장되었습니다.')
     // 저장된 자료 목록 새로고침
     await referenceStore.fetchMaterials(projectId)
+    // 부모 컴포넌트에 자료 저장 완료 이벤트 전달 (이미지 갤러리 새로고침용)
+    emit('materialSaved', { material: materialData, id: result.data?.id })
   } else {
     console.error('자료 저장 실패:', result.error)
   }

@@ -100,7 +100,7 @@ export const handler = async (event, context) => {
     const heygenResponse = await fetch('https://api.heygen.com/v2/photo_avatar/photo/generate', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${heygenApiKey}`,
+        'x-api-key': heygenApiKey,
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },

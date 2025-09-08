@@ -84,7 +84,66 @@
             </div>
           </th>
           <th class="script-col">스크립트 원본</th>
-          <th class="characters-col">인물</th>
+          <th class="scene-type-col">씬타입</th>
+          <th class="director-guide-col">연출가이드</th>
+          <th class="assets-col">
+            <div class="assets-header">
+              <span>에셋</span>
+              <div class="asset-filter-dropdown">
+                <button class="filter-toggle-btn" @click="toggleAssetFilterDropdown">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M3 6h18M7 12h10m-7 6h4"/>
+                  </svg>
+                </button>
+                <div v-if="showAssetFilterDropdown" class="filter-dropdown-menu" @click.stop>
+                  <div class="filter-option">
+                    <input 
+                      type="checkbox" 
+                      id="filter-characters"
+                      v-model="assetFilter.characters"
+                    />
+                    <label for="filter-characters">
+                      <span class="filter-color characters-color"></span>
+                      캐릭터
+                    </label>
+                  </div>
+                  <div class="filter-option">
+                    <input 
+                      type="checkbox" 
+                      id="filter-backgrounds"
+                      v-model="assetFilter.backgrounds"
+                    />
+                    <label for="filter-backgrounds">
+                      <span class="filter-color backgrounds-color"></span>
+                      배경
+                    </label>
+                  </div>
+                  <div class="filter-option">
+                    <input 
+                      type="checkbox" 
+                      id="filter-props"
+                      v-model="assetFilter.props"
+                    />
+                    <label for="filter-props">
+                      <span class="filter-color props-color"></span>
+                      소품/그래픽
+                    </label>
+                  </div>
+                  <div class="filter-option">
+                    <input 
+                      type="checkbox" 
+                      id="filter-reference"
+                      v-model="assetFilter.referenceSources"
+                    />
+                    <label for="filter-reference">
+                      <span class="filter-color reference-color"></span>
+                      참고소스
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </th>
           <th class="tts-col">
             TTS
             <span v-if="totalTTSDuration > 0" class="tts-total-duration">
@@ -176,40 +235,169 @@
                 {{ scene.original_script_text }}
               </template>
             </td>
-            <td class="characters-col editable-cell" :data-label="isMobile ? '등장인물/자료' : ''" @click="startEditingCharacters(scene.id, scene.characters)">
-              <template v-if="isEditing(scene.id, 'characters')">
-                <input 
-                  :id="`edit-${scene.id}-characters`"
+            
+            <!-- 씬타입 컬럼 -->
+            <td class="scene-type-col" :data-label="isMobile ? '씬타입' : ''">
+              <span class="scene-type-badge" :class="getSceneTypeClass(scene)">
+                {{ getSceneType(scene) }}
+              </span>
+            </td>
+            
+            <!-- 연출가이드 컬럼 -->
+            <td class="director-guide-col editable-cell" :data-label="isMobile ? '연출가이드' : ''" @click="startEditingDirectorGuide(scene.id, scene.director_guide)">
+              <template v-if="isEditing(scene.id, 'director_guide')">
+                <textarea 
+                  :id="`edit-${scene.id}-director-guide`"
                   v-model="editedValue"
-                  @blur="handleCharactersBlur(scene)"
+                  @blur="handleDirectorGuideBlur(scene)"
                   @keydown.esc.prevent="cancelEdit"
-                  @keydown.enter.prevent="handleCharactersEnter(scene)"
-                  placeholder="캐릭터1, 캐릭터2, ..."
-                  class="edit-input"
+                  @keydown.ctrl.enter.prevent="handleDirectorGuideEnter(scene)"
+                  placeholder="시각적 연출 방안을 입력하세요..."
+                  class="edit-textarea"
+                  rows="3"
                 />
-                <div class="edit-hint">쉼표로 구분하여 입력 (Enter: 저장, Esc: 취소)</div>
+                <div class="edit-hint">Ctrl+Enter: 저장, Esc: 취소</div>
               </template>
               <template v-else>
-                <div class="tag-list">
-                  <span 
-                    v-for="(character, idx) in scene.characters" 
-                    :key="`char-${idx}`"
-                    class="tag character-tag"
-                  >
-                    {{ character }}
-                  </span>
-                  <span 
-                    v-for="(keyword, idx) in scene.reference_keywords" 
-                    :key="`keyword-${idx}`"
-                    class="tag reference-keyword-tag"
-                  >
-                    {{ keyword }}
-                  </span>
-                  <span v-if="(!scene.characters || scene.characters.length === 0) && (!scene.reference_keywords || scene.reference_keywords.length === 0)" class="empty-hint">
-                    캐릭터 추가
-                  </span>
+                <div class="director-guide-content">
+                  <p v-if="scene.director_guide" class="guide-text">{{ scene.director_guide }}</p>
+                  <span v-else class="empty-hint">연출가이드 추가</span>
                 </div>
               </template>
+            </td>
+            
+            <!-- 에셋 컬럼 -->
+            <td class="assets-col" :data-label="isMobile ? '에셋' : ''">
+              <div class="assets-container">
+                <!-- 캐릭터 -->
+                <div v-if="assetFilter.characters && scene.characters && scene.characters.length > 0" class="asset-section characters-section" 
+                     @mouseover="hoveredAsset = `${scene.id}-characters`" 
+                     @mouseleave="hoveredAsset = null"
+                     @click="startEditingCharacters(scene.id, scene.characters)"
+                     :class="{ 'editable-hover': hoveredAsset === `${scene.id}-characters`, 'editing': editingCell === `${scene.id}-characters` }">
+                  <div class="asset-type-label">캐릭터</div>
+                  <div v-if="editingCell !== `${scene.id}-characters`" class="tag-list">
+                    <span 
+                      v-for="(character, idx) in scene.characters" 
+                      :key="`char-${idx}`"
+                      class="tag character-tag"
+                    >
+                      {{ character }}
+                    </span>
+                  </div>
+                  <div v-else class="edit-input-container">
+                    <input 
+                      :id="`edit-${scene.id}-characters`"
+                      type="text" 
+                      v-model="editedValue" 
+                      @keydown.enter="saveCharactersEdit(scene)"
+                      @keydown.escape="cancelEdit"
+                      @blur="saveCharactersEdit(scene)"
+                      class="edit-input"
+                      placeholder="캐릭터 이름들 (쉼표로 구분)"
+                    />
+                  </div>
+                  <div v-if="hoveredAsset === `${scene.id}-characters` && editingCell !== `${scene.id}-characters`" class="edit-hint">
+                    클릭하여 편집
+                  </div>
+                </div>
+                
+                <!-- 배경 -->
+                <div v-if="assetFilter.backgrounds && scene.backgrounds && scene.backgrounds.length > 0" class="asset-section backgrounds-section"
+                     @mouseover="hoveredAsset = `${scene.id}-backgrounds`" 
+                     @mouseleave="hoveredAsset = null"
+                     @click="startEditingBackgrounds(scene.id, scene.backgrounds)"
+                     :class="{ 'editable-hover': hoveredAsset === `${scene.id}-backgrounds`, 'editing': editingCell === `${scene.id}-backgrounds` }">
+                  <div class="asset-type-label">배경</div>
+                  <div v-if="editingCell !== `${scene.id}-backgrounds`" class="tag-list">
+                    <span 
+                      v-for="(background, idx) in scene.backgrounds" 
+                      :key="`bg-${idx}`"
+                      class="tag background-tag"
+                    >
+                      {{ background }}
+                    </span>
+                  </div>
+                  <div v-else class="edit-input-container">
+                    <input 
+                      :id="`edit-${scene.id}-backgrounds`"
+                      type="text" 
+                      v-model="editedValue" 
+                      @keydown.enter="saveBackgroundsEdit(scene)"
+                      @keydown.escape="cancelEdit"
+                      @blur="saveBackgroundsEdit(scene)"
+                      class="edit-input"
+                      placeholder="배경 설명들 (쉼표로 구분)"
+                    />
+                  </div>
+                  <div v-if="hoveredAsset === `${scene.id}-backgrounds` && editingCell !== `${scene.id}-backgrounds`" class="edit-hint">
+                    클릭하여 편집
+                  </div>
+                </div>
+                
+                <!-- 소품/그래픽 -->
+                <div v-if="assetFilter.props && scene.props && scene.props.length > 0" class="asset-section props-section"
+                     @mouseover="hoveredAsset = `${scene.id}-props`" 
+                     @mouseleave="hoveredAsset = null"
+                     @click="startEditingProps(scene.id, scene.props)"
+                     :class="{ 'editable-hover': hoveredAsset === `${scene.id}-props`, 'editing': editingCell === `${scene.id}-props` }">
+                  <div class="asset-type-label">소품/그래픽</div>
+                  <div v-if="editingCell !== `${scene.id}-props`" class="tag-list">
+                    <span 
+                      v-for="(prop, idx) in scene.props" 
+                      :key="`prop-${idx}`"
+                      class="tag prop-tag"
+                    >
+                      {{ prop }}
+                    </span>
+                  </div>
+                  <div v-else class="edit-input-container">
+                    <input 
+                      :id="`edit-${scene.id}-props`"
+                      type="text" 
+                      v-model="editedValue" 
+                      @keydown.enter="savePropsEdit(scene)"
+                      @keydown.escape="cancelEdit"
+                      @blur="savePropsEdit(scene)"
+                      class="edit-input"
+                      placeholder="소품/그래픽 설명들 (쉼표로 구분)"
+                    />
+                  </div>
+                  <div v-if="hoveredAsset === `${scene.id}-props` && editingCell !== `${scene.id}-props`" class="edit-hint">
+                    클릭하여 편집
+                  </div>
+                </div>
+                
+                <!-- 자료 키워드 -->
+                <div v-if="assetFilter.referenceSources && scene.reference_keywords && scene.reference_keywords.length > 0" class="asset-section keywords-section">
+                  <div class="asset-type-label">자료</div>
+                  <div class="tag-list">
+                    <span 
+                      v-for="(keyword, idx) in scene.reference_keywords" 
+                      :key="`keyword-${idx}`"
+                      class="tag reference-keyword-tag"
+                    >
+                      {{ keyword }}
+                    </span>
+                  </div>
+                </div>
+                
+                <!-- 자료 소스 -->
+                <div v-if="assetFilter.referenceSources && getReferenceSources(scene) && getReferenceSources(scene).length > 0" class="asset-section sources-section">
+                  <div class="asset-type-label">참고 소스</div>
+                  <div class="tag-list">
+                    <span 
+                      v-for="(source, idx) in getReferenceSources(scene)" 
+                      :key="`source-${idx}`"
+                      class="tag reference-source-tag"
+                    >
+                      {{ source }}
+                    </span>
+                  </div>
+                </div>
+                
+                <span v-if="!hasAnyAssets(scene)" class="empty-hint">에셋 정보 없음</span>
+              </div>
             </td>
             <td class="tts-col" :data-label="isMobile ? '' : 'TTS 컨트롤'">
               <div class="tts-controls">
@@ -336,9 +524,19 @@ const projectsStore = useProjectsStore()
 const editingCell = ref(null)
 const editedValue = ref('')
 const hoveredItemId = ref(null)
+const hoveredAsset = ref(null)
 const isSaving = ref(false)
 const globalMediaType = ref('image') // 전체 미디어 타입 (image/video)
 const pollingInterval = ref(null) // 자동 새로고침용 interval
+
+// 에셋 필터링 상태
+const assetFilter = ref({
+  characters: true,
+  backgrounds: true, 
+  props: true,
+  referenceSources: true
+})
+const showAssetFilterDropdown = ref(false)
 
 // MediaPanel 관련
 const mediaPanel = ref(null)
@@ -433,6 +631,30 @@ const startEditingCharacters = (sceneId, characters) => {
   editedValue.value = characters ? characters.join(', ') : ''
   nextTick(() => {
     const input = document.querySelector(`#edit-${sceneId}-characters`)
+    if (input) {
+      input.focus()
+      input.setSelectionRange(input.value.length, input.value.length)
+    }
+  })
+}
+
+const startEditingBackgrounds = (sceneId, backgrounds) => {
+  editingCell.value = `${sceneId}-backgrounds`
+  editedValue.value = backgrounds ? backgrounds.join(', ') : ''
+  nextTick(() => {
+    const input = document.querySelector(`#edit-${sceneId}-backgrounds`)
+    if (input) {
+      input.focus()
+      input.setSelectionRange(input.value.length, input.value.length)
+    }
+  })
+}
+
+const startEditingProps = (sceneId, props) => {
+  editingCell.value = `${sceneId}-props`
+  editedValue.value = props ? props.join(', ') : ''
+  nextTick(() => {
+    const input = document.querySelector(`#edit-${sceneId}-props`)
     if (input) {
       input.focus()
       input.setSelectionRange(input.value.length, input.value.length)
@@ -566,6 +788,110 @@ const saveCharactersEdit = async (scene) => {
   }
 }
 
+const saveBackgroundsEdit = async (scene) => {
+  if (isSaving.value || !editingCell.value) {
+    return
+  }
+  
+  const newBackgrounds = editedValue.value
+    .split(',')
+    .map(bg => bg.trim())
+    .filter(bg => bg.length > 0)
+  
+  const oldBackgrounds = scene.backgrounds || []
+  if (JSON.stringify(newBackgrounds) === JSON.stringify(oldBackgrounds)) {
+    cancelEdit()
+    return
+  }
+  
+  isSaving.value = true
+  
+  try {
+    const { data, error } = await supabase
+      .from('production_sheets')
+      .update({ 
+        backgrounds: newBackgrounds
+      })
+      .eq('id', scene.id)
+      .select()
+      .single()
+    
+    if (error) {
+      console.error('Supabase error:', error)
+      alert('배경 저장에 실패했습니다: ' + error.message)
+    } else {
+      if (data.backgrounds !== undefined) {
+        scene.backgrounds = data.backgrounds
+      }
+      
+      const index = productionStore.productionSheets.findIndex(sheet => sheet.id === scene.id)
+      if (index !== -1 && data.backgrounds !== undefined) {
+        productionStore.productionSheets[index].backgrounds = data.backgrounds
+      }
+    }
+  } catch (err) {
+    console.error('Unexpected error:', err)
+    alert('예상치 못한 오류가 발생했습니다.')
+  } finally {
+    cancelEdit()
+    setTimeout(() => {
+      isSaving.value = false
+    }, 100)
+  }
+}
+
+const savePropsEdit = async (scene) => {
+  if (isSaving.value || !editingCell.value) {
+    return
+  }
+  
+  const newProps = editedValue.value
+    .split(',')
+    .map(prop => prop.trim())
+    .filter(prop => prop.length > 0)
+  
+  const oldProps = scene.props || []
+  if (JSON.stringify(newProps) === JSON.stringify(oldProps)) {
+    cancelEdit()
+    return
+  }
+  
+  isSaving.value = true
+  
+  try {
+    const { data, error } = await supabase
+      .from('production_sheets')
+      .update({ 
+        props: newProps
+      })
+      .eq('id', scene.id)
+      .select()
+      .single()
+    
+    if (error) {
+      console.error('Supabase error:', error)
+      alert('소품 저장에 실패했습니다: ' + error.message)
+    } else {
+      if (data.props !== undefined) {
+        scene.props = data.props
+      }
+      
+      const index = productionStore.productionSheets.findIndex(sheet => sheet.id === scene.id)
+      if (index !== -1 && data.props !== undefined) {
+        productionStore.productionSheets[index].props = data.props
+      }
+    }
+  } catch (err) {
+    console.error('Unexpected error:', err)
+    alert('예상치 못한 오류가 발생했습니다.')
+  } finally {
+    cancelEdit()
+    setTimeout(() => {
+      isSaving.value = false
+    }, 100)
+  }
+}
+
 const cancelEdit = () => {
   editingCell.value = null
   editedValue.value = ''
@@ -573,6 +899,115 @@ const cancelEdit = () => {
 
 const isEditing = (sceneId, field) => {
   return editingCell.value === `${sceneId}-${field}`
+}
+
+// 연출가이드 편집 관련 함수들
+const startEditingDirectorGuide = (sceneId, directorGuide) => {
+  editingCell.value = `${sceneId}-director_guide`
+  editedValue.value = directorGuide || ''
+  nextTick(() => {
+    const textarea = document.querySelector(`#edit-${sceneId}-director-guide`)
+    if (textarea) {
+      textarea.focus()
+      textarea.setSelectionRange(textarea.value.length, textarea.value.length)
+    }
+  })
+}
+
+const handleDirectorGuideEnter = async (scene) => {
+  await saveDirectorGuideEdit(scene)
+}
+
+const handleDirectorGuideBlur = async (scene) => {
+  if (editingCell.value === null) {
+    return
+  }
+  await saveDirectorGuideEdit(scene)
+}
+
+const saveDirectorGuideEdit = async (scene) => {
+  if (isSaving.value) {
+    return
+  }
+  
+  isSaving.value = true
+  
+  try {
+    const newDirectorGuide = editedValue.value.trim()
+    
+    const { data, error } = await supabase
+      .from('production_sheets')
+      .update({ 
+        director_guide: newDirectorGuide
+      })
+      .eq('id', scene.id)
+      .select()
+      .single()
+    
+    if (error) {
+      console.error('연출가이드 저장 오류:', error)
+      alert('연출가이드 저장에 실패했습니다: ' + error.message)
+    } else {
+      scene.director_guide = data.director_guide
+      
+      const index = productionStore.productionSheets.findIndex(sheet => sheet.id === scene.id)
+      if (index !== -1) {
+        productionStore.productionSheets[index].director_guide = data.director_guide
+      }
+    }
+  } catch (err) {
+    console.error('연출가이드 저장 오류:', err)
+    alert('예상치 못한 오류가 발생했습니다.')
+  } finally {
+    cancelEdit()
+    setTimeout(() => {
+      isSaving.value = false
+    }, 100)
+  }
+}
+
+// scene_type 추출 함수
+const getSceneType = (scene) => {
+  // metadata.scene_type이 있으면 사용
+  if (scene.metadata && scene.metadata.scene_type) {
+    return scene.metadata.scene_type
+  }
+  return 'mixed' // 기본값
+}
+
+// scene_type CSS 클래스 함수
+const getSceneTypeClass = (scene) => {
+  const sceneType = getSceneType(scene)
+  switch (sceneType) {
+    case '그래픽': return 'scene-type-graphics'
+    case 'CG': return 'scene-type-cg'
+    case '자료영상': return 'scene-type-archive'
+    case '애니메이션': return 'scene-type-animation'
+    default: return 'scene-type-mixed'
+  }
+}
+
+// reference_sources 추출 함수
+const getReferenceSources = (scene) => {
+  // metadata.reference_sources가 있으면 사용
+  if (scene.metadata && scene.metadata.reference_sources && Array.isArray(scene.metadata.reference_sources)) {
+    return scene.metadata.reference_sources.filter(source => source && source !== '-')
+  }
+  return []
+}
+
+// 에셋 검사 함수 (필터링 조건 고려)
+const hasAnyAssets = (scene) => {
+  const hasReferenceSources = getReferenceSources(scene).length > 0
+  
+  const hasCharacters = assetFilter.value.characters && (scene.characters && scene.characters.length > 0)
+  const hasBackgrounds = assetFilter.value.backgrounds && (scene.backgrounds && scene.backgrounds.length > 0)
+  const hasProps = assetFilter.value.props && (scene.props && scene.props.length > 0)
+  const hasReferenceData = assetFilter.value.referenceSources && (
+    (scene.reference_keywords && scene.reference_keywords.length > 0) || hasReferenceSources
+  )
+  
+  return hasCharacters || hasBackgrounds || hasProps || hasReferenceData
 }
 
 // 호버 관련 함수들
@@ -758,6 +1193,19 @@ const extractCharacters = (text) => {
 // 선택 해제
 const clearSelection = () => {
   emit('update:selected', [])
+}
+
+// 에셋 필터 드롭다운 토글
+const toggleAssetFilterDropdown = () => {
+  showAssetFilterDropdown.value = !showAssetFilterDropdown.value
+}
+
+// 드롭다운 외부 클릭 시 닫기
+const handleClickOutside = (event) => {
+  const dropdown = event.target.closest('.asset-filter-dropdown')
+  if (!dropdown) {
+    showAssetFilterDropdown.value = false
+  }
 }
 
 // 씬 삭제 함수 (Netlify Function 사용)
@@ -1720,6 +2168,7 @@ onMounted(() => {
   initSceneMediaTypes() // 씬 미디어 타입 초기화
   checkExistingTTS()
   startPolling() // 자동 새로고침 시작
+  document.addEventListener('click', handleClickOutside) // 드롭다운 외부 클릭 감지
 })
 
 
@@ -1733,6 +2182,7 @@ onUnmounted(() => {
   })
   stopPolling() // 자동 새로고침 중지
   window.removeEventListener('resize', handleResize) // 리사이즈 리스너 제거
+  document.removeEventListener('click', handleClickOutside) // 드롭다운 이벤트 리스너 제거
 })
 
 
@@ -2209,9 +2659,20 @@ defineExpose({ deleteSelectedScenes })
   max-width: 380px;
 }
 
-.characters-col {
+.scene-type-col {
   min-width: 80px;
-  max-width: 150px;
+  max-width: 100px;
+  text-align: center;
+}
+
+.director-guide-col {
+  min-width: 200px;
+  max-width: 300px;
+}
+
+.assets-col {
+  min-width: 180px;
+  max-width: 250px;
 }
 
 .tts-col {
@@ -2319,6 +2780,12 @@ defineExpose({ deleteSelectedScenes })
 .reference-keyword-tag {
   background-color: rgba(59, 130, 246, 0.15);
   color: #3b82f6;
+  font-size: 0.75rem;
+}
+
+.reference-source-tag {
+  background-color: rgba(16, 185, 129, 0.15);
+  color: #10b981;
   font-size: 0.75rem;
   padding: 1px 6px;
 }
@@ -2681,25 +3148,40 @@ input[type="checkbox"] {
     font-size: 0.85rem;
   }
   
-  /* 등장인물/자료 섹션 */
-  .production-table td.characters-col {
-    padding: 8px 6px; /* 패딩 감소 */
+  /* 연출가이드 섹션 */
+  .production-table td.director-guide-col {
+    padding: 8px 6px;
   }
   
-  .production-table td.characters-col:before {
+  .production-table td.director-guide-col:before {
     content: attr(data-label);
     font-weight: bold;
     display: inline-block;
-    margin-bottom: 6px; /* 마진 감소 */
+    margin-bottom: 6px;
     margin-right: 8px;
     color: var(--text-secondary);
     font-size: 0.85rem;
   }
   
-  .production-table td.characters-col .tag-list {
+  /* 에셋 섹션 */
+  .production-table td.assets-col {
+    padding: 8px 6px;
+  }
+  
+  .production-table td.assets-col:before {
+    content: attr(data-label);
+    font-weight: bold;
+    display: inline-block;
+    margin-bottom: 6px;
+    margin-right: 8px;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+  }
+  
+  .production-table td.assets-col .tag-list {
     display: inline-flex;
     flex-wrap: wrap;
-    gap: 4px; /* 갭 감소 */
+    gap: 4px;
   }
   
   /* TTS 컨트롤 섹션 */
@@ -2789,7 +3271,8 @@ input[type="checkbox"] {
   }
   
   .script-col,
-  .characters-col,
+  .director-guide-col,
+  .assets-col,
   .tts-col {
     margin-bottom: 10px;
   }
@@ -2826,5 +3309,301 @@ input[type="checkbox"] {
     font-size: 0.8rem;
     padding: 3px 8px;
   }
+}
+
+/* 씬타입 배지 스타일 */
+.scene-type-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.scene-type-graphics {
+  background-color: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+}
+
+.scene-type-cg {
+  background-color: rgba(139, 92, 246, 0.15);
+  color: #8b5cf6;
+}
+
+.scene-type-archive {
+  background-color: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+
+.scene-type-animation {
+  background-color: rgba(236, 72, 153, 0.15);
+  color: #ec4899;
+}
+
+.scene-type-mixed {
+  background-color: rgba(107, 114, 128, 0.15);
+  color: #6b7280;
+}
+
+/* 연출가이드 스타일 */
+.director-guide-content {
+  /* 세로 제한 제거 - 전체 내용 표시 */
+}
+
+.guide-text {
+  margin: 0;
+  line-height: 1.4;
+  white-space: pre-wrap;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.edit-textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  resize: vertical;
+  background-color: var(--background);
+  color: var(--text-primary);
+}
+
+.edit-textarea:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+/* 에셋 컨테이너 스타일 */
+.assets-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.asset-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: relative;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.asset-section.editable-hover {
+  background-color: rgba(59, 130, 246, 0.1);
+  border: 1px dashed rgba(59, 130, 246, 0.3);
+}
+
+.asset-section.editing {
+  background-color: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.5);
+  cursor: default;
+}
+
+.asset-type-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* 각 에셋 타입별 컬러 */
+.characters-section .asset-type-label {
+  color: #3b82f6;
+}
+
+.backgrounds-section .asset-type-label {
+  color: #10b981;
+}
+
+.props-section .asset-type-label {
+  color: #f59e0b;
+}
+
+.keywords-section .asset-type-label {
+  color: #8b5cf6;
+}
+
+/* 인라인 편집 관련 스타일 */
+.edit-input-container {
+  width: 100%;
+}
+
+.edit-input {
+  width: 100%;
+  padding: 4px 8px;
+  border: 1px solid rgba(59, 130, 246, 0.5);
+  border-radius: 4px;
+  font-size: 0.8rem;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  outline: none;
+  resize: none;
+}
+
+.edit-input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.empty-placeholder {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  font-style: italic;
+  opacity: 0.6;
+}
+
+.edit-hint {
+  position: absolute;
+  bottom: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 0.7rem;
+  color: #3b82f6;
+  background: var(--bg-primary);
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  white-space: nowrap;
+  z-index: 10;
+}
+
+/* 에셋 필터 헤더 스타일 */
+.assets-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.asset-filter-dropdown {
+  position: relative;
+}
+
+.filter-toggle-btn {
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 4px 6px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.filter-toggle-btn:hover {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border-color: var(--primary-color);
+}
+
+.filter-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  min-width: 150px;
+  margin-top: 4px;
+}
+
+.filter-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  cursor: pointer;
+}
+
+.filter-option input[type="checkbox"] {
+  margin: 0;
+  cursor: pointer;
+}
+
+.filter-option label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.filter-color {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 2px;
+}
+
+.characters-color {
+  background-color: #3b82f6;
+}
+
+.backgrounds-color {
+  background-color: #10b981;
+}
+
+.props-color {
+  background-color: #f59e0b;
+}
+
+.reference-color {
+  background-color: #8b5cf6;
+}
+
+/* 태그 스타일 업데이트 */
+.character-tag {
+  background-color: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.background-tag {
+  background-color: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.prop-tag {
+  background-color: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.reference-keyword-tag {
+  background-color: rgba(139, 92, 246, 0.1);
+  color: #8b5cf6;
+  border: 1px solid rgba(139, 92, 246, 0.2);
+}
+
+.reference-source-tag {
+  background-color: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+/* 편집 힌트 스타일 */
+.edit-hint {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  font-style: italic;
 }
 </style>

@@ -294,13 +294,6 @@
       @close="closeGenerationModal"
       @generated="handleGenerationSuccess"
     />
-    
-    <!-- 아바타 비디오 생성 모달 -->
-    <AvatarVideoGenerationModal
-      v-if="showAvatarGenerationModal"
-      @close="closeAvatarGenerationModal"
-      @generated="handleAvatarGenerationSuccess"
-    />
 
     <!-- 비디오 상세보기 모달 -->
     <VideoDetailModal
@@ -372,7 +365,6 @@ import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { supabase } from '@/utils/supabase'
 import { useProductionStore } from '@/stores/production'
 import VideoGenerationModal from './VideoGenerationModal.vue'
-import AvatarVideoGenerationModal from './AvatarVideoGenerationModal.vue'
 import VideoDetailModal from './VideoDetailModal.vue'
 import VideoUpscaleModal from './VideoUpscaleModal.vue'
 import { Plus, Link, Download, Trash2, Loader, Clock, AlertCircle, Video, Star, Archive, ChevronLeft, ChevronRight, ChevronFirst, ChevronLast, CheckSquare, Square } from 'lucide-vue-next'
@@ -400,7 +392,6 @@ const totalCount = ref(0)
 const filterModel = ref('')
 const showKeptOnly = ref(false)
 const showGenerationModal = ref(false)
-const showAvatarGenerationModal = ref(false)
 const showDetailModal = ref(false)
 const showSceneModal = ref(false)
 const showUpscaleModal = ref(false)
@@ -608,18 +599,12 @@ const openGenerationModal = () => {
   showGenerationModal.value = true
 }
 
-const openAvatarGenerationModal = () => {
-  showAvatarGenerationModal.value = true
-}
 
 const closeGenerationModal = () => {
   showGenerationModal.value = false
   currentPrompt.value = ''
 }
 
-const closeAvatarGenerationModal = () => {
-  showAvatarGenerationModal.value = false
-}
 
 const handleGenerationSuccess = async (result) => {
   console.log('Video generation success:', result)
@@ -635,19 +620,6 @@ const handleGenerationSuccess = async (result) => {
   }
 }
 
-const handleAvatarGenerationSuccess = async (result) => {
-  console.log('Avatar video generation success:', result)
-  closeAvatarGenerationModal()
-  
-  // 즉시 비디오 목록 새로고침
-  await fetchVideos()
-  
-  // 처리 중인 비디오가 있으면 폴링 시작
-  if (result.status === 'processing' || result.status === 'pending') {
-    console.log('Starting polling for avatar video')
-    startPolling()
-  }
-}
 
 const handleVideoClick = (video) => {
   // 선택 모드일 때는 선택 토글
@@ -1435,7 +1407,6 @@ const toggleKeptView = async (showKept) => {
 // Expose method for parent component
 defineExpose({
   openGenerationModal,
-  openAvatarGenerationModal,
   setFilterModel,
   filterModel,
   toggleKeptView,
