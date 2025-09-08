@@ -82,12 +82,4 @@
 [functions.analyze-script]
   environment = { SUPABASE_URL = "", SUPABASE_SERVICE_ROLE_KEY = "", VITE_SUPABASE_URL = "", GENERATIVE_LANGUAGE_API_KEY = "" }
 
-# 구글 드라이브 백업 관련 함수들 - 전용 환경변수 지정
-[functions.backupToGoogleDrive]
-  environment = { SUPABASE_URL = "", SUPABASE_SERVICE_ROLE_KEY = "", GOOGLE_DRIVE_CLIENT_EMAIL = "", GOOGLE_DRIVE_PRIVATE_KEY = "", GOOGLE_DRIVE_PROJECT_ID = "", GOOGLE_DRIVE_FOLDER_ID = "" }
-
-[functions.backupToGoogleDriveOAuth]
-  environment = { SUPABASE_URL = "", SUPABASE_SERVICE_ROLE_KEY = "", GOOGLE_DRIVE_CLIENT_ID = "", GOOGLE_DRIVE_CLIENT_EMAIL = "", GOOGLE_DRIVE_PRIVATE_KEY = "", GOOGLE_DRIVE_PROJECT_ID = "", GOOGLE_DRIVE_FOLDER_ID = "" }
-
-[functions.syncGoogleDrive]
-  environment = { SUPABASE_URL = "", SUPABASE_SERVICE_ROLE_KEY = "", GOOGLE_DRIVE_CLIENT_EMAIL = "", GOOGLE_DRIVE_PRIVATE_KEY = "", GOOGLE_DRIVE_PROJECT_ID = "", GOOGLE_DRIVE_FOLDER_ID = "" }
+# 구글 드라이브 백업 기능은 제거됨 (Supabase Storage 사용)
