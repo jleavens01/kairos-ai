@@ -166,15 +166,37 @@ const connectToScene = async () => {
     }
     
     // 2. 현재 미디어의 production_sheet_id 업데이트
-    const { error: mediaError } = await supabase
+    console.log('=== 미디어 테이블 업데이트 시작 ===')
+    console.log('테이블:', mediaTable)
+    console.log('미디어 ID:', props.media.id)
+    console.log('씬 ID:', selectedSceneId.value)
+    
+    const { data: mediaUpdateResult, error: mediaError } = await supabase
       .from(mediaTable)
       .update({
         production_sheet_id: selectedSceneId.value,
         updated_at: new Date().toISOString()
       })
       .eq('id', props.media.id)
+      .select()
     
-    if (mediaError) throw mediaError
+    console.log('미디어 업데이트 결과:', {
+      result: mediaUpdateResult,
+      error: mediaError
+    })
+    
+    if (mediaError) {
+      console.error('미디어 업데이트 실패:', mediaError)
+      throw mediaError
+    }
+    
+    // 업데이트 후 확인
+    const { data: verifyData } = await supabase
+      .from(mediaTable)
+      .select('id, production_sheet_id')
+      .eq('id', props.media.id)
+    
+    console.log('업데이트 후 확인:', verifyData)
     
     emit('success', {
       sceneId: selectedSceneId.value,

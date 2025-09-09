@@ -13,8 +13,8 @@
             <label class="inline-label">AI 모델</label>
             <select v-model="selectedModel" class="form-select model-select">
               <option value="veo2">🎬 Google Veo 2</option>
-              <option value="veo3">🚀 Google Veo 3 Preview</option>
-              <option value="veo3-fast">⚡ Google Veo 3 Fast Preview</option>
+              <option value="veo3">🚀 Google Veo 3</option>
+              <option value="veo3-fast">⚡ Google Veo 3 Fast</option>
               <option value="kling2.1">🎥 Kling AI 2.1 Pro</option>
               <option value="hailou02-standard">📹 MiniMax Hailou 02 Standard</option>
               <option value="hailou02-pro">🎞️ MiniMax Hailou 02 Pro</option>
@@ -328,9 +328,9 @@
             </div>
           </div>
 
-          <!-- Veo 3 Preview 파라미터 -->
+          <!-- Veo 3 파라미터 -->
           <div v-else-if="selectedModel === 'veo3'" class="parameter-group">
-            <h4>Google Veo 3 Preview 설정</h4>
+            <h4>Google Veo 3 설정</h4>
             <div class="form-group inline-group">
               <label class="inline-label">화면 비율</label>
               <select v-model="veo3Params.aspectRatio" class="form-select">
@@ -347,9 +347,9 @@
             </div>
           </div>
 
-          <!-- Veo 3 Fast Preview 파라미터 -->
+          <!-- Veo 3 Fast 파라미터 -->
           <div v-else-if="selectedModel === 'veo3-fast'" class="parameter-group">
-            <h4>Google Veo 3 Fast Preview 설정</h4>
+            <h4>Google Veo 3 Fast 설정</h4>
             <div class="form-group inline-group">
               <label class="inline-label">화면 비율</label>
               <select v-model="veo3FastParams.aspectRatio" class="form-select">

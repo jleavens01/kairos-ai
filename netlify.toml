@@ -11,8 +11,8 @@
 [build.environment]
   NODE_VERSION = "20"
   # 빌드 시에는 Vite 환경 변수만 필요 (클라이언트 사이드)
-  VITE_SUPABASE_URL = ""
-  VITE_SUPABASE_ANON_KEY = ""
+  VITE_SUPABASE_URL = "https://kqlqkuikfipsmskewvye.supabase.co"
+  VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxbHFrdWlrZmlwc21za2V3dnllIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ1NDIxMzEsImV4cCI6MjA3MDExODEzMX0.Ryd37TN6KweY8HpYdXjbP522jmasnVLIGc16Gbl9Xso"
 
 [dev]
   # 'netlify dev' 명령어를 실행할 때 사용되는 로컬 개발 서버 명령어입니다.
@@ -53,33 +53,4 @@
   timeout = 60000
   format = "esm"
 
-# 주요 함수들에 대해 환경 변수 명시적 지정 (4KB 제한 준수)
-[functions.storyboardGenerator]
-  environment = { SUPABASE_URL = "", SUPABASE_SERVICE_ROLE_KEY = "", VITE_SUPABASE_URL = "", FAL_API_KEY = "" }
-
-[functions.generateVideoAsync]
-  environment = { SUPABASE_URL = "", SUPABASE_SERVICE_ROLE_KEY = "", VITE_SUPABASE_URL = "", FAL_API_KEY = "", GENERATIVE_LANGUAGE_API_KEY = "" }
-
-[functions.generateGptImage]
-  environment = { SUPABASE_URL = "", SUPABASE_SERVICE_ROLE_KEY = "", VITE_SUPABASE_URL = "", OPENAI_API_KEY = "" }
-
-[functions.generateFluxImage]
-  environment = { SUPABASE_URL = "", SUPABASE_SERVICE_ROLE_KEY = "", VITE_SUPABASE_URL = "", FAL_API_KEY = "" }
-
-[functions.check-job-status]
-  environment = { FAL_API_KEY = "" }
-
-[functions.checkApiKeys]
-  environment = { SUPABASE_URL = "", SUPABASE_SERVICE_ROLE_KEY = "" }
-
-# 원고 분석 함수들
-[functions.analyze-script-quick]
-  environment = { SUPABASE_URL = "", SUPABASE_SERVICE_ROLE_KEY = "", VITE_SUPABASE_URL = "", GENERATIVE_LANGUAGE_API_KEY = "" }
-
-[functions.analyze-script-async]
-  environment = { SUPABASE_URL = "", SUPABASE_SERVICE_ROLE_KEY = "", VITE_SUPABASE_URL = "", GENERATIVE_LANGUAGE_API_KEY = "" }
-
-[functions.analyze-script]
-  environment = { SUPABASE_URL = "", SUPABASE_SERVICE_ROLE_KEY = "", VITE_SUPABASE_URL = "", GENERATIVE_LANGUAGE_API_KEY = "" }
-
-# 구글 드라이브 백업 기능은 제거됨 (Supabase Storage 사용)
+# 함수별 환경변수 설정 제거 - Netlify UI에서 설정된 환경변수 사용

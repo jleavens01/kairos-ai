@@ -420,33 +420,45 @@
                 
                 <!-- TTS가 있을 때 -->
                 <template v-else>
+                  <!-- 검증 실패 시 경고 표시 -->
+                  <div v-if="ttsData[scene.id]?.validation_failed" class="tts-validation-warning">
+                    ⚠️ 로드 실패
+                  </div>
+                  
                   <button 
                     @click="playTTS(scene.id)"
                     class="tts-play-btn"
-                    :class="{ 'playing': playingTTS[scene.id] }"
+                    :class="{ 
+                      'playing': playingTTS[scene.id],
+                      'validation-failed': ttsData[scene.id]?.validation_failed
+                    }"
+                    :disabled="ttsData[scene.id]?.validation_failed"
+                    :title="ttsData[scene.id]?.validation_failed ? 'TTS 파일을 로드할 수 없습니다' : '재생'"
                   >
                     <Pause v-if="playingTTS[scene.id]" :size="14" />
                     <Play v-else :size="14" />
                   </button>
                   
-                  <span class="tts-duration" v-if="ttsData[scene.id]?.duration">
+                  <span class="tts-duration" v-if="ttsData[scene.id]?.duration && !ttsData[scene.id]?.validation_failed">
                     {{ formatDuration(ttsData[scene.id].duration) }}
                   </span>
                   
                   <button 
                     @click="generateTTS(scene, true)"
                     class="tts-regenerate-btn"
+                    :class="{ 'validation-failed-regenerate': ttsData[scene.id]?.validation_failed }"
                     :disabled="loadingTTS[scene.id]"
-                    title="재생성"
+                    :title="ttsData[scene.id]?.validation_failed ? '파일 재생성 권장' : '재생성'"
                   >
                     <span v-if="loadingTTS[scene.id]" class="loading-spinner-small"></span>
-                    <span v-else>재생성</span>
+                    <span v-else>{{ ttsData[scene.id]?.validation_failed ? '재생성' : '재생성' }}</span>
                   </button>
                   
                   <button 
                     @click="downloadTTS(scene)"
                     class="tts-download-btn"
-                    title="다운로드"
+                    :disabled="ttsData[scene.id]?.validation_failed"
+                    :title="ttsData[scene.id]?.validation_failed ? '다운로드 불가' : '다운로드'"
                   >
                     <Download :size="14" />
                   </button>
@@ -1931,12 +1943,56 @@ const downloadBatchVideos = async () => {
     return
   }
   
+  // 선택된 씬의 비디오 데이터 가져오기 (업스케일 비디오 포함)
+  const { data: videoData, error: videoError } = await supabase
+    .from('gen_videos')
+    .select('scene_id, storage_video_url, upscale_video_url, upscale_status, upscale_factor')
+    .in('scene_id', props.selectedScenes)
+  
+  if (videoError) {
+    console.error('비디오 데이터 로드 실패:', videoError)
+    alert('비디오 데이터를 불러오는데 실패했습니다.')
+    return
+  }
+  
+  // 각 씬의 최적 비디오 찾기 (업스케일된 비디오 우선)
+  const bestVideoByScene = {}
+  if (videoData) {
+    videoData.forEach(video => {
+      if (!bestVideoByScene[video.scene_id]) {
+        bestVideoByScene[video.scene_id] = video
+      } else {
+        const currentVideo = bestVideoByScene[video.scene_id]
+        // 업스케일된 비디오가 있으면 우선적으로 사용
+        if (video.upscale_video_url && video.upscale_status === 'completed') {
+          bestVideoByScene[video.scene_id] = video
+        } else if (!currentVideo.upscale_video_url && video.storage_video_url) {
+          bestVideoByScene[video.scene_id] = video
+        }
+      }
+    })
+  }
+  
   // 선택된 씬들 중 비디오가 있는 씬만 필터링
   const scenesWithVideos = props.scenes.filter(scene => {
-    // 선택된 씬이고 비디오 URL이 존재하며 유효한 경우만 포함
-    return props.selectedScenes.includes(scene.id) && 
-           scene.scene_video_url && 
-           scene.scene_video_url.trim() !== ''
+    if (!props.selectedScenes.includes(scene.id)) return false
+    
+    const video = bestVideoByScene[scene.id]
+    const videoUrl = video?.upscale_video_url || video?.storage_video_url || scene.scene_video_url
+    
+    return videoUrl && videoUrl.trim() !== ''
+  }).map(scene => {
+    const video = bestVideoByScene[scene.id]
+    const videoUrl = video?.upscale_video_url || video?.storage_video_url || scene.scene_video_url
+    const isUpscaled = !!(video?.upscale_video_url && video?.upscale_status === 'completed')
+    const upscaleFactor = video?.upscale_factor || null
+    
+    return {
+      ...scene,
+      bestVideoUrl: videoUrl,
+      isUpscaled: isUpscaled,
+      upscaleFactor: upscaleFactor
+    }
   })
   
   if (scenesWithVideos.length === 0) {
@@ -1964,13 +2020,13 @@ const downloadBatchVideos = async () => {
     const downloadPromises = scenesWithVideos.map(async (scene) => {
       try {
         // 비디오 URL이 없거나 유효하지 않은 경우 건너뛰기
-        if (!scene.scene_video_url) {
+        if (!scene.bestVideoUrl) {
           console.log(`Scene ${scene.scene_number}: No video URL available`)
           return { success: false, sceneNumber: scene.scene_number, error: 'No video URL' }
         }
 
         // CORS 문제를 피하기 위한 fetch 옵션 설정
-        const response = await fetch(scene.scene_video_url, {
+        const response = await fetch(scene.bestVideoUrl, {
           mode: 'cors',
           credentials: 'omit',
           cache: 'no-cache'
@@ -1987,12 +2043,14 @@ const downloadBatchVideos = async () => {
           throw new Error('Empty or invalid video file')
         }
         
-        const fileName = `video_${projectName}_${scene.scene_number}.mp4`
+        // 업스케일 표시를 포함한 파일명 생성
+        const upscaleTag = scene.isUpscaled ? `-upscaled-${scene.upscaleFactor || '4x'}` : ''
+        const fileName = `video_${projectName}_${scene.scene_number}${upscaleTag}.mp4`
         
         // ZIP에 파일 추가
         zip.file(fileName, blob)
         
-        return { success: true, sceneNumber: scene.scene_number }
+        return { success: true, sceneNumber: scene.scene_number, isUpscaled: scene.isUpscaled }
       } catch (error) {
         // 에러를 경고로 변경하여 다른 비디오 다운로드는 계속 진행
         console.warn(`Scene ${scene.scene_number} video download skipped:`, error.message)
@@ -2021,11 +2079,14 @@ const downloadBatchVideos = async () => {
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
     
-    // 결과 알림
+    // 결과 알림 (업스케일 정보 포함)
+    const upscaledCount = results.filter(r => r.value?.success && r.value?.isUpscaled).length
     if (failCount > 0) {
-      alert(`비디오 다운로드 완료: 성공 ${successCount}개, 실패 ${failCount}개`)
+      const upscaleMsg = upscaledCount > 0 ? ` (업스케일: ${upscaledCount}개)` : ''
+      alert(`비디오 다운로드 완료: 성공 ${successCount}개${upscaleMsg}, 실패 ${failCount}개`)
     } else {
-      alert(`${successCount}개 비디오 파일이 다운로드되었습니다.`)
+      const upscaleMsg = upscaledCount > 0 ? ` (업스케일: ${upscaledCount}개)` : ''
+      alert(`${successCount}개 비디오 파일이 다운로드되었습니다.${upscaleMsg}`)
     }
     
     // 선택 해제
@@ -2150,7 +2211,33 @@ const toggleSceneMediaType = (sceneId) => {
   console.log(`Scene ${sceneId} media type changed to: ${newType}`)
 }
 
-// TTS 파일 존재 여부 확인 (컴포넌트 마운트 시)
+// TTS 파일 검증 함수
+const validateTtsFile = async (audioUrl) => {
+  if (!audioUrl) return false
+  
+  try {
+    // HEAD 요청으로 파일 접근 가능성 확인
+    const response = await fetch(audioUrl, { method: 'HEAD' })
+    if (!response.ok) {
+      console.warn(`TTS 파일 접근 불가: ${audioUrl} (${response.status})`)
+      return false
+    }
+    
+    // Content-Type 확인 (오디오 파일인지)
+    const contentType = response.headers.get('content-type')
+    if (!contentType?.includes('audio')) {
+      console.warn(`TTS 파일이 아닌 형식: ${audioUrl} (${contentType})`)
+      return false
+    }
+    
+    return true
+  } catch (error) {
+    console.warn(`TTS 파일 검증 실패: ${audioUrl}`, error)
+    return false
+  }
+}
+
+// TTS 파일 존재 여부 확인 및 검증 (컴포넌트 마운트 시)
 const checkExistingTTS = async () => {
   if (!props.scenes.length) return
   
@@ -2172,14 +2259,32 @@ const checkExistingTTS = async () => {
       }
     })
     
-    // TTS 데이터 저장
-    Object.values(latestByScene).forEach(item => {
+    // TTS 데이터 저장 및 검증
+    let hasInvalidFiles = false
+    
+    for (const item of Object.values(latestByScene)) {
+      // TTS 파일 접근 가능성 검증
+      const isValid = await validateTtsFile(item.file_url)
+      
       ttsData.value[item.scene_id] = {
         file_url: item.file_url,
         duration: item.duration,
-        version: item.version
+        version: item.version,
+        validation_failed: !isValid
       }
-    })
+      
+      if (!isValid) {
+        hasInvalidFiles = true
+      }
+    }
+    
+    // 검증 실패한 파일이 있으면 알림 표시
+    if (hasInvalidFiles) {
+      console.warn('일부 TTS 파일을 로드할 수 없습니다.')
+      // 실패한 TTS 파일 개수 알림 (필요시 구현)
+      const failedCount = Object.values(ttsData.value).filter(item => item.validation_failed).length
+      console.log(`${failedCount}개의 TTS 파일 로드 실패`)
+    }
   }
 }
 
@@ -2918,6 +3023,25 @@ defineExpose({ deleteSelectedScenes })
   color: white;
 }
 
+.tts-play-btn.validation-failed {
+  background-color: #fee2e2;
+  border-color: #fca5a5;
+  color: #dc2626;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.tts-validation-warning {
+  font-size: 11px;
+  color: #dc2626;
+  background-color: #fef2f2;
+  border: 1px solid #fca5a5;
+  border-radius: 4px;
+  padding: 2px 6px;
+  margin-bottom: 4px;
+  text-align: center;
+}
+
 .tts-duration {
   font-size: 12px;
   color: var(--text-secondary);
@@ -2946,6 +3070,19 @@ defineExpose({ deleteSelectedScenes })
 .tts-regenerate-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.tts-regenerate-btn.validation-failed-regenerate {
+  background-color: #fef3c7;
+  border-color: #fbbf24;
+  color: #d97706;
+  font-weight: 600;
+}
+
+.tts-regenerate-btn.validation-failed-regenerate:hover:not(:disabled) {
+  background-color: #fbbf24;
+  border-color: #f59e0b;
+  color: white;
 }
 
 .tts-download-btn {

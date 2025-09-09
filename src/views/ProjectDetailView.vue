@@ -144,6 +144,15 @@
             />
           </div>
 
+          <!-- 내보내기 탭 -->
+          <div v-if="activeTab === 'export'" class="export-section">
+            <ExportView 
+              ref="exportViewRef"
+              :project-id="projectId"
+              :project="project"
+            />
+          </div>
+
           <!-- 설정 탭 -->
           <div v-if="activeTab === 'settings'" class="settings-section">
             <h3>프로젝트 설정</h3>
@@ -189,6 +198,7 @@ import ReferenceView from '@/views/ReferenceView.vue'
 import AIGenerationGallery from '@/components/generation/AIGenerationGallery.vue'
 import MediaView from '@/components/project/MediaView.vue'
 import AvatarView from '@/views/AvatarView.vue'
+import ExportView from '@/views/ExportView.vue'
 import { Archive } from 'lucide-vue-next'
 
 const route = useRoute()
@@ -214,6 +224,7 @@ const tabs = [
   { id: 'generate', label: '이미지', mobileLabel: '이미지' },
   { id: 'media', label: '비디오', mobileLabel: '비디오' },
   { id: 'avatar', label: '아바타', mobileLabel: '아바타' },
+  { id: 'export', label: '내보내기', mobileLabel: '내보내기' },
   { id: 'settings', label: '설정', mobileLabel: '⚙️' }
 ]
 
