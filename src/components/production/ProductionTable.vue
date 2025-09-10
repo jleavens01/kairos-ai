@@ -2144,14 +2144,20 @@ const downloadTTS = async (scene) => {
 
 // TTS 재생/일시정지 함수
 const playTTS = async (sceneId) => {
+  // 온디맨드 검증 실행
+  const tts = await validateOnDemand(sceneId)
+  if (!tts || !tts.file_url) {
+    alert('TTS 파일을 찾을 수 없습니다.')
+    return
+  }
+  
+  // 검증 실패한 파일 재생 방지
+  if (tts.validation_failed) {
+    alert('TTS 파일에 접근할 수 없습니다. 파일을 재생성해주세요.')
+    return
+  }
+  
   if (!audioElements.value[sceneId]) {
-    // ttsData에서 URL 가져오기
-    const tts = ttsData.value[sceneId]
-    if (!tts || !tts.file_url) {
-      alert('TTS 파일을 찾을 수 없습니다.')
-      return
-    }
-    
     audioElements.value[sceneId] = new Audio(tts.file_url)
   }
   
@@ -2211,13 +2217,23 @@ const toggleSceneMediaType = (sceneId) => {
   console.log(`Scene ${sceneId} media type changed to: ${newType}`)
 }
 
-// TTS 파일 검증 함수
-const validateTtsFile = async (audioUrl) => {
+// TTS 파일 검증 함수 (개선된 버전)
+const validateTtsFile = async (audioUrl, timeout = 5000) => {
   if (!audioUrl) return false
   
   try {
+    // 타임아웃과 함께 AbortController 사용
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), timeout)
+    
     // HEAD 요청으로 파일 접근 가능성 확인
-    const response = await fetch(audioUrl, { method: 'HEAD' })
+    const response = await fetch(audioUrl, { 
+      method: 'HEAD',
+      signal: controller.signal
+    })
+    
+    clearTimeout(timeoutId)
+    
     if (!response.ok) {
       console.warn(`TTS 파일 접근 불가: ${audioUrl} (${response.status})`)
       return false
@@ -2232,25 +2248,74 @@ const validateTtsFile = async (audioUrl) => {
     
     return true
   } catch (error) {
-    console.warn(`TTS 파일 검증 실패: ${audioUrl}`, error)
+    if (error.name === 'AbortError') {
+      console.warn(`TTS 파일 검증 타임아웃: ${audioUrl}`)
+    } else {
+      console.warn(`TTS 파일 검증 실패: ${audioUrl}`, error)
+    }
     return false
   }
 }
 
-// TTS 파일 존재 여부 확인 및 검증 (컴포넌트 마운트 시)
+// 배치 단위로 TTS 파일 검증 (부하 분산)
+const validateTtsFileBatch = async (items, batchSize = 3) => {
+  const results = []
+  
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize)
+    
+    // 배치 내에서 병렬 처리
+    const batchPromises = batch.map(async (item) => {
+      const isValid = await validateTtsFile(item.file_url, 3000) // 3초 타임아웃
+      return {
+        ...item,
+        validation_failed: !isValid
+      }
+    })
+    
+    const batchResults = await Promise.allSettled(batchPromises)
+    
+    // 결과 처리 및 에러 핸들링
+    batchResults.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        results.push(result.value)
+      } else {
+        // Promise 실패 시 기본값 설정
+        results.push({
+          ...batch[index],
+          validation_failed: true
+        })
+      }
+    })
+    
+    // 배치 간 대기 (Supabase Storage 부하 분산)
+    if (i + batchSize < items.length) {
+      await new Promise(resolve => setTimeout(resolve, 500)) // 0.5초 대기
+    }
+  }
+  
+  return results
+}
+
+// TTS 파일 존재 여부 확인 및 검증 (개선된 버전)
 const checkExistingTTS = async () => {
   if (!props.scenes.length) return
   
   const sceneIds = props.scenes.map(s => s.id)
   
-  // 각 씬의 최신 TTS 정보 가져오기
-  const { data } = await supabase
-    .from('tts_audio')
-    .select('scene_id, file_url, duration, version')
-    .in('scene_id', sceneIds)
-    .order('version', { ascending: false })
-  
-  if (data) {
+  try {
+    // 각 씬의 최신 TTS 정보 가져오기
+    const { data } = await supabase
+      .from('tts_audio')
+      .select('scene_id, file_url, duration, version')
+      .in('scene_id', sceneIds)
+      .order('version', { ascending: false })
+    
+    if (!data || data.length === 0) {
+      console.log('TTS 파일이 없습니다.')
+      return
+    }
+    
     // 각 씬의 최신 버전만 저장
     const latestByScene = {}
     data.forEach(item => {
@@ -2259,32 +2324,246 @@ const checkExistingTTS = async () => {
       }
     })
     
-    // TTS 데이터 저장 및 검증
-    let hasInvalidFiles = false
+    const latestItems = Object.values(latestByScene)
+    console.log(`${latestItems.length}개의 TTS 파일 검증 시작...`)
     
-    for (const item of Object.values(latestByScene)) {
-      // TTS 파일 접근 가능성 검증
-      const isValid = await validateTtsFile(item.file_url)
-      
+    // 배치 단위로 TTS 파일 검증
+    const validatedItems = await validateTtsFileBatch(latestItems, 3)
+    
+    // TTS 데이터 저장
+    let hasInvalidFiles = false
+    validatedItems.forEach(item => {
       ttsData.value[item.scene_id] = {
         file_url: item.file_url,
         duration: item.duration,
         version: item.version,
-        validation_failed: !isValid
+        validation_failed: item.validation_failed
       }
       
-      if (!isValid) {
+      if (item.validation_failed) {
         hasInvalidFiles = true
       }
+    })
+    
+    // 검증 결과 리포트
+    const failedCount = validatedItems.filter(item => item.validation_failed).length
+    const successCount = validatedItems.length - failedCount
+    
+    console.log(`TTS 파일 검증 완료: 성공 ${successCount}개, 실패 ${failedCount}개`)
+    
+    if (hasInvalidFiles) {
+      console.warn(`${failedCount}개의 TTS 파일을 로드할 수 없습니다.`)
     }
     
-    // 검증 실패한 파일이 있으면 알림 표시
-    if (hasInvalidFiles) {
-      console.warn('일부 TTS 파일을 로드할 수 없습니다.')
-      // 실패한 TTS 파일 개수 알림 (필요시 구현)
-      const failedCount = Object.values(ttsData.value).filter(item => item.validation_failed).length
-      console.log(`${failedCount}개의 TTS 파일 로드 실패`)
+  } catch (error) {
+    console.error('TTS 파일 검증 중 오류:', error)
+  }
+}
+
+// 선택적 TTS 검증 - 사용자가 실제로 재생할 때만 검증
+const validateOnDemand = async (sceneId) => {
+  const tts = ttsData.value[sceneId]
+  if (!tts || tts.validation_checked) return tts
+  
+  console.log(`TTS 파일 온디맨드 검증: ${sceneId}`)
+  const isValid = await validateTtsFile(tts.file_url, 3000)
+  
+  // 검증 결과 업데이트
+  ttsData.value[sceneId] = {
+    ...tts,
+    validation_failed: !isValid,
+    validation_checked: true
+  }
+  
+  return ttsData.value[sceneId]
+}
+
+// 배치 단위로 TTS 데이터 로딩 (큰 데이터셋 대응)
+const loadTtsDataInBatches = async (sceneIds, batchSize = 50) => {
+  const allData = []
+  
+  for (let i = 0; i < sceneIds.length; i += batchSize) {
+    const batch = sceneIds.slice(i, i + batchSize)
+    console.log(`TTS 데이터 배치 ${Math.floor(i/batchSize) + 1}/${Math.ceil(sceneIds.length/batchSize)} 로딩 중... (${batch.length}개)`)
+    
+    try {
+      const { data, error } = await supabase
+        .from('tts_audio')
+        .select('scene_id, file_url, duration, version')
+        .in('scene_id', batch)
+        .order('version', { ascending: false })
+        .limit(1000) // 배치당 최대 1000개
+      
+      if (error) {
+        console.error(`배치 ${Math.floor(i/batchSize) + 1} 로딩 오류:`, error)
+        continue
+      }
+      
+      if (data && data.length > 0) {
+        allData.push(...data)
+        console.log(`배치 ${Math.floor(i/batchSize) + 1} 완료: ${data.length}개 로드`)
+      }
+      
+      // 배치 간 짧은 대기 (DB 부하 분산)
+      if (i + batchSize < sceneIds.length) {
+        await new Promise(resolve => setTimeout(resolve, 200))
+      }
+      
+    } catch (error) {
+      console.error(`배치 ${Math.floor(i/batchSize) + 1} 처리 중 오류:`, error)
     }
+  }
+  
+  return allData
+}
+
+// 개선된 초기 로딩 (대용량 데이터 지원)
+const loadTtsDataOnly = async () => {
+  if (!props.scenes.length) return
+  
+  const sceneIds = props.scenes.map(s => s.id)
+  console.log(`${sceneIds.length}개 씬의 TTS 데이터 로딩 시작...`)
+  
+  try {
+    // 큰 데이터셋인 경우 배치 로딩
+    const allData = sceneIds.length > 100 ? 
+      await loadTtsDataInBatches(sceneIds, 50) :
+      await loadSingleBatch(sceneIds)
+    
+    if (allData && allData.length > 0) {
+      // 각 씬의 최신 버전만 저장 (개선된 로직)
+      const latestByScene = {}
+      
+      allData.forEach(item => {
+        const key = item.scene_id
+        if (!latestByScene[key] || item.version > latestByScene[key].version) {
+          latestByScene[key] = item
+        }
+      })
+      
+      // TTS 데이터 저장
+      let loadedCount = 0
+      Object.values(latestByScene).forEach(item => {
+        ttsData.value[item.scene_id] = {
+          file_url: item.file_url,
+          duration: item.duration,
+          version: item.version,
+          validation_failed: false,
+          validation_checked: false
+        }
+        loadedCount++
+      })
+      
+      // 로딩 결과 상세 리포트
+      const totalScenes = sceneIds.length
+      const loadedScenes = loadedCount
+      const missingCount = totalScenes - loadedScenes
+      
+      console.log(`TTS 데이터 로딩 완료:`)
+      console.log(`- 전체 씬: ${totalScenes}개`)
+      console.log(`- 로드된 TTS: ${loadedScenes}개`)
+      console.log(`- 누락된 TTS: ${missingCount}개`)
+      
+      if (missingCount > 0) {
+        console.warn(`${missingCount}개 씬에 TTS 데이터가 없습니다.`)
+        logMissingScenes(sceneIds, latestByScene)
+      }
+      
+    } else {
+      console.log('로드된 TTS 데이터가 없습니다.')
+    }
+  } catch (error) {
+    console.error('TTS 데이터 로딩 중 전체 오류:', error)
+  }
+}
+
+// 단일 배치 로딩 (소규모 데이터용)
+const loadSingleBatch = async (sceneIds) => {
+  const { data, error } = await supabase
+    .from('tts_audio')
+    .select('scene_id, file_url, duration, version')
+    .in('scene_id', sceneIds)
+    .order('version', { ascending: false })
+    .limit(2000) // 안전 제한
+  
+  if (error) throw error
+  return data || []
+}
+
+// 누락된 씬 로깅
+const logMissingScenes = (allSceneIds, loadedData) => {
+  const loadedSceneIds = new Set(Object.keys(loadedData))
+  const missingSceneIds = allSceneIds.filter(id => !loadedSceneIds.has(id))
+  
+  console.log('TTS가 없는 씬들:', missingSceneIds.slice(0, 10)) // 처음 10개만 표시
+  if (missingSceneIds.length > 10) {
+    console.log(`... 외 ${missingSceneIds.length - 10}개 더`)
+  }
+}
+
+// 누락된 TTS 재시도 로딩
+const retryMissingTts = async () => {
+  const sceneIds = props.scenes.map(s => s.id)
+  const loadedSceneIds = new Set(Object.keys(ttsData.value))
+  const missingSceneIds = sceneIds.filter(id => !loadedSceneIds.has(id))
+  
+  if (missingSceneIds.length === 0) {
+    console.log('모든 TTS 데이터가 로드되어 있습니다.')
+    return
+  }
+  
+  console.log(`${missingSceneIds.length}개의 누락된 TTS 재시도 로딩...`)
+  
+  try {
+    const retryData = await loadSingleBatch(missingSceneIds)
+    
+    if (retryData && retryData.length > 0) {
+      // 최신 버전 선택 및 저장
+      const latestByScene = {}
+      retryData.forEach(item => {
+        const key = item.scene_id
+        if (!latestByScene[key] || item.version > latestByScene[key].version) {
+          latestByScene[key] = item
+        }
+      })
+      
+      // TTS 데이터 추가
+      let recoveredCount = 0
+      Object.values(latestByScene).forEach(item => {
+        ttsData.value[item.scene_id] = {
+          file_url: item.file_url,
+          duration: item.duration,
+          version: item.version,
+          validation_failed: false,
+          validation_checked: false
+        }
+        recoveredCount++
+      })
+      
+      console.log(`재시도 완료: ${recoveredCount}개의 TTS 복구됨`)
+    }
+  } catch (error) {
+    console.error('TTS 재시도 로딩 오류:', error)
+  }
+}
+
+// TTS 로딩 상태 실시간 모니터링
+const monitorTtsLoading = () => {
+  const totalScenes = props.scenes.length
+  const loadedCount = Object.keys(ttsData.value).length
+  const percentage = totalScenes > 0 ? Math.round((loadedCount / totalScenes) * 100) : 0
+  
+  console.log(`TTS 로딩 진행률: ${loadedCount}/${totalScenes} (${percentage}%)`)
+  
+  // 로딩이 불완전한 경우 알림
+  if (totalScenes > 0 && percentage < 90) {
+    console.warn(`⚠️  TTS 로딩 불완전: ${100 - percentage}% 누락`)
+    
+    // 5초 후 자동 재시도
+    setTimeout(() => {
+      console.log('자동 재시도 실행...')
+      retryMissingTts()
+    }, 5000)
   }
 }
 
@@ -2317,10 +2596,25 @@ watch(() => props.scenes, () => {
   initSceneMediaTypes()
 }, { deep: true })
 
-// 컴포넌트 마운트 시 TTS 확인 및 폴링 시작
-onMounted(() => {
+// 컴포넌트 마운트 시 TTS 확인 및 폴링 시작 (대용량 데이터 지원)
+onMounted(async () => {
   initSceneMediaTypes() // 씬 미디어 타입 초기화
-  checkExistingTTS()
+  
+  // 개선된 TTS 데이터 로딩
+  await loadTtsDataOnly()
+  
+  // 로딩 완료 후 모니터링
+  setTimeout(() => {
+    monitorTtsLoading() // 로딩 상태 확인 및 자동 재시도
+  }, 2000)
+  
+  // 백그라운드에서 점진적 검증 (대용량인 경우 비활성화)
+  if (props.scenes.length <= 50) {
+    setTimeout(() => {
+      checkExistingTTS() // 소규모인 경우만 검증
+    }, 5000)
+  }
+  
   startPolling() // 자동 새로고침 시작
   document.addEventListener('click', handleClickOutside) // 드롭다운 외부 클릭 감지
 })

@@ -4,6 +4,7 @@ import { supabase } from '@/utils/supabase'
 export const useProjectsStore = defineStore('projects', {
   state: () => ({
     projects: [],
+    sharedProjects: [],
     currentProject: null,
     loading: false,
     error: null
@@ -159,6 +160,92 @@ export const useProjectsStore = defineStore('projects', {
         return { success: true, data }
       } catch (error) {
         console.error('Error fetching project:', error)
+        this.error = error.message
+        return { success: false, error: error.message }
+      } finally {
+        this.loading = false
+      }
+    },
+
+    async fetchSharedProjects() {
+      this.loading = true
+      this.error = null
+      
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) throw new Error('User not authenticated')
+
+        const { data, error } = await supabase
+          .from('project_shares')
+          .select(`
+            *,
+            projects!inner (
+              id,
+              name,
+              description,
+              thumbnail_url,
+              tags,
+              created_at,
+              updated_at,
+              user_id,
+              status
+            )
+          `)
+          .eq('shared_with_user_id', user.id)
+          .is('projects.deleted_at', null)
+          .order('created_at', { ascending: false })
+        
+        if (error) throw error
+        
+        // project_shares 데이터를 projects 형태로 변환
+        this.sharedProjects = (data || []).map(share => ({
+          ...share.projects,
+          is_owner: false,
+          permission_level: share.permission_level,
+          shared_by_user_id: share.shared_by_user_id,
+          share_id: share.id
+        }))
+        
+        return { success: true, data: this.sharedProjects }
+      } catch (error) {
+        console.error('Error fetching shared projects:', error)
+        this.error = error.message
+        return { success: false, error: error.message }
+      } finally {
+        this.loading = false
+      }
+    },
+
+    async shareProject(projectId, shareEmail, permissionLevel = 'editor') {
+      this.loading = true
+      this.error = null
+      
+      try {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) throw new Error('User not authenticated')
+
+        const response = await fetch('/.netlify/functions/shareProject', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`
+          },
+          body: JSON.stringify({
+            project_id: projectId,
+            share_email: shareEmail,
+            permission_level: permissionLevel
+          })
+        })
+
+        const result = await response.json()
+        
+        if (!response.ok) {
+          throw new Error(result.error || 'Failed to share project')
+        }
+        
+        return { success: true, data: result }
+      } catch (error) {
+        console.error('Error sharing project:', error)
         this.error = error.message
         return { success: false, error: error.message }
       } finally {

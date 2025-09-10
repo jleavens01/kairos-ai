@@ -21,35 +21,79 @@
       </button>
     </div>
 
-    <div v-else class="projects-grid">
-      <div v-for="project in projectsStore.sortedProjects" :key="project.id" class="project-card">
-        <div class="project-thumbnail">
-          <img v-if="project.thumbnail_url" :src="project.thumbnail_url" alt="프로젝트 썸네일" />
-          <div v-else class="placeholder-thumbnail">🎬</div>
-        </div>
-        <div class="project-info">
-          <h3 class="project-title">{{ project.name }}</h3>
-          <p class="project-description">{{ project.description || '설명이 없습니다' }}</p>
-          <div class="project-tags" v-if="project.tags && project.tags.length">
-            <span v-for="tag in project.tags" :key="tag" class="tag">{{ tag }}</span>
+    <div v-else>
+      <!-- 내 프로젝트 섹션 -->
+      <div class="projects-section">
+        <h2 class="section-title">내 프로젝트</h2>
+        <div class="projects-grid">
+          <div v-for="project in projectsStore.sortedProjects" :key="project.id" class="project-card">
+            <div class="project-thumbnail">
+              <img v-if="project.thumbnail_url" :src="project.thumbnail_url" alt="프로젝트 썸네일" />
+              <div v-else class="placeholder-thumbnail">🎬</div>
+            </div>
+            <div class="project-info">
+              <h3 class="project-title">{{ project.name }}</h3>
+              <p class="project-description">{{ project.description || '설명이 없습니다' }}</p>
+              <div class="project-tags" v-if="project.tags && project.tags.length">
+                <span v-for="tag in project.tags" :key="tag" class="tag">{{ tag }}</span>
+              </div>
+              <div class="project-meta">
+                <span class="project-date">{{ formatDate(project.created_at) }}</span>
+                <span class="project-status" :class="project.status">
+                  {{ getStatusText(project.status) }}
+                </span>
+              </div>
+            </div>
+            <div class="project-actions">
+              <button @click="openProject(project.id)" class="action-button">
+                열기
+              </button>
+              <button @click="handleEditProject(project.id)" class="action-button edit">
+                편집
+              </button>
+              <button @click="handleDeleteProject(project.id)" class="action-button delete">
+                삭제
+              </button>
+              <button @click="handleShareProject(project.id)" class="action-button share">
+                공유
+              </button>
+            </div>
           </div>
-          <div class="project-meta">
-            <span class="project-date">{{ formatDate(project.created_at) }}</span>
-            <span class="project-status" :class="project.status">
-              {{ getStatusText(project.status) }}
-            </span>
-          </div>
         </div>
-        <div class="project-actions">
-          <button @click="openProject(project.id)" class="action-button">
-            열기
-          </button>
-          <button @click="handleEditProject(project.id)" class="action-button edit">
-            편집
-          </button>
-          <button @click="handleDeleteProject(project.id)" class="action-button delete">
-            삭제
-          </button>
+      </div>
+
+      <!-- 공유받은 프로젝트 섹션 -->
+      <div v-if="projectsStore.sharedProjects.length > 0" class="projects-section">
+        <h2 class="section-title">공유받은 프로젝트</h2>
+        <div class="projects-grid">
+          <div v-for="project in projectsStore.sharedProjects" :key="project.id" class="project-card shared">
+            <div class="project-thumbnail">
+              <img v-if="project.thumbnail_url" :src="project.thumbnail_url" alt="프로젝트 썸네일" />
+              <div v-else class="placeholder-thumbnail">🎬</div>
+              <div class="shared-badge">공유됨</div>
+            </div>
+            <div class="project-info">
+              <h3 class="project-title">{{ project.name }}</h3>
+              <p class="project-description">{{ project.description || '설명이 없습니다' }}</p>
+              <div class="project-tags" v-if="project.tags && project.tags.length">
+                <span v-for="tag in project.tags" :key="tag" class="tag">{{ tag }}</span>
+              </div>
+              <div class="project-meta">
+                <span class="project-date">{{ formatDate(project.created_at) }}</span>
+                <span class="project-permission" :class="project.permission_level">
+                  {{ getPermissionText(project.permission_level) }}
+                </span>
+              </div>
+            </div>
+            <div class="project-actions">
+              <button @click="openProject(project.id)" class="action-button">
+                열기
+              </button>
+              <button v-if="project.permission_level === 'editor'" @click="handleEditProject(project.id)" class="action-button edit">
+                편집
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -86,7 +130,10 @@ const showCreateModal = ref(false);
 const showNicknameModal = ref(false);
 
 onMounted(async () => {
-  await projectsStore.fetchProjects();
+  await Promise.all([
+    projectsStore.fetchProjects(),
+    projectsStore.fetchSharedProjects()
+  ]);
   
   // 닉네임이 설정되지 않았으면 모달 표시
   if (profileStore.currentProfile && !profileStore.currentProfile.nickname) {
@@ -135,6 +182,30 @@ const getStatusText = (status) => {
     failed: '실패'
   };
   return statusMap[status] || status;
+};
+
+const getPermissionText = (permission) => {
+  const permissionMap = {
+    viewer: '뷰어',
+    editor: '편집자'
+  };
+  return permissionMap[permission] || permission;
+};
+
+const handleShareProject = (projectId) => {
+  const email = prompt('공유할 사용자의 이메일을 입력하세요:');
+  if (email && email.trim()) {
+    shareProject(projectId, email.trim());
+  }
+};
+
+const shareProject = async (projectId, email) => {
+  const result = await projectsStore.shareProject(projectId, email);
+  if (result.success) {
+    alert('프로젝트가 성공적으로 공유되었습니다.');
+  } else {
+    alert(`공유 실패: ${result.error}`);
+  }
 };
 </script>
 
@@ -234,6 +305,19 @@ const getStatusText = (status) => {
 .create-button-large:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(74, 222, 128, 0.3);
+}
+
+.projects-section {
+  margin-bottom: 50px;
+}
+
+.section-title {
+  font-size: 1.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 30px;
+  padding-left: 10px;
+  border-left: 4px solid var(--primary-color);
 }
 
 .projects-grid {
@@ -382,6 +466,46 @@ const getStatusText = (status) => {
 .action-button.delete:hover {
   background-color: var(--danger-color);
   border-color: var(--danger-color);
+}
+
+/* 공유 프로젝트 스타일 */
+.project-card.shared {
+  border: 2px solid var(--primary-color);
+  background: linear-gradient(135deg, var(--card-bg) 0%, rgba(74, 222, 128, 0.05) 100%);
+}
+
+.shared-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: var(--primary-color);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.project-permission {
+  background: var(--primary-color);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.project-permission.viewer {
+  background: var(--secondary-color);
+}
+
+.action-button.share {
+  background: var(--primary-color);
+  color: white;
+}
+
+.action-button.share:hover {
+  background: var(--primary-dark);
 }
 
 /* 모바일 반응형 */

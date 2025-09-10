@@ -43,37 +43,7 @@
       <h3>⚙️ 내보내기 설정</h3>
       
       <div class="settings-grid">
-        <div class="setting-group">
-          <h4>비디오 트림 방식</h4>
-          <div class="radio-group">
-            <label>
-              <input type="radio" v-model="exportSettings.videoTrimMode" value="start" />
-              앞부분 사용 (TTS 길이만큼)
-            </label>
-            <label>
-              <input type="radio" v-model="exportSettings.videoTrimMode" value="center" />
-              중간부분 사용
-            </label>
-            <label>
-              <input type="radio" v-model="exportSettings.videoTrimMode" value="smart" />
-              스마트 트림 (자동 최적화)
-            </label>
-          </div>
-        </div>
 
-        <div class="setting-group">
-          <h4>이미지 처리</h4>
-          <div class="checkbox-group">
-            <label>
-              <input type="checkbox" v-model="exportSettings.enableKenBurns" />
-              켄 번즈 효과 적용 (이미지 확대/축소)
-            </label>
-            <label>
-              <input type="checkbox" v-model="exportSettings.imageToVideo" />
-              이미지를 비디오로 변환
-            </label>
-          </div>
-        </div>
 
         <div class="setting-group">
           <h4>프로젝트 설정</h4>
@@ -88,13 +58,30 @@
           <div class="input-group">
             <label>해상도</label>
             <select v-model="exportSettings.resolution">
-              <option value="1920x1080">1920x1080 (Full HD 가로)</option>
               <option value="1080x1920">1080x1920 (Full HD 세로)</option>
-              <option value="3840x2160">3840x2160 (4K 가로)</option>
+              <option value="1920x1080">1920x1080 (Full HD 가로)</option>
               <option value="2160x3840">2160x3840 (4K 세로)</option>
-              <option value="1280x720">1280x720 (HD 가로)</option>
+              <option value="3840x2160">3840x2160 (4K 가로)</option>
               <option value="720x1280">720x1280 (HD 세로)</option>
+              <option value="1280x720">1280x720 (HD 가로)</option>
             </select>
+          </div>
+          <div class="input-group">
+            <label>비디오 트림 방식</label>
+            <div class="radio-group">
+              <label>
+                <input type="radio" v-model="exportSettings.videoTrimMode" value="start" />
+                앞부분 사용 (TTS 길이만큼)
+              </label>
+              <label>
+                <input type="radio" v-model="exportSettings.videoTrimMode" value="center" />
+                중간부분 사용
+              </label>
+              <label>
+                <input type="radio" v-model="exportSettings.videoTrimMode" value="smart" />
+                스마트 트림 (자동 최적화)
+              </label>
+            </div>
           </div>
           <div class="input-group">
             <label>자막 옵션</label>
@@ -135,94 +122,6 @@
             </div>
           </div>
           
-          <!-- 제목 트랙 설정 -->
-          <div class="input-group">
-            <label>제목 트랙</label>
-            <div class="checkbox-group">
-              <label class="checkbox-label">
-                <input 
-                  type="checkbox" 
-                  v-model="exportSettings.includeTitleTrack"
-                />
-                제목 텍스트 트랙 추가
-              </label>
-              <div v-if="exportSettings.includeTitleTrack" class="sub-options">
-                <div class="input-group">
-                  <label>제목 텍스트</label>
-                  <input
-                    type="text"
-                    v-model="exportSettings.titleText"
-                    :placeholder="project?.name || '제목을 입력하세요'"
-                    class="input-field"
-                  />
-                </div>
-                <div class="input-group">
-                  <label>제목 위치</label>
-                  <select v-model="exportSettings.titlePosition">
-                    <option value="0.1">상단</option>
-                    <option value="0.5">중앙</option>
-                    <option value="0.9">하단</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- 로고 트랙 설정 -->
-          <div class="input-group">
-            <label>로고 트랙</label>
-            <div class="checkbox-group">
-              <label class="checkbox-label">
-                <input 
-                  type="checkbox" 
-                  v-model="exportSettings.includeLogoTrack"
-                />
-                로고 이미지 트랙 추가
-              </label>
-              <div v-if="exportSettings.includeLogoTrack" class="sub-options">
-                <div class="input-group">
-                  <label>로고 이미지</label>
-                  <div class="logo-upload-section">
-                    <input
-                      type="file"
-                      ref="logoFileInput"
-                      accept="image/*"
-                      @change="handleLogoUpload"
-                      style="display: none"
-                    />
-                    <button 
-                      type="button" 
-                      @click="$refs.logoFileInput.click()"
-                      class="btn-secondary upload-btn"
-                    >
-                      {{ exportSettings.logoFile ? '로고 변경' : '로고 업로드' }}
-                    </button>
-                    <span v-if="exportSettings.logoFile" class="logo-filename">
-                      {{ exportSettings.logoFile.name }}
-                    </span>
-                  </div>
-                </div>
-                <div class="input-group">
-                  <label>로고 위치</label>
-                  <select v-model="exportSettings.logoPosition">
-                    <option value="top-left">좌상단</option>
-                    <option value="top-right">우상단</option>
-                    <option value="bottom-left">좌하단</option>
-                    <option value="bottom-right">우하단</option>
-                    <option value="center">중앙</option>
-                  </select>
-                </div>
-                <div class="input-group">
-                  <label>로고 크기</label>
-                  <select v-model="exportSettings.logoSize">
-                    <option value="small">작게 (10%)</option>
-                    <option value="medium">보통 (20%)</option>
-                    <option value="large">크게 (30%)</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          </div>
           <div class="input-group">
             <label>프레임레이트</label>
             <select v-model="exportSettings.frameRate">
@@ -414,7 +313,7 @@ const exportSettings = ref({
   enableKenBurns: true,
   imageToVideo: false,
   projectName: '',
-  resolution: '1920x1080',
+  resolution: '1080x1920',
   frameRate: '24',
   includeSceneScript: true,  // 씬별 오리지널 스크립트 자막
   splitSubtitles: false,     // 자막 분할 옵션
@@ -1496,7 +1395,7 @@ ${videoTrack.join('\n')}
           <locked>FALSE</locked>
         </track>`)
 
-  // 자막과 제목 텍스트 트랙 제거 (SRT 파일로 대체)
+  // XML 텍스트 트랙 제거 - SRT 파일만 사용하여 프리미어프로 안정성 확보
 
   // 로고 이미지 트랙  
   if (exportSettings.value.includeLogoTrack && logoTrack.length > 0) {
@@ -2659,6 +2558,10 @@ ${text}`
   box-shadow: var(--shadow-sm);
   border-left: 4px solid var(--primary-color);
   border: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 2rem;
 }
 
 .export-files h3 {
@@ -2683,6 +2586,10 @@ ${text}`
   gap: 2rem;
 }
 
+.export-info {
+  flex-grow: 1;
+}
+
 .export-info h4 {
   margin-bottom: 0.75rem;
 }
@@ -2700,8 +2607,10 @@ ${text}`
 
 .export-buttons {
   display: flex;
+  flex-direction: column;
   gap: 1rem;
   flex-shrink: 0;
+  min-width: 200px;
 }
 
 .btn-primary, .btn-secondary {

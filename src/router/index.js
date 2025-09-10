@@ -72,12 +72,6 @@ const router = createRouter({
       meta: { requiresAuth: true }
     },
     {
-      path: '/storyboard-lab',
-      name: 'storyboard-lab',
-      component: () => import('../views/StoryboardLabView.vue'),
-      meta: { requiresAuth: true }
-    },
-    {
       path: '/semoji',
       name: 'semoji',
       component: () => import('../views/ProductionView.vue'),
