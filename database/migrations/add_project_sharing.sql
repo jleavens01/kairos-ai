@@ -16,6 +16,10 @@ CREATE TABLE IF NOT EXISTS project_shares (
 -- RLS 정책 설정
 ALTER TABLE project_shares ENABLE ROW LEVEL SECURITY;
 
+-- 기존 정책이 있다면 삭제
+DROP POLICY IF EXISTS "프로젝트 소유자는 자신이 공유한 프로젝트를 관리할 수 있음" ON project_shares;
+DROP POLICY IF EXISTS "공유받은 사용자는 자신에게 공유된 프로젝트를 볼 수 있음" ON project_shares;
+
 -- 프로젝트 소유자는 자신이 공유한 프로젝트를 볼 수 있음
 CREATE POLICY "프로젝트 소유자는 자신이 공유한 프로젝트를 관리할 수 있음" ON project_shares
   FOR ALL USING (auth.uid() = shared_by_user_id);

@@ -57,17 +57,38 @@ export const useProductionStore = defineStore('production', {
       try {
         const { data, error } = await supabase
           .from('production_sheets')
-          .select('*')
+          .select(`
+            *,
+            tts_audio:tts_audio(file_url, voice_id, model_id, text, created_at)
+          `)
           .eq('project_id', projectId)
           .order('scene_number', { ascending: true })
 
         if (error) throw error
 
         // characters 필드가 null인 경우 빈 배열로 처리
+        // TTS 데이터 처리
         if (data) {
           data.forEach(sheet => {
             if (!sheet.characters) {
               sheet.characters = []
+            }
+            
+            // TTS 데이터가 있으면 tts_audio_url 필드에 추가
+            if (sheet.tts_audio && sheet.tts_audio.length > 0) {
+              // 가장 최신 TTS 선택 (created_at 기준)
+              const latestTTS = sheet.tts_audio.sort((a, b) => 
+                new Date(b.created_at) - new Date(a.created_at)
+              )[0]
+              sheet.tts_audio_url = latestTTS.file_url
+              sheet.tts_text = latestTTS.text
+              sheet.tts_voice_id = latestTTS.voice_id
+              sheet.tts_model_id = latestTTS.model_id
+            } else {
+              sheet.tts_audio_url = null
+              sheet.tts_text = null
+              sheet.tts_voice_id = null
+              sheet.tts_model_id = null
             }
           })
         }

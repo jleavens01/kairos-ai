@@ -111,6 +111,14 @@
       @close="showNicknameModal = false"
       @success="() => showNicknameModal = false"
     />
+
+    <!-- 프로젝트 공유 모달 -->
+    <ShareProjectModal
+      :show="showShareModal"
+      :project-id="shareProjectId"
+      @close="showShareModal = false"
+      @share="handleShareSubmit"
+    />
   </div>
 </template>
 
@@ -121,6 +129,7 @@ import { useProjectsStore } from '@/stores/projects';
 import { useProfileStore } from '@/stores/profile';
 import CreateProjectModal from '@/components/CreateProjectModal.vue';
 import NicknameSetupModal from '@/components/NicknameSetupModal.vue';
+import ShareProjectModal from '@/components/ShareProjectModal.vue';
 
 const router = useRouter();
 const projectsStore = useProjectsStore();
@@ -128,6 +137,8 @@ const profileStore = useProfileStore();
 
 const showCreateModal = ref(false);
 const showNicknameModal = ref(false);
+const showShareModal = ref(false);
+const shareProjectId = ref(null);
 
 onMounted(async () => {
   await Promise.all([
@@ -193,16 +204,15 @@ const getPermissionText = (permission) => {
 };
 
 const handleShareProject = (projectId) => {
-  const email = prompt('공유할 사용자의 이메일을 입력하세요:');
-  if (email && email.trim()) {
-    shareProject(projectId, email.trim());
-  }
+  showShareModal.value = true;
+  shareProjectId.value = projectId;
 };
 
-const shareProject = async (projectId, email) => {
-  const result = await projectsStore.shareProject(projectId, email);
+const handleShareSubmit = async (shareData) => {
+  const result = await projectsStore.shareProject(shareData.projectId, shareData.email, shareData.permission);
   if (result.success) {
     alert('프로젝트가 성공적으로 공유되었습니다.');
+    showShareModal.value = false;
   } else {
     alert(`공유 실패: ${result.error}`);
   }

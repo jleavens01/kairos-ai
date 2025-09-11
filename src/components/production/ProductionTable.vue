@@ -55,6 +55,99 @@
         </button>
       </div>
     </div>
+
+    <!-- TTS 플레이어 -->
+    <div v-if="showTTSPlayer" class="tts-player">
+      <div class="player-header">
+        <div class="track-info">
+          <h4>씬 {{ currentTrack?.sceneNumber }} - TTS 재생</h4>
+          <p>{{ currentTrack?.text?.substring(0, 60) }}{{ currentTrack?.text?.length > 60 ? '...' : '' }}</p>
+        </div>
+        <div class="playlist-info">
+          {{ playlistProgress.current }} / {{ playlistProgress.total }}
+        </div>
+        <button @click="closeTTSPlayer" class="close-player-btn">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      
+      <div class="player-controls">
+        <button @click="playPrevious" :disabled="currentTrackIndex === 0" class="control-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="19 20 9 12 19 4 19 20"></polygon>
+            <line x1="5" y1="19" x2="5" y2="5"></line>
+          </svg>
+        </button>
+        
+        <button @click="togglePlayPause" class="play-pause-btn">
+          <svg v-if="!isPlaying" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+          </svg>
+          <svg v-else width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="6" y="4" width="4" height="16"></rect>
+            <rect x="14" y="4" width="4" height="16"></rect>
+          </svg>
+        </button>
+        
+        <button @click="playNext" :disabled="currentTrackIndex === ttsPlaylist.length - 1" class="control-btn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="5 4 15 12 5 20 5 4"></polygon>
+            <line x1="19" y1="5" x2="19" y2="19"></line>
+          </svg>
+        </button>
+      </div>
+      
+      <div class="player-progress">
+        <span class="time-current">{{ formatTime(currentTime) }}</span>
+        <div class="progress-bar">
+          <div class="progress-fill" :style="{ width: duration ? (currentTime / duration * 100) + '%' : '0%' }"></div>
+        </div>
+        <span class="time-duration">{{ formatTime(duration) }}</span>
+      </div>
+      
+      <!-- 전체 플레이리스트 타임라인 -->
+      <div class="playlist-timeline">
+        <div class="timeline-header">
+          <h5>전체 타임라인</h5>
+          <div class="timeline-time">
+            {{ formatTime(playlistCurrentTime) }} / {{ formatTime(totalPlaylistDuration) }}
+          </div>
+        </div>
+        
+        <div class="timeline-container">
+          <div 
+            class="timeline-progress-bar" 
+            @click="onTimelineClick"
+            ref="timelineBarRef"
+          >
+            <div 
+              class="timeline-progress-fill" 
+              :style="{ width: totalPlaylistDuration ? (playlistCurrentTime / totalPlaylistDuration * 100) + '%' : '0%' }"
+            ></div>
+          </div>
+          
+          <!-- TTS 트랙 세그먼트 표시 -->
+          <div class="timeline-tracks">
+            <div 
+              v-for="(track, index) in ttsPlaylist" 
+              :key="track.id"
+              class="timeline-track"
+              :class="{ active: index === currentTrackIndex }"
+              :style="{ 
+                width: totalPlaylistDuration && track.duration ? (track.duration / totalPlaylistDuration * 100) + '%' : '0%' 
+              }"
+              @click="jumpToTrack(index)"
+              :title="`씬 ${track.sceneNumber}: ${track.text.substring(0, 50)}...`"
+            >
+              <span class="track-number">{{ track.sceneNumber }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
     
     <div class="production-table-container">
       <table class="production-table">
@@ -1477,16 +1570,33 @@ let currentAudioPlayer = null
 let ttsPlaylist = []
 let currentTrackIndex = 0
 
+// TTS 플레이어 상태
+const showTTSPlayer = ref(false)
+const isPlaying = ref(false)
+const isPaused = ref(false)
+const currentTrack = ref(null)
+const playlistProgress = ref({ current: 0, total: 0 })
+const currentTime = ref(0)
+const duration = ref(0)
+const totalPlaylistDuration = ref(0)
+const playlistCurrentTime = ref(0)
+
 const playBatchTTS = async () => {
   if (props.selectedScenes.length === 0) {
     alert('TTS를 들을 씬을 선택해주세요.')
     return
   }
   
+  console.log('선택된 씬들:', props.selectedScenes)
+  console.log('전체 씬 데이터:', props.scenes)
+  
   // 선택된 씬들 중 TTS가 있는 씬만 필터링
   const scenesWithTTS = []
   for (const sceneId of props.selectedScenes) {
     const scene = props.scenes.find(s => s.id === sceneId)
+    console.log(`씬 ${sceneId}:`, scene)
+    console.log(`TTS URL:`, scene?.tts_audio_url)
+    
     if (scene && scene.tts_audio_url) {
       scenesWithTTS.push({
         id: scene.id,
@@ -1496,6 +1606,8 @@ const playBatchTTS = async () => {
       })
     }
   }
+  
+  console.log('TTS가 있는 씬들:', scenesWithTTS)
   
   if (scenesWithTTS.length === 0) {
     // TTS가 없으면 먼저 생성하도록 안내
@@ -1513,6 +1625,13 @@ const playBatchTTS = async () => {
   ttsPlaylist = scenesWithTTS
   currentTrackIndex = 0
   
+  // 플레이어 UI 표시
+  showTTSPlayer.value = true
+  playlistProgress.value = { current: 1, total: scenesWithTTS.length }
+  
+  // 전체 재생 시간 계산
+  await calculateTotalDuration()
+  
   // 재생 시작
   playNextTrack()
 }
@@ -1520,26 +1639,40 @@ const playBatchTTS = async () => {
 const playNextTrack = () => {
   if (currentTrackIndex >= ttsPlaylist.length) {
     console.log('TTS 일괄 재생 완료')
+    closeTTSPlayer()
     return
   }
   
-  const currentTrack = ttsPlaylist[currentTrackIndex]
-  console.log(`재생 중: 씬 ${currentTrack.sceneNumber} - ${currentTrack.text.substring(0, 50)}...`)
+  const track = ttsPlaylist[currentTrackIndex]
+  console.log(`재생 중: 씬 ${track.sceneNumber} - ${track.text.substring(0, 50)}...`)
+  
+  // 현재 트랙 정보 업데이트
+  currentTrack.value = track
+  playlistProgress.value.current = currentTrackIndex + 1
+  currentTime.value = 0
+  duration.value = 0
   
   // 기존 플레이어 정리
   if (currentAudioPlayer) {
     currentAudioPlayer.pause()
     currentAudioPlayer.removeEventListener('ended', onTrackEnded)
     currentAudioPlayer.removeEventListener('error', onTrackError)
+    currentAudioPlayer.removeEventListener('timeupdate', onTimeUpdate)
+    currentAudioPlayer.removeEventListener('loadedmetadata', onLoadedMetadata)
   }
   
   // 새 오디오 플레이어 생성
-  currentAudioPlayer = new Audio(currentTrack.audioUrl)
+  currentAudioPlayer = new Audio(track.audioUrl)
   currentAudioPlayer.addEventListener('ended', onTrackEnded)
   currentAudioPlayer.addEventListener('error', onTrackError)
+  currentAudioPlayer.addEventListener('timeupdate', onTimeUpdate)
+  currentAudioPlayer.addEventListener('loadedmetadata', onLoadedMetadata)
   
   // 재생
-  currentAudioPlayer.play().catch(error => {
+  currentAudioPlayer.play().then(() => {
+    isPlaying.value = true
+    isPaused.value = false
+  }).catch(error => {
     console.error('Audio play error:', error)
     // 에러 발생 시 다음 트랙으로
     currentTrackIndex++
@@ -1558,13 +1691,172 @@ const onTrackError = (error) => {
   playNextTrack()
 }
 
-// 컴포넌트 언마운트 시 오디오 정리
-onUnmounted(() => {
+const onTimeUpdate = () => {
+  if (currentAudioPlayer) {
+    currentTime.value = currentAudioPlayer.currentTime
+    updatePlaylistCurrentTime()
+  }
+}
+
+const onLoadedMetadata = () => {
+  if (currentAudioPlayer) {
+    duration.value = currentAudioPlayer.duration
+  }
+}
+
+// 플레이어 제어 함수들
+const togglePlayPause = () => {
+  if (!currentAudioPlayer) return
+  
+  if (isPlaying.value) {
+    currentAudioPlayer.pause()
+    isPlaying.value = false
+    isPaused.value = true
+  } else {
+    currentAudioPlayer.play()
+    isPlaying.value = true
+    isPaused.value = false
+  }
+}
+
+const playPrevious = () => {
+  if (currentTrackIndex > 0) {
+    currentTrackIndex--
+    playNextTrack()
+  }
+}
+
+const playNext = () => {
+  if (currentTrackIndex < ttsPlaylist.length - 1) {
+    currentTrackIndex++
+    playNextTrack()
+  }
+}
+
+const closeTTSPlayer = () => {
+  showTTSPlayer.value = false
+  isPlaying.value = false
+  isPaused.value = false
+  currentTrack.value = null
+  
   if (currentAudioPlayer) {
     currentAudioPlayer.pause()
     currentAudioPlayer.removeEventListener('ended', onTrackEnded)
     currentAudioPlayer.removeEventListener('error', onTrackError)
+    currentAudioPlayer.removeEventListener('timeupdate', onTimeUpdate)
+    currentAudioPlayer.removeEventListener('loadedmetadata', onLoadedMetadata)
+    currentAudioPlayer = null
   }
+}
+
+const formatTime = (seconds) => {
+  if (!seconds || isNaN(seconds)) return '0:00'
+  const mins = Math.floor(seconds / 60)
+  const secs = Math.floor(seconds % 60)
+  return `${mins}:${secs.toString().padStart(2, '0')}`
+}
+
+// 전체 재생 시간 계산
+const calculateTotalDuration = async () => {
+  totalPlaylistDuration.value = 0
+  
+  const promises = ttsPlaylist.map((track, index) => {
+    return new Promise((resolve) => {
+      const audio = new Audio(track.audioUrl)
+      audio.addEventListener('loadedmetadata', () => {
+        if (audio.duration && !isNaN(audio.duration)) {
+          track.duration = audio.duration
+          totalPlaylistDuration.value += audio.duration
+        }
+        resolve()
+      })
+      audio.addEventListener('error', () => {
+        track.duration = 0
+        resolve()
+      })
+    })
+  })
+  
+  await Promise.all(promises)
+}
+
+// 플레이리스트 전체 진행 시간 업데이트
+const updatePlaylistCurrentTime = () => {
+  let elapsed = 0
+  
+  // 이전 트랙들의 시간 합계
+  for (let i = 0; i < currentTrackIndex; i++) {
+    if (ttsPlaylist[i].duration) {
+      elapsed += ttsPlaylist[i].duration
+    }
+  }
+  
+  // 현재 트랙의 진행 시간 추가
+  elapsed += currentTime.value
+  
+  playlistCurrentTime.value = elapsed
+}
+
+// 타임라인에서 특정 시간으로 점프
+const seekToPlaylistTime = (targetTime) => {
+  let elapsed = 0
+  let targetTrackIndex = 0
+  let targetTrackTime = 0
+  
+  // 목표 시간이 어느 트랙에 있는지 찾기
+  for (let i = 0; i < ttsPlaylist.length; i++) {
+    const trackDuration = ttsPlaylist[i].duration || 0
+    
+    if (elapsed + trackDuration >= targetTime) {
+      targetTrackIndex = i
+      targetTrackTime = targetTime - elapsed
+      break
+    }
+    
+    elapsed += trackDuration
+  }
+  
+  // 해당 트랙으로 이동
+  if (targetTrackIndex !== currentTrackIndex) {
+    currentTrackIndex = targetTrackIndex
+    playNextTrack()
+    
+    // 메타데이터 로드 후 시간 점프
+    setTimeout(() => {
+      if (currentAudioPlayer && targetTrackTime > 0) {
+        currentAudioPlayer.currentTime = targetTrackTime
+      }
+    }, 100)
+  } else if (currentAudioPlayer) {
+    currentAudioPlayer.currentTime = targetTrackTime
+  }
+}
+
+// 타임라인 클릭 이벤트
+const timelineBarRef = ref(null)
+
+const onTimelineClick = (event) => {
+  if (!timelineBarRef.value || !totalPlaylistDuration.value) return
+  
+  const rect = timelineBarRef.value.getBoundingClientRect()
+  const clickX = event.clientX - rect.left
+  const percentage = clickX / rect.width
+  const targetTime = percentage * totalPlaylistDuration.value
+  
+  seekToPlaylistTime(targetTime)
+}
+
+// 특정 트랙으로 점프
+const jumpToTrack = (trackIndex) => {
+  if (trackIndex === currentTrackIndex) return
+  
+  currentTrackIndex = trackIndex
+  playNextTrack()
+}
+
+// 컴포넌트 언마운트 시 오디오 정리
+onUnmounted(() => {
+  closeTTSPlayer()
 })
 
 const generateBatchTTS = async () => {
@@ -2726,6 +3018,7 @@ defineExpose({ deleteSelectedScenes })
 .btn-character,
 .btn-reference-keywords,
 .btn-tts,
+.btn-play-tts,
 .btn-download-tts {
   display: flex;
   align-items: center;
@@ -2739,6 +3032,10 @@ defineExpose({ deleteSelectedScenes })
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
+}
+
+.btn-play-tts {
+  background-color: #3b82f6;
 }
 
 .btn-download-tts {
@@ -2778,10 +3075,16 @@ defineExpose({ deleteSelectedScenes })
 .btn-character:hover,
 .btn-reference-keywords:hover,
 .btn-tts:hover,
+.btn-play-tts:hover,
 .btn-download-tts:hover {
   background-color: var(--primary-dark);
   transform: translateY(-1px);
   box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
+}
+
+.btn-play-tts:hover {
+  background-color: #2563eb;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
 }
 
 .btn-download-tts:hover {
@@ -3483,10 +3786,306 @@ input[type="checkbox"] {
   accent-color: var(--primary-color);
 }
 
+/* TTS 플레이어 스타일 */
+.tts-player {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(37, 99, 235, 0.05));
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.1);
+}
+
+.player-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.track-info h4 {
+  margin: 0 0 4px 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.track-info p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.playlist-info {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.close-player-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close-player-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.player-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.control-btn {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #3b82f6;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.control-btn:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.2);
+  transform: translateY(-1px);
+}
+
+.control-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.play-pause-btn {
+  background: #3b82f6;
+  border: none;
+  color: white;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+.play-pause-btn:hover {
+  background: #2563eb;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+.player-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.time-current,
+.time-duration {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-family: monospace;
+  min-width: 35px;
+}
+
+.progress-bar {
+  flex: 1;
+  height: 4px;
+  background: rgba(59, 130, 246, 0.2);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: #3b82f6;
+  border-radius: 2px;
+  transition: width 0.1s ease;
+}
+
+/* 플레이리스트 타임라인 스타일 */
+.playlist-timeline {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.timeline-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.timeline-header h5 {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.timeline-time {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-family: monospace;
+}
+
+.timeline-container {
+  position: relative;
+}
+
+.timeline-progress-bar {
+  height: 8px;
+  background: rgba(59, 130, 246, 0.2);
+  border-radius: 4px;
+  cursor: pointer;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+
+.timeline-progress-fill {
+  height: 100%;
+  background: #3b82f6;
+  border-radius: 4px;
+  transition: width 0.1s ease;
+}
+
+.timeline-tracks {
+  display: flex;
+  gap: 1px;
+  height: 24px;
+}
+
+.timeline-track {
+  background: rgba(59, 130, 246, 0.3);
+  border-radius: 2px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  min-width: 20px;
+  border: 1px solid transparent;
+}
+
+.timeline-track:hover {
+  background: rgba(59, 130, 246, 0.5);
+  transform: translateY(-1px);
+}
+
+.timeline-track.active {
+  background: #3b82f6;
+  border-color: #1d4ed8;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+}
+
+.track-number {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
 /* Mobile responsive */
 @media (max-width: 768px) {
   .production-table-wrapper {
     padding: 5px 2px;
+  }
+  
+  /* TTS 플레이어 모바일 스타일 */
+  .tts-player {
+    padding: 12px;
+  }
+  
+  .player-header {
+    flex-direction: column;
+    gap: 8px;
+    align-items: stretch;
+  }
+  
+  .track-info h4 {
+    font-size: 0.9rem;
+  }
+  
+  .track-info p {
+    font-size: 0.8rem;
+  }
+  
+  .playlist-info {
+    align-self: flex-start;
+  }
+  
+  .player-controls {
+    gap: 8px;
+  }
+  
+  .control-btn {
+    width: 36px;
+    height: 36px;
+  }
+  
+  .play-pause-btn {
+    width: 44px;
+    height: 44px;
+  }
+  
+  /* 타임라인 모바일 스타일 */
+  .playlist-timeline {
+    margin-top: 12px;
+    padding-top: 12px;
+  }
+  
+  .timeline-header {
+    flex-direction: column;
+    gap: 4px;
+    align-items: flex-start;
+  }
+  
+  .timeline-header h5 {
+    font-size: 0.8rem;
+  }
+  
+  .timeline-time {
+    font-size: 0.75rem;
+  }
+  
+  .timeline-tracks {
+    height: 20px;
+  }
+  
+  .timeline-track {
+    min-width: 16px;
+  }
+  
+  .track-number {
+    font-size: 0.6rem;
   }
   
   .production-table-container {

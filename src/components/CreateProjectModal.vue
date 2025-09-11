@@ -54,6 +54,7 @@
             />
           </div>
 
+          <!-- 공개 프로젝트 기능 비활성화
           <div class="form-group checkbox-group">
             <label class="checkbox-label">
               <input
@@ -63,6 +64,7 @@
               <span>공개 프로젝트로 설정</span>
             </label>
           </div>
+          -->
 
           <div v-if="error" class="error-message">
             {{ error }}

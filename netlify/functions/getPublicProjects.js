@@ -32,11 +32,13 @@ export const handler = async (event) => {
     // 페이지네이션 계산
     const offset = (page - 1) * limit;
 
+    // 공개 프로젝트 기능 비활성화 - 빈 결과 반환
     // 기본 쿼리 작성 (최소한의 컬럼만)
     let query = supabaseAdmin
       .from('projects')
       .select('id, name, description, thumbnail_url, tags, created_at, updated_at')
-      .is('deleted_at', null);
+      .is('deleted_at', null)
+      .eq('is_public', true); // 공개 프로젝트만 조회하지만 모든 프로젝트가 is_public=false이므로 빈 결과
 
     // 검색 필터 적용
     if (search.trim()) {
@@ -61,11 +63,12 @@ export const handler = async (event) => {
       throw projectsError;
     }
 
-    // 전체 개수 조회
+    // 전체 개수 조회 (공개 프로젝트만)
     const { count: totalCount } = await supabaseAdmin
       .from('projects')
       .select('id', { count: 'exact' })
-      .is('deleted_at', null);
+      .is('deleted_at', null)
+      .eq('is_public', true); // 공개 프로젝트만 카운트
 
     // 프로젝트 데이터 변환 (단순화)
     const transformedProjects = (projects || []).map(project => ({

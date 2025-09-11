@@ -44,6 +44,7 @@
               {{ downloadingBatch ? '다운로드 중...' : `선택된 ${selectedVideos.size}개 다운로드` }}
             </button>
             <button 
+              v-if="canEdit"
               @click="deleteSelectedVideos"
               class="btn-batch-delete"
             >
@@ -206,6 +207,7 @@
                   <Download :size="16" />
                 </button>
                 <button 
+                  v-if="canEdit"
                   @click.stop="deleteVideo(video)"
                   class="btn-delete"
                   title="삭제"
@@ -377,6 +379,10 @@ const props = defineProps({
   projectId: {
     type: String,
     required: true
+  },
+  canEdit: {
+    type: Boolean,
+    default: true
   }
 })
 

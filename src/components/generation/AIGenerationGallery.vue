@@ -158,6 +158,7 @@
                     <Link :size="16" />
                   </button>
                   <button 
+                    v-if="canEdit"
                     @click.stop="openTagEditor(item)"
                     class="btn-tags"
                     title="태그 편집"
@@ -172,6 +173,7 @@
                     <Download :size="16" />
                   </button>
                   <button 
+                    v-if="canEdit"
                     @click.stop="deleteImage(item)"
                     class="btn-delete"
                     title="삭제"
@@ -382,6 +384,10 @@ const props = defineProps({
   projectId: {
     type: String,
     required: true
+  },
+  canEdit: {
+    type: Boolean,
+    default: true
   }
 })
 const productionStore = useProductionStore()

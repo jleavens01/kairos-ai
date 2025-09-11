@@ -141,21 +141,54 @@ export const useProjectsStore = defineStore('projects', {
       this.error = null
       
       try {
-        const { data, error } = await supabase
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) throw new Error('User not authenticated')
+
+        // 먼저 소유한 프로젝트인지 확인
+        let { data, error } = await supabase
           .from('projects')
           .select('*')
           .eq('id', projectId)
           .single()
         
-        if (error) throw error
+        // 소유한 프로젝트가 아니라면 공유받은 프로젝트인지 확인
+        if (error) {
+          const { data: shareData, error: shareError } = await supabase
+            .from('project_shares')
+            .select(`
+              *,
+              projects!inner (*)
+            `)
+            .eq('project_id', projectId)
+            .eq('shared_with_user_id', user.id)
+            .single()
+          
+          if (shareError || !shareData) {
+            throw new Error('프로젝트에 접근할 권한이 없습니다.')
+          }
+          
+          // 공유받은 프로젝트 데이터 설정
+          data = {
+            ...shareData.projects,
+            is_owner: false,
+            permission_level: shareData.permission_level,
+            shared_by_user_id: shareData.shared_by_user_id
+          }
+        } else {
+          // 소유한 프로젝트인 경우
+          data.is_owner = true
+          data.permission_level = 'owner'
+        }
         
         this.currentProject = data
         
-        // last_accessed_at 업데이트
-        await supabase
-          .from('projects')
-          .update({ last_accessed_at: new Date().toISOString() })
-          .eq('id', projectId)
+        // last_accessed_at 업데이트 (소유자만)
+        if (data.is_owner) {
+          await supabase
+            .from('projects')
+            .update({ last_accessed_at: new Date().toISOString() })
+            .eq('id', projectId)
+        }
         
         return { success: true, data }
       } catch (error) {

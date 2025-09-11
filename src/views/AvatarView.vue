@@ -15,7 +15,7 @@
         </div>
         <h3>나만의 아바타 만들기</h3>
         <p>내 사진으로 나를 닮은 AI 아바타를 생성합니다</p>
-        <button @click="openPhotoAvatarModal" class="btn-primary-action">
+        <button v-if="canEdit" @click="openPhotoAvatarModal" class="btn-primary-action">
           <Plus :size="20" />
           Photo Avatar 생성
         </button>
@@ -28,7 +28,7 @@
         </div>
         <h3>기본 아바타로 시작</h3>
         <p>카이로스가 선별한 프로 아바타를 바로 사용하세요</p>
-        <button @click="showDefaultAvatars = true" class="btn-secondary-action">
+        <button v-if="canEdit" @click="showDefaultAvatars = true" class="btn-secondary-action">
           <Grid :size="20" />
           아바타 둘러보기
         </button>
@@ -64,6 +64,7 @@
           
           <div class="avatar-actions">
             <button 
+              v-if="canEdit"
               @click="createVideoWithAvatar(avatar)" 
               class="btn-use-avatar"
               :disabled="!isAvatarReady(avatar)"
@@ -71,7 +72,7 @@
               <Video :size="16" />
               비디오 만들기
             </button>
-            <button @click="deleteAvatar(avatar)" class="btn-icon delete">
+            <button v-if="canEdit" @click="deleteAvatar(avatar)" class="btn-icon delete">
               <Trash2 :size="16" />
             </button>
           </div>
@@ -127,6 +128,7 @@
         <div class="modal-actions">
           <button @click="showDefaultAvatars = false" class="btn-cancel">취소</button>
           <button 
+            v-if="canEdit"
             @click="useSelectedDefaultAvatar" 
             :disabled="!selectedDefaultAvatar || selectedDefaultAvatar.isPlaceholder"
             class="btn-confirm"
@@ -169,6 +171,10 @@ const props = defineProps({
   projectId: {
     type: String,
     required: true
+  },
+  canEdit: {
+    type: Boolean,
+    default: true
   }
 })
 

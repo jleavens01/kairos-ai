@@ -5,7 +5,7 @@
       <div class="empty-icon">📄</div>
       <h4>원고를 입력하여 스토리보드를 생성하세요</h4>
       <p>1단계: AI가 원고를 분석하여 씬을 나눕니다.<br>2단계: 선택된 씬에서 캐릭터를 추출합니다.</p>
-      <button @click="handleOpenScriptInput" class="btn-primary-large">
+      <button v-if="canEdit" @click="handleOpenScriptInput" class="btn-primary-large">
         원고 입력 시작
       </button>
     </div>
@@ -17,6 +17,7 @@
         :scenes="scenes"
         :selected-scenes="selectedScenes"
         :project-id="projectId"
+        :can-edit="canEdit"
         @update:selected="updateSelectedScenes"
         @edit-scene="handleEditScene"
         @add-scene="handleAddScene"
@@ -76,6 +77,10 @@ const props = defineProps({
   projectId: {
     type: String,
     required: true
+  },
+  canEdit: {
+    type: Boolean,
+    default: true
   }
 })
 

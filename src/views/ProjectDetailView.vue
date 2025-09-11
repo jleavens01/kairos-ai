@@ -31,17 +31,17 @@
             </button>
           </div>
           <div class="tabs-right">
-            <!-- 스토리보드 탭 액션 버튼 -->
+            <!-- 스토리보드 탭 액션 버튼 (편집 권한 필요) -->
             <button 
-              v-if="activeTab === 'production'"
+              v-if="activeTab === 'production' && canEdit"
               @click="handleOpenScriptInput" 
               class="tab-action-btn"
             >
               원고 입력
             </button>
-            <!-- 이미지 탭 액션 버튼 및 필터 -->
+            <!-- 이미지 탭 액션 버튼 및 필터 (편집 권한 필요) -->
             <button 
-              v-if="activeTab === 'generate'"
+              v-if="activeTab === 'generate' && canEdit && !showImageKeptOnly"
               @click="handleOpenImageGeneration" 
               class="tab-action-btn"
             >
@@ -54,7 +54,7 @@
               :class="{ active: showImageKeptOnly }"
             >
               <Archive :size="16" style="margin-right: 4px" />
-              {{ showImageKeptOnly ? '보관함' : '전체' }}
+              {{ showImageKeptOnly ? '나가기' : '보관함' }}
             </button>
             <select 
               v-if="activeTab === 'generate' && !showImageKeptOnly"
@@ -70,7 +70,7 @@
             </select>
             <!-- 비디오 탭 액션 버튼 및 필터 -->
             <button 
-              v-if="activeTab === 'media'"
+              v-if="activeTab === 'media' && canEdit && !showVideoKeptOnly"
               @click="handleOpenVideoGeneration" 
               class="tab-action-btn"
             >
@@ -83,7 +83,7 @@
               :class="{ active: showVideoKeptOnly }"
             >
               <Archive :size="16" style="margin-right: 4px" />
-              {{ showVideoKeptOnly ? '보관함' : '전체' }}
+              {{ showVideoKeptOnly ? '나가기' : '보관함' }}
             </button>
             <select 
               v-if="activeTab === 'media' && !showVideoKeptOnly"
@@ -107,6 +107,7 @@
             <ProductionSheet 
               ref="productionSheetRef"
               :project-id="projectId"
+              :can-edit="canEdit"
               @update="handleProductionUpdate"
             />
           </div>
@@ -116,6 +117,7 @@
             <ReferenceView 
               ref="referenceViewRef"
               :project-id="projectId"
+              :can-edit="canEdit"
               @materialSaved="handleMaterialSaved"
             />
           </div>
@@ -124,7 +126,8 @@
           <div v-if="activeTab === 'generate'" class="generate-section">
             <AIGenerationGallery 
               ref="imageGalleryRef"
-              :project-id="projectId" 
+              :project-id="projectId"
+              :can-edit="canEdit"
             />
           </div>
 
@@ -132,7 +135,8 @@
           <div v-if="activeTab === 'media'" class="media-section">
             <MediaView 
               ref="mediaViewRef"
-              :project-id="projectId" 
+              :project-id="projectId"
+              :can-edit="canEdit"
             />
           </div>
 
@@ -140,7 +144,8 @@
           <div v-if="activeTab === 'avatar'" class="avatar-section">
             <AvatarView 
               ref="avatarViewRef"
-              :project-id="projectId" 
+              :project-id="projectId"
+              :can-edit="canEdit"
             />
           </div>
 
@@ -156,8 +161,17 @@
           <!-- 설정 탭 -->
           <div v-if="activeTab === 'settings'" class="settings-section">
             <h3>프로젝트 설정</h3>
+            
+            <!-- 권한 정보 표시 -->
+            <div v-if="!isOwner" class="permission-info">
+              <div class="permission-badge" :class="project.permission_level">
+                {{ project.permission_level === 'editor' ? '편집자' : '뷰어' }}
+              </div>
+              <p>이 프로젝트는 다른 사용자가 공유한 프로젝트입니다.</p>
+            </div>
+            
             <div class="settings-form">
-              <div class="form-group">
+              <div v-if="canEdit" class="form-group">
                 <label>프로젝트 상태</label>
                 <select v-model="project.status" @change="updateStatus">
                   <option value="draft">초안</option>
@@ -167,12 +181,19 @@
                 </select>
               </div>
               
+              <div v-else class="form-group">
+                <label>프로젝트 상태</label>
+                <div class="readonly-field">{{ getStatusText(project.status) }}</div>
+              </div>
+              
+              <!-- 공개 프로젝트 기능 비활성화
               <div class="form-group">
                 <label>
                   <input type="checkbox" v-model="project.is_public" @change="updateVisibility">
                   공개 프로젝트로 설정
                 </label>
               </div>
+              -->
 
               <div v-if="project.share_token" class="share-section">
                 <label>공유 링크</label>
@@ -209,6 +230,13 @@ const project = computed(() => projectsStore.currentProject)
 const projectId = computed(() => route.params.id)
 const loading = ref(true)
 const error = ref('')
+
+// 권한 관련 computed 속성들
+const isOwner = computed(() => project.value?.is_owner === true || project.value?.permission_level === 'owner')
+const isEditor = computed(() => project.value?.permission_level === 'editor')
+const isViewer = computed(() => project.value?.permission_level === 'viewer')
+const canEdit = computed(() => isOwner.value || isEditor.value)
+const canView = computed(() => isOwner.value || isEditor.value || isViewer.value)
 
 // URL 쿼리에서 탭 상태 가져오기 (기본값: production)
 const getInitialTab = () => {
@@ -341,11 +369,12 @@ const updateStatus = async () => {
   })
 }
 
-const updateVisibility = async () => {
-  await projectsStore.updateProject(project.value.id, {
-    is_public: project.value.is_public
-  })
-}
+// 공개 프로젝트 기능 비활성화로 인해 제거됨
+// const updateVisibility = async () => {
+//   await projectsStore.updateProject(project.value.id, {
+//     is_public: project.value.is_public
+//   })
+// }
 
 const shareUrl = computed(() => {
   if (project.value?.share_token) {
@@ -819,6 +848,43 @@ const toggleVideoKeptView = () => {
     overflow-x: hidden;
     flex: 1;
     min-height: 0;
+  }
+
+  /* 권한 관련 스타일 */
+  .permission-info {
+    background: rgba(74, 222, 128, 0.1);
+    border: 1px solid rgba(74, 222, 128, 0.3);
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 20px;
+  }
+
+  .permission-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .permission-badge.editor {
+    background: var(--primary-color);
+    color: white;
+  }
+
+  .permission-badge.viewer {
+    background: var(--secondary-color);
+    color: white;
+  }
+
+  .readonly-field {
+    padding: 12px;
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    color: var(--text-secondary);
+    font-style: italic;
   }
 }
 </style>

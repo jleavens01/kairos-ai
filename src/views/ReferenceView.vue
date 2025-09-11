@@ -27,7 +27,8 @@
         
         <ReferenceGallery 
           :materials="searchResultsWithSaveStatus"
-          :show-save-button="true"
+          :show-save-button="canEdit"
+          :can-edit="canEdit"
           @save="handleSaveMaterial"
           @view="handleViewMaterial"
         />
@@ -51,6 +52,7 @@
           v-else
           :materials="referenceStore.materials"
           :show-save-button="false"
+          :can-edit="canEdit"
           @favorite="handleToggleFavorite"
           @delete="handleDeleteMaterial"
           @view="handleViewMaterial"
@@ -62,6 +64,7 @@
     <ReferenceDetailModal 
       v-if="showDetailModal"
       :material="selectedMaterial"
+      :can-edit="canEdit"
       @close="handleCloseDetail"
       @favorite="handleToggleFavorite"
       @delete="handleDeleteMaterial"
@@ -87,6 +90,10 @@ const props = defineProps({
   projectId: {
     type: String,
     required: true
+  },
+  canEdit: {
+    type: Boolean,
+    default: true
   }
 })
 

@@ -2,7 +2,8 @@
   <div class="media-view">
     <VideoGenerationGallery 
       ref="videoGalleryRef"
-      :project-id="projectId" 
+      :project-id="projectId"
+      :can-edit="canEdit"
     />
   </div>
 </template>
@@ -15,6 +16,10 @@ const props = defineProps({
   projectId: {
     type: String,
     required: true
+  },
+  canEdit: {
+    type: Boolean,
+    default: true
   }
 })
 
