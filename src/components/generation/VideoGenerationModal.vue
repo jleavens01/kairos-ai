@@ -1061,7 +1061,6 @@ const loadPresets = async () => {
         id,
         name,
         prompt,
-        description,
         media_type,
         sort_order
       `)
