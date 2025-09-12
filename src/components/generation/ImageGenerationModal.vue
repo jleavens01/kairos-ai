@@ -854,33 +854,42 @@ watch(selectedModel, (newModel) => {
 
 // Computed
 
-// 카테고리별 제안 리스트
+// 카테고리별 제안 리스트 (production_sheets에서 분석된 데이터 사용)
 const categorySuggestions = computed(() => {
-  if (category.value === 'character') {
-    // 캐릭터 제안
-    return [
-      '주인공', '친구', '멘토', '악역', '조연',
-      '아이', '청년', '중년', '노인',
-      '학생', '선생님', '회사원', '의사', '경찰',
-      '엄마', '아빠', '할머니', '할아버지'
-    ]
-  } else if (category.value === 'background') {
-    // 배경 제안
-    return [
-      '교실', '사무실', '집', '거리', '공원',
-      '카페', '식당', '병원', '학교', '회사',
-      '숲', '바다', '산', '하늘', '도시',
-      '밤거리', '일출', '일몰', '비오는날', '눈오는날'
-    ]
-  } else if (category.value === 'prop') {
-    // 소품 제안
-    return [
-      '책', '펜', '노트북', '휴대폰', '가방',
-      '안경', '시계', '열쇠', '지갑', '카메라',
-      '컵', '접시', '의자', '테이블', '침대',
-      '자동차', '자전거', '비행기', '배', '기차'
-    ]
+  // production_sheets에서 모든 assets 수집
+  const allAssets = {
+    characters: new Set(),
+    backgrounds: new Set(),
+    props: new Set()
   }
+  
+  // productionStore의 sheets에서 데이터 수집
+  productionStore.productionSheets.forEach(sheet => {
+    // 캐릭터 수집
+    if (sheet.characters && Array.isArray(sheet.characters)) {
+      sheet.characters.forEach(char => allAssets.characters.add(char))
+    }
+    
+    // 배경 수집
+    if (sheet.backgrounds && Array.isArray(sheet.backgrounds)) {
+      sheet.backgrounds.forEach(bg => allAssets.backgrounds.add(bg))
+    }
+    
+    // 소품 수집
+    if (sheet.props && Array.isArray(sheet.props)) {
+      sheet.props.forEach(prop => allAssets.props.add(prop))
+    }
+  })
+  
+  // 카테고리에 따라 적절한 제안 반환
+  if (category.value === 'character') {
+    return Array.from(allAssets.characters).filter(Boolean).slice(0, 20) // 최대 20개
+  } else if (category.value === 'background') {
+    return Array.from(allAssets.backgrounds).filter(Boolean).slice(0, 20)
+  } else if (category.value === 'prop') {
+    return Array.from(allAssets.props).filter(Boolean).slice(0, 20)
+  }
+  
   return []
 })
 
@@ -2031,6 +2040,11 @@ onMounted(async () => {
   // 카테고리가 이미 scene이면 씬 목록 로드
   if (category.value === 'scene') {
     loadScenes()
+  }
+  
+  // production_sheets 데이터 로드 (캐릭터, 배경, 소품 제안용)
+  if (props.projectId && productionStore.productionSheets.length === 0) {
+    productionStore.fetchProductionSheets(props.projectId)
   }
 })
 </script>
