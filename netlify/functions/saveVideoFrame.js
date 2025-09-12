@@ -90,7 +90,7 @@ export const handler = async (event) => {
         custom_prompt: `Frame captured from video at ${frameTime} seconds`,
         generation_model: 'video-frame-capture',
         result_image_url: publicUrl,
-        storage_image_url: publicUrl,
+        
         thumbnail_url: publicUrl,
         metadata: {
           source_video_id: videoId,

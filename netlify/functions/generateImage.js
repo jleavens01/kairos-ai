@@ -266,7 +266,7 @@ export const handler = async (event) => {
           (characterName || prompt.substring(0, 100)),
         generation_status: 'completed',
         result_image_url: falResult.image_url,
-        storage_image_url: publicUrl,
+        
         thumbnail_url: publicUrl,
         prompt_used: prompt,
         generation_model: model,

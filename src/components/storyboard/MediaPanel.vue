@@ -61,7 +61,7 @@
               :title="image.element_name || image.prompt_used"
             >
               <img 
-                :src="image.thumbnail_url || image.storage_image_url || image.result_image_url" 
+                :src="image.result_image_url" 
                 :alt="image.element_name"
                 @error="handleImageError($event)"
               />
@@ -197,12 +197,20 @@ const loadMedia = async () => {
     // 이미지 로드 (is_kept가 true가 아닌 것만)
     const { data: imageData, error: imageError } = await supabase
       .from('gen_images')
-      .select('*')
+      .select(`
+        id,
+        result_image_url,
+        element_name,
+        image_type,
+        prompt_used,
+        tags,
+        created_at
+      `)
       .eq('project_id', props.projectId)
       .eq('generation_status', 'completed')
       .or('is_kept.is.null,is_kept.eq.false')  // is_kept가 null이거나 false인 것만
       .order('created_at', { ascending: false })
-      .limit(100)
+      .limit(50)
 
     if (!imageError && imageData) {
       images.value = imageData
@@ -211,12 +219,23 @@ const loadMedia = async () => {
     // 비디오 로드 (is_kept가 true가 아닌 것만)
     const { data: videoData, error: videoError } = await supabase
       .from('gen_videos')
-      .select('*')
+      .select(`
+        id,
+        result_video_url,
+        storage_video_url,
+        video_url,
+        thumbnail_url,
+        reference_image_url,
+        element_name,
+        prompt_used,
+        tags,
+        created_at
+      `)
       .eq('project_id', props.projectId)
       .eq('generation_status', 'completed')
       .or('is_kept.is.null,is_kept.eq.false')  // is_kept가 null이거나 false인 것만
       .order('created_at', { ascending: false })
-      .limit(50)
+      .limit(30)
 
     if (!videoError && videoData) {
       videos.value = videoData
@@ -240,11 +259,11 @@ const handleDragStart = (event, item, type) => {
     type: type,
     id: item.id,
     url: type === 'image' 
-      ? (item.storage_image_url || item.result_image_url)
+      ? item.result_image_url
       : (item.storage_video_url || item.result_video_url || item.video_url),
     thumbnailUrl: type === 'video' 
       ? (item.thumbnail_url || item.reference_image_url)
-      : (item.thumbnail_url || item.storage_image_url || item.result_image_url),
+      : item.result_image_url,
     name: item.element_name,
     prompt: item.prompt_used
   }

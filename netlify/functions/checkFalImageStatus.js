@@ -182,13 +182,45 @@ export const handler = async (event) => {
               console.error('Failed to save image to storage:', storageError);
             }
             
+            // 썸네일 생성 (Canvas API 사용)
+            let thumbnailUrl = null;
+            try {
+              // 원본 이미지를 다시 가져와서 썸네일 생성
+              if (storageUrl) {
+                const thumbnailBuffer = await generateThumbnail(uint8Array, 300, 300);
+                const thumbnailFileName = `thumb_${fileName}`;
+                const thumbnailPath = `gen-images/${imageRecord.project_id}/${imageRecord.image_type}/thumbs/${thumbnailFileName}`;
+                
+                const { error: thumbUploadError } = await supabaseAdmin
+                  .storage
+                  .from('projects')
+                  .upload(thumbnailPath, thumbnailBuffer, {
+                    contentType: 'image/jpeg',
+                    cacheControl: '3600',
+                    upsert: true
+                  });
+                
+                if (!thumbUploadError) {
+                  const { data: { publicUrl: thumbPublicUrl } } = supabaseAdmin
+                    .storage
+                    .from('projects')
+                    .getPublicUrl(thumbnailPath);
+                  thumbnailUrl = thumbPublicUrl;
+                  console.log('Thumbnail created:', thumbnailUrl);
+                }
+              }
+            } catch (thumbError) {
+              console.warn('Failed to create thumbnail:', thumbError);
+            }
+
             // DB 업데이트
             const { data: updatedRecord, error: updateError } = await supabaseAdmin
               .from('gen_images')
               .update({
                 generation_status: 'completed',
                 result_image_url: imageUrl,
-                storage_image_url: storageUrl,
+                thumbnail_url: thumbnailUrl,
+                backup_storage_url: storageUrl,
                 updated_at: new Date().toISOString()
               })
               .eq('id', imageId)

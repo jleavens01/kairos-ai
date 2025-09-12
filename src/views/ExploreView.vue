@@ -219,19 +219,37 @@ const loadExploreContent = async () => {
   loading.value = true;
   
   try {
-    // 공개 이미지 불러오기 (is_public 컬럼이 없으므로 일단 모든 이미지 가져오기)
+    // 공개 이미지 불러오기 - 특정 컬럼만 로드하여 성능 최적화
     const { data: images } = await supabase
       .from('gen_images')
-      .select('*')
+      .select(`
+        id,
+        result_image_url,
+        prompt_used,
+        image_type,
+        element_name,
+        created_at
+      `)
+      .eq('generation_status', 'completed')
       .order('created_at', { ascending: false })
-      .limit(50);
+      .limit(20);
     
-    // 공개 비디오 불러오기 (is_public 컬럼이 없으므로 일단 모든 비디오 가져오기)
+    // 공개 비디오 불러오기 - 특정 컬럼만 로드하여 성능 최적화
     const { data: videos } = await supabase
       .from('gen_videos')
-      .select('*')
+      .select(`
+        id,
+        result_video_url,
+        storage_video_url,
+        video_url,
+        thumbnail_url,
+        prompt_used,
+        element_name,
+        created_at
+      `)
+      .eq('generation_status', 'completed')
       .order('created_at', { ascending: false })
-      .limit(50);
+      .limit(20);
     
     // 데이터 병합 및 타입 추가
     const allContent = [

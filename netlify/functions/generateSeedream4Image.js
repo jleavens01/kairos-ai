@@ -283,7 +283,7 @@ async function pollImageStatus(imageId, requestId) {
           .update({
             generation_status: 'completed',
             result_image_url: imageUrl,
-            storage_image_url: imageUrl,
+            
             metadata: {
               ...currentImage?.metadata,
               completion_response: result.data || result,

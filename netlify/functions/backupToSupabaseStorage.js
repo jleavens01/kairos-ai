@@ -115,7 +115,7 @@ async function backupUpscaleVideos(limit = 5) {
       // DB 업데이트 - 백업 정보 및 실제 파일 크기 업데이트
       const updateData = {
         backup_storage_url: result.publicUrl,
-        backup_storage_path: result.storagePath,
+        
         backed_up_at: new Date().toISOString(),
         backup_status: 'completed'
       };
@@ -183,7 +183,7 @@ async function backupRegularVideos(limit = 10) {
       // DB 업데이트 - 백업 정보 및 실제 파일 크기 업데이트
       const updateData = {
         backup_storage_url: result.publicUrl,
-        backup_storage_path: result.storagePath,
+        
         backed_up_at: new Date().toISOString(),
         backup_status: 'completed'
       };
@@ -251,7 +251,7 @@ async function backupImages(limit = 20) {
       // DB 업데이트 - 백업 정보 및 실제 파일 크기 업데이트
       const updateData = {
         backup_storage_url: result.publicUrl,
-        backup_storage_path: result.storagePath,
+        
         backed_up_at: new Date().toISOString(),
         backup_status: 'completed'
       };

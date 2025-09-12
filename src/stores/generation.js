@@ -201,18 +201,61 @@ export const useGenerationStore = defineStore('generation', {
         // gen_videos 테이블에서 이미지와 비디오 로드
         const { data: genVideosData, error: genVideosError } = await supabase
           .from('gen_videos')
-          .select('*')
+          .select(`
+            id,
+            user_id,
+            project_id,
+            type,
+            status,
+            generation_status,
+            result_video_url,
+            thumbnail_url,
+            request_id,
+            credits_used,
+            metadata,
+            created_at,
+            updated_at,
+            is_kept
+          `)
           .eq('user_id', user.user.id)
           .order('created_at', { ascending: false })
+          .limit(50)
 
         if (genVideosError) throw genVideosError
 
         // gen_heygen_videos 테이블에서 아바타 비디오 로드
         const { data: heygenVideosData, error: heygenVideosError } = await supabase
           .from('gen_heygen_videos')
-          .select('*')
+          .select(`
+            id,
+            user_id,
+            project_id,
+            heygen_video_id,
+            callback_id,
+            avatar_id,
+            voice_id,
+            title,
+            input_text,
+            status,
+            result_url,
+            thumbnail_url,
+            dimension_width,
+            dimension_height,
+            background_type,
+            background_value,
+            voice_type,
+            voice_speed,
+            voice_emotion,
+            voice_locale,
+            generation_params,
+            credits_used,
+            error_message,
+            created_at,
+            updated_at
+          `)
           .eq('user_id', user.user.id)
           .order('created_at', { ascending: false })
+          .limit(30)
 
         if (heygenVideosError) throw heygenVideosError
 

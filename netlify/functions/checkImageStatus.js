@@ -229,7 +229,7 @@ Be specific and use commonly understood terms. Limit to 10-15 most relevant tags
           .update({
             generation_status: 'completed',
             result_image_url: imageUrl,
-            storage_image_url: publicUrl,
+            
             thumbnail_url: publicUrl,
             tags: allTags,
             metadata: {

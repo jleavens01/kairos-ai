@@ -29,6 +29,7 @@
     "openai": "^5.12.2",
     "pinia": "^3.0.3",
     "radix-vue": "^1.9.17",
+    "sharp": "^0.34.3",
     "tailwind-merge": "^3.3.1",
     "vite-plugin-cesium": "^1.2.23",
     "vue": "^3.5.17",

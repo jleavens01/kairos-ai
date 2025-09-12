@@ -34,7 +34,29 @@ export const handler = async (event) => {
   try {
     const webhookData = JSON.parse(event.body);
     console.log('=== FAL WEBHOOK DATA ===');
-    console.log('Full webhook data:', JSON.stringify(webhookData, null, 2));
+    // base64 데이터 등 민감한 정보는 제외하고 로그 출력
+    const safeWebhookData = {
+      request_id: webhookData.request_id,
+      status: webhookData.status,
+      output: webhookData.output ? {
+        ...webhookData.output,
+        // base64 이미지 데이터가 있으면 길이만 표시
+        ...(webhookData.output.image && typeof webhookData.output.image === 'string' && webhookData.output.image.startsWith('data:') 
+          ? { image: `[Base64 Data URL, length: ${webhookData.output.image.length}]` } 
+          : {}),
+        // images 배열 처리
+        ...(webhookData.output.images ? {
+          images: webhookData.output.images.map(img => 
+            typeof img === 'string' && img.startsWith('data:') 
+              ? `[Base64 Data URL, length: ${img.length}]`
+              : img
+          )
+        } : {})
+      } : webhookData.output,
+      result: webhookData.result,
+      data: webhookData.data
+    };
+    console.log('Safe webhook data:', JSON.stringify(safeWebhookData, null, 2));
     console.log('Request ID:', webhookData.request_id);
     console.log('Status:', webhookData.status);
     console.log('Has output:', !!webhookData.output);

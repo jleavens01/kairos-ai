@@ -126,9 +126,10 @@
               <!-- 성공한 이미지 표시 -->
               <LazyImage 
                 v-else
-                :src="item.thumbnail_url || item.storage_image_url || item.result_image_url" 
+                :src="getOptimizedImageUrl(item)" 
                 :alt="item.prompt_used || 'AI Generated Image'"
-                root-margin="200px"
+                :fallback-src="item.result_image_url"
+                root-margin="100px"
               />
               <div class="image-overlay-info">
                 <div class="info-top">
@@ -585,7 +586,7 @@ const characterImageMap = computed(() => {
       map.set(img.element_name, customCharacterImageMap.value.get(img.element_name))
       // Debug log removed
     } else if (!map.has(img.element_name)) {
-      const imageUrl = img.thumbnail_url || img.storage_image_url || img.result_image_url
+      const imageUrl = img.thumbnail_url || img.result_image_url
       map.set(img.element_name, imageUrl)
       // Debug log removed
     }
@@ -641,20 +642,39 @@ const characterSuggestions = computed(() => {
 })
 // 필터링된 이미지 목록 (모든 이미지 포함)
 const filteredImages = computed(() => {
+  console.log('🔍 필터링 시작 - 전체 이미지:', images.value.length)
+  
   // completed 또는 failed 상태의 모든 이미지 표시 (캐릭터 포함)
   let filtered = images.value.filter(img => {
     const isVisibleStatus = img.generation_status === 'completed' || img.generation_status === 'failed'
     return isVisibleStatus
   })
+  console.log('📊 상태 필터 후 (completed/failed):', filtered.length)
+  
   // 보관함 필터
   if (showKeptOnly.value) {
     filtered = filtered.filter(img => img.is_kept === true)
+    console.log('📦 보관함만 표시:', filtered.length)
   } else {
     filtered = filtered.filter(img => !img.is_kept) // 보관함이 아닐 때는 보관되지 않은 것만
+    console.log('🗂️ 보관되지 않은 이미지만:', filtered.length)
   }
+  
   if (filterCategory.value) {
     filtered = filtered.filter(img => img.image_type === filterCategory.value)
+    console.log(`🏷️ 카테고리 필터 (${filterCategory.value}):`, filtered.length)
   }
+  
+  console.log('✨ 최종 필터링된 이미지:', {
+    count: filtered.length,
+    samples: filtered.slice(0, 3).map(img => ({
+      id: img.id,
+      status: img.generation_status,
+      hasThumb: !!img.thumbnail_url,
+      hasResult: !!img.result_image_url
+    }))
+  })
+  
   return filtered
 })
 // 이미지 갤러리용 아이템 (제안 카드 제외)
@@ -721,7 +741,7 @@ const fetchImagesWithPagination = async ({ page, pageSize: size }) => {
     // 필요한 컬럼만 선택하여 성능 최적화
     const selectColumns = `
       id, project_id, user_id, element_name, image_type, generation_model,
-      result_image_url, storage_image_url, thumbnail_url, generation_status,
+      result_image_url, thumbnail_url, generation_status,
       style_name, style_id, is_kept, is_favorite, tags, production_sheet_id,
       scene_number, created_at, updated_at
     `
@@ -742,7 +762,17 @@ const fetchImagesWithPagination = async ({ page, pageSize: size }) => {
     const { data, error, count } = await query
       .order('created_at', { ascending: false })
       .range(from, to)
-    if (error) throw error
+    if (error) {
+      console.error('이미지 조회 쿼리 오류:', error)
+      throw error
+    }
+    
+    console.log('이미지 조회 결과:', {
+      count: data?.length || 0,
+      totalCount: count,
+      sampleData: data?.slice(0, 2)
+    })
+    
     return {
       data: data || [],
       count: count || 0,
@@ -770,7 +800,7 @@ const fetchCharacterImages = async () => {
   try {
     // 캐릭터 이미지만 효율적으로 가져오기 (필요한 컬럼만)
     const selectColumns = `
-      id, element_name, image_type, result_image_url, storage_image_url,
+      id, element_name, image_type, result_image_url,
       thumbnail_url, generation_status, style_name, is_kept, created_at
     `
     
@@ -794,16 +824,14 @@ const fetchCharacterImages = async () => {
 const fetchImages = async () => {
   loading.value = true
   try {
-    const from = (currentPage.value - 1) * pageSize.value
-    const to = from + pageSize.value - 1
+    console.log('🔍 이미지 로딩 시작')
     
-    // 1. AI 생성 이미지 조회 (gen_images)
-    let genImagesQuery = supabase
+    // 성능 개선: 쿼리 단순화 및 제한 추가
+    let query = supabase
       .from('gen_images')
       .select(`
         id,
         result_image_url,
-        storage_image_url,
         thumbnail_url,
         element_name,
         image_type,
@@ -815,77 +843,42 @@ const fetchImages = async () => {
         created_at
       `)
       .eq('project_id', props.projectId)
-    
-    // 보관함 필터 적용 (컬럼이 존재하는 경우에만)
-    // 임시로 비활성화하여 테스트
-    /*
-    if (showKeptOnly.value) {
-      genImagesQuery = genImagesQuery.eq('is_kept', true)
-    } else {
-      genImagesQuery = genImagesQuery.or('is_kept.is.null,is_kept.eq.false')
-    }
-    */
+      .in('generation_status', ['completed', 'failed'])
+      .order('created_at', { ascending: false })
+      .limit(50) // 타임아웃 방지를 위해 제한
     
     // 카테고리 필터 적용
     if (filterCategory.value) {
-      genImagesQuery = genImagesQuery.eq('image_type', filterCategory.value)
+      query = query.eq('image_type', filterCategory.value)
     }
     
-    const { data: genImages, error: genError } = await genImagesQuery
-      .order('created_at', { ascending: false })
+    // 보관함 필터 (단순화)
+    if (showKeptOnly.value) {
+      query = query.eq('is_kept', true)
+    }
+    
+    const { data: genImages, error: genError } = await query
     
     if (genError) throw genError
     
-    // 2. 저장된 자료 이미지 조회 (reference_materials - 이미지만)
-    let refImagesQuery = supabase
-      .from('reference_materials')
-      .select(`
-        id,
-        title,
-        image_url,
-        thumbnail_url,
-        created_at
-      `)
-      .eq('project_id', props.projectId)
-      .not('image_url', 'is', null) // 이미지가 있는 것만
+    console.log(`✅ 이미지 로딩 완료: ${genImages?.length || 0}개`)
     
-    // reference_materials는 보관함 필터 없음 (항상 표시)
-    // 카테고리 필터도 적용하지 않음 (자료는 별도 분류)
+    // 필터링 로직 단순화
+    let filteredImages = genImages || []
     
-    const { data: refImages, error: refError } = await refImagesQuery
-      .order('created_at', { ascending: false })
+    // 클라이언트 사이드 필터링으로 변경 (성능 개선)
+    if (!showKeptOnly.value) {
+      filteredImages = filteredImages.filter(img => !img.is_kept)
+    }
     
-    if (refError) throw refError
+    console.log(`📊 필터링 후: ${filteredImages.length}개`)
     
-    // 3. 저장된 자료를 gen_images 형식으로 변환
-    const convertedRefImages = (refImages || []).map(refImage => ({
-      id: `ref_${refImage.id}`, // 충돌 방지를 위해 접두사 추가
-      project_id: refImage.project_id,
-      image_type: 'reference', // 새로운 타입 추가
-      element_name: refImage.title,
-      prompt: refImage.title,
-      storage_image_url: refImage.storage_url,
-      thumbnail_url: refImage.thumbnail_url,
-      generation_status: 'completed',
-      created_at: refImage.created_at,
-      updated_at: refImage.updated_at,
-      is_kept: false,
-      // 자료 고유 필드
-      source_type: refImage.source_type,
-      source_url: refImage.source_url,
-      metadata: refImage.metadata,
-      is_reference: true // 자료인지 구분하는 플래그
-    }))
-    
-    // 4. 두 데이터 합치고 정렬
-    const allImages = [...(genImages || []), ...convertedRefImages]
-    allImages.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-    
-    // 5. 페이지네이션 적용
-    const paginatedImages = allImages.slice(from, from + pageSize.value)
+    // 페이지네이션
+    const from = (currentPage.value - 1) * pageSize.value
+    const paginatedImages = filteredImages.slice(from, from + pageSize.value)
     
     images.value = paginatedImages
-    totalCount.value = allImages.length
+    totalCount.value = filteredImages.length
     
     // 프로덕션 시트에서 캐릭터 확인
     const allCharacters = new Set()
@@ -1215,8 +1208,8 @@ const downloadImage = async (image) => {
     const sanitizedProjectName = projectName.replace(/[^a-zA-Z0-9가-힣]/g, '_')
     const timestamp = new Date().getTime()
     const fileName = `image_${sanitizedProjectName}${category}${characterName}${sceneNumber}_${timestamp}.png`
-    // 이미지 URL 선택 (우선순위: storage_image_url > result_image_url > image_url)
-    const imageUrl = image.storage_image_url || image.result_image_url || image.image_url
+    // 이미지 URL 선택 (우선순위: result_image_url > image_url)
+    const imageUrl = image.result_image_url || image.image_url
     // 이미지 다운로드 (CORS 문제 회피를 위해 fetch 사용)
     const response = await fetch(imageUrl)
     const blob = await response.blob()
@@ -1232,7 +1225,7 @@ const downloadImage = async (image) => {
   } catch (error) {
     console.error('이미지 다운로드 오류:', error)
     // CORS 오류 시 기본 다운로드 시도
-    const imageUrl = image.storage_image_url || image.result_image_url || image.image_url
+    const imageUrl = image.result_image_url || image.image_url
     const link = document.createElement('a')
     link.href = imageUrl
     link.download = `image_${new Date().getTime()}.png`
@@ -1248,9 +1241,9 @@ const deleteImage = async (image) => {
   }
   try {
     // Storage에서 이미지 파일 삭제
-    if (image.storage_image_url) {
+    if (image.result_image_url) {
       // Storage URL에서 파일 경로 추출
-      const url = new URL(image.storage_image_url)
+      const url = new URL(image.result_image_url)
       const pathParts = url.pathname.split('/storage/v1/object/public/gen-images/')
       if (pathParts[1]) {
         const { error: storageError } = await supabase.storage
@@ -1361,9 +1354,8 @@ const handleSceneConnection = async (result) => {
   try {
     // result 객체에서 sceneId 추출
     const sceneId = result.sceneId
-    // 이미지 URL 가져오기 (storage_image_url 우선, 없으면 result_image_url 사용)
-    const imageUrl = imageToConnect.value.storage_image_url || 
-                     imageToConnect.value.result_image_url || 
+    // 이미지 URL 가져오기 (result_image_url 사용)
+    const imageUrl = imageToConnect.value.result_image_url || 
                      imageToConnect.value.thumbnail_url
     if (!imageUrl) {
       throw new Error('이미지 URL을 찾을 수 없습니다.')
@@ -1402,6 +1394,32 @@ const handleSceneConnection = async (result) => {
     alert('씬 연결에 실패했습니다.')
   }
 }
+// 최적화된 이미지 URL 선택
+const getOptimizedImageUrl = (item) => {
+  console.log('🖼️ 이미지 URL 선택:', {
+    id: item.id,
+    thumbnail_url: item.thumbnail_url,
+    result_image_url: item.result_image_url,
+    generation_status: item.generation_status
+  })
+  
+  // 1. 썸네일이 있고 유효하면 우선 사용 (빠른 로딩)
+  if (item.thumbnail_url && item.thumbnail_url.length > 10) {
+    console.log('✅ 썸네일 사용:', item.thumbnail_url)
+    return item.thumbnail_url
+  }
+  
+  // 2. 썸네일이 없으면 result_image_url 사용
+  if (item.result_image_url) {
+    console.log('⚠️ 원본 이미지 사용 (느림):', item.result_image_url)
+    return item.result_image_url
+  }
+  
+  // 3. 모든 URL이 없으면 기본 이미지
+  console.log('❌ 이미지 URL 없음, 기본 이미지 사용')
+  return 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="300" height="300"%3E%3Crect fill="%23f0f0f0" width="300" height="300"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%23999" font-size="14"%3E이미지 없음%3C/text%3E%3C/svg%3E'
+}
+
 const formatDate = (dateString) => {
   const date = new Date(dateString)
   return date.toLocaleDateString('ko-KR', {

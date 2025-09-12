@@ -599,7 +599,10 @@ const saveChanges = async () => {
 
 // 프레임 캡처 메서드들
 const initializeFrameExtractor = async () => {
-  if (!props.video || !props.video.storage_video_url) return
+  if (!props.video) {
+    console.warn('비디오 정보가 없습니다')
+    return
+  }
   
   // 기존 추출기가 있으면 먼저 정리
   if (frameExtractor.value) {
@@ -615,14 +618,22 @@ const initializeFrameExtractor = async () => {
   const videoUrl = isShowingUpscale.value && props.video?.upscale_video_url 
     ? props.video.upscale_video_url 
     : (props.video?.storage_video_url || props.video?.result_video_url)
-  if (!videoUrl) {
-    console.warn('비디오 URL을 찾을 수 없습니다')
+  
+  if (!videoUrl || videoUrl.trim() === '') {
+    console.warn('비디오 URL을 찾을 수 없습니다:', {
+      storage_video_url: props.video?.storage_video_url,
+      result_video_url: props.video?.result_video_url,
+      upscale_video_url: props.video?.upscale_video_url,
+      isShowingUpscale: isShowingUpscale.value
+    })
     return
   }
   
   try {
+    console.log('프레임 추출기 초기화 시작:', videoUrl)
     frameExtractor.value = new VideoFrameExtractor(videoUrl)
     await frameExtractor.value.initialize()
+    console.log('프레임 추출기 초기화 완료')
   } catch (error) {
     console.error('프레임 추출기 초기화 실패:', error)
     frameExtractor.value = null

@@ -106,11 +106,21 @@ const loadImages = async () => {
 
     let query = supabase
       .from('gen_images')
-      .select('*')
+      .select(`
+        id,
+        storage_image_url,
+        thumbnail_url,
+        prompt_used,
+        generation_model,
+        image_type,
+        element_name,
+        metadata,
+        created_at
+      `)
       .eq('generation_status', 'completed')
       .eq('image_type', 'character') // 캐릭터 타입만
       .order('created_at', { ascending: false })
-      .limit(100)
+      .limit(50)
 
     if (currentProjectOnly.value) {
       // 현재 프로젝트만 선택된 경우

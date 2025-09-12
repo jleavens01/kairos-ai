@@ -71,7 +71,7 @@ export const handler = async (event) => {
               .update({
                 generation_status: 'completed',
                 result_image_url: imageUrl,
-                storage_image_url: imageUrl,
+                
                 updated_at: new Date().toISOString(),
                 metadata: {
                   ...image.metadata,

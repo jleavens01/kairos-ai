@@ -30,7 +30,21 @@ export const useProjectsStore = defineStore('projects', {
       try {
         const { data, error } = await supabase
           .from('projects')
-          .select('*')
+          .select(`
+            id,
+            name,
+            description,
+            content,
+            status,
+            is_public,
+            thumbnail_url,
+            tags,
+            metadata,
+            created_at,
+            updated_at,
+            last_accessed_at,
+            user_id
+          `)
           .is('deleted_at', null)
           .order('created_at', { ascending: false })
         
@@ -147,7 +161,21 @@ export const useProjectsStore = defineStore('projects', {
         // 먼저 소유한 프로젝트인지 확인
         let { data, error } = await supabase
           .from('projects')
-          .select('*')
+          .select(`
+            id,
+            name,
+            description,
+            content,
+            status,
+            is_public,
+            thumbnail_url,
+            tags,
+            metadata,
+            created_at,
+            updated_at,
+            last_accessed_at,
+            user_id
+          `)
           .eq('id', projectId)
           .single()
         

@@ -55,16 +55,34 @@ export const useProductionStore = defineStore('production', {
       this.error = null
 
       try {
+        // 1. production_sheets 먼저 로드 (빠른 쿼리)
         const { data, error } = await supabase
           .from('production_sheets')
-          .select(`
-            *,
-            tts_audio:tts_audio(file_url, voice_id, model_id, text, created_at)
-          `)
+          .select('*')
           .eq('project_id', projectId)
           .order('scene_number', { ascending: true })
 
         if (error) throw error
+
+        // 2. tts_audio 별도 로드 (필요한 경우만)
+        let ttsAudioMap = {}
+        if (data && data.length > 0) {
+          const sheetIds = data.map(sheet => sheet.id)
+          const { data: ttsData } = await supabase
+            .from('tts_audio')
+            .select('scene_id, file_url, voice_id, model_id, text, created_at')
+            .in('scene_id', sheetIds)
+            .order('created_at', { ascending: false })
+
+          if (ttsData) {
+            // scene_id별로 그룹화
+            ttsAudioMap = ttsData.reduce((acc, tts) => {
+              if (!acc[tts.scene_id]) acc[tts.scene_id] = []
+              acc[tts.scene_id].push(tts)
+              return acc
+            }, {})
+          }
+        }
 
         // characters 필드가 null인 경우 빈 배열로 처리
         // TTS 데이터 처리
@@ -75,20 +93,21 @@ export const useProductionStore = defineStore('production', {
             }
             
             // TTS 데이터가 있으면 tts_audio_url 필드에 추가
-            if (sheet.tts_audio && sheet.tts_audio.length > 0) {
-              // 가장 최신 TTS 선택 (created_at 기준)
-              const latestTTS = sheet.tts_audio.sort((a, b) => 
-                new Date(b.created_at) - new Date(a.created_at)
-              )[0]
+            const ttsAudioList = ttsAudioMap[sheet.id] || []
+            if (ttsAudioList.length > 0) {
+              // 가장 최신 TTS 선택 (이미 created_at desc로 정렬됨)
+              const latestTTS = ttsAudioList[0]
               sheet.tts_audio_url = latestTTS.file_url
               sheet.tts_text = latestTTS.text
               sheet.tts_voice_id = latestTTS.voice_id
               sheet.tts_model_id = latestTTS.model_id
+              sheet.tts_audio = ttsAudioList // 기존 호환성 유지
             } else {
               sheet.tts_audio_url = null
               sheet.tts_text = null
               sheet.tts_voice_id = null
               sheet.tts_model_id = null
+              sheet.tts_audio = []
             }
           })
         }

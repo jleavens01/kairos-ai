@@ -961,16 +961,11 @@ const loadLibraryImages = async () => {
       .eq('project_id', props.projectId)
       .eq('generation_status', 'completed')
     
-    // 보관함에 넣은 이미지는 제외 (비디오 생성용이 아님)
-    // is_kept가 true가 아닌 것만 표시 (컬럼이 존재하는 경우에만)
-    // query = query.neq('is_kept', true) // 임시로 비활성화
-    
-    // is_shared인 이미지도 제외 (중복 방지) 
-    // query = query.neq('is_shared', true) // 임시로 비활성화
+    // 보관함 및 공유 필터는 컬럼 존재 확인 후 적용 예정
     
     const { data, error } = await query
       .order('created_at', { ascending: false })
-      .limit(50) // 성능을 위해 50개로 제한
+      .limit(20) // 타임아웃 방지를 위해 20개로 제한
 
     if (error) {
       console.error('라이브러리 이미지 쿼리 에러:', error)
@@ -982,6 +977,11 @@ const loadLibraryImages = async () => {
   } catch (error) {
     console.error('라이브러리 이미지 로드 실패:', error)
     libraryImages.value = []
+    
+    // 타임아웃 오류인 경우 사용자에게 알림
+    if (error.message && error.message.includes('timeout')) {
+      console.warn('데이터베이스 연결 타임아웃으로 이미지 로드에 실패했습니다.')
+    }
   } finally {
     loadingLibrary.value = false
   }

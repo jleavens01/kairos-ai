@@ -164,7 +164,7 @@ export const handler = async (event, context) => {
       .from('gen_heygen_videos')
       .update({
         backup_storage_url: backupUrl,
-        backup_storage_path: storagePath,
+        
         backed_up_at: new Date().toISOString(),
         backup_status: 'completed',
         backup_file_size: actualFileSize,

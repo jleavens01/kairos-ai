@@ -920,7 +920,7 @@ const loadAvailableImages = async () => {
     const projectId = props.projectId || props.image.project_id
     const { data, error } = await supabase
       .from('gen_images')
-      .select('id, element_name, storage_image_url, result_image_url, thumbnail_url, image_type')
+      .select('id, element_name, result_image_url, thumbnail_url, image_type')
       .eq('project_id', projectId)
       .eq('generation_status', 'completed')
       .order('created_at', { ascending: false })
