@@ -253,7 +253,19 @@ const loadLibraryItems = async () => {
     // 이미지 불러오기
     const { data: images, error: imagesError } = await supabase
       .from('gen_images')
-      .select('*')
+      .select(`
+        id,
+        result_image_url,
+        storage_image_url,
+        thumbnail_url,
+        element_name,
+        image_type,
+        prompt_used,
+        style_name,
+        generation_status,
+        created_at,
+        project_id
+      `)
       .order('created_at', { ascending: false });
     
     if (imagesError) throw imagesError;
@@ -261,7 +273,19 @@ const loadLibraryItems = async () => {
     // 비디오 불러오기
     const { data: videos, error: videosError } = await supabase
       .from('gen_videos')
-      .select('*')
+      .select(`
+        id,
+        result_video_url,
+        storage_video_url,
+        thumbnail_url,
+        element_name,
+        video_type,
+        prompt_used,
+        generation_status,
+        generation_model,
+        created_at,
+        project_id
+      `)
       .order('created_at', { ascending: false });
     
     if (videosError) throw videosError;

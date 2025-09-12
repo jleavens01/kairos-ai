@@ -947,20 +947,30 @@ const loadLibraryImages = async () => {
 
     let query = supabase
       .from('gen_images')
-      .select('*')
+      .select(`
+        id,
+        result_image_url,
+        storage_image_url,
+        thumbnail_url,
+        element_name,
+        image_type,
+        prompt_used,
+        style_name,
+        created_at
+      `)
       .eq('project_id', props.projectId)
       .eq('generation_status', 'completed')
     
     // 보관함에 넣은 이미지는 제외 (비디오 생성용이 아님)
-    // is_kept가 true가 아닌 것만 표시
-    query = query.neq('is_kept', true)
+    // is_kept가 true가 아닌 것만 표시 (컬럼이 존재하는 경우에만)
+    // query = query.neq('is_kept', true) // 임시로 비활성화
     
-    // is_shared인 이미지도 제외 (중복 방지)
-    query = query.neq('is_shared', true)
+    // is_shared인 이미지도 제외 (중복 방지) 
+    // query = query.neq('is_shared', true) // 임시로 비활성화
     
     const { data, error } = await query
       .order('created_at', { ascending: false })
-      .limit(200) // 제한을 200개로 유지
+      .limit(50) // 성능을 위해 50개로 제한
 
     if (error) {
       console.error('라이브러리 이미지 쿼리 에러:', error)
@@ -1047,7 +1057,14 @@ const loadPresets = async () => {
   try {
     const { data, error } = await supabase
       .from('prompt_presets')
-      .select('*')
+      .select(`
+        id,
+        name,
+        prompt,
+        description,
+        media_type,
+        sort_order
+      `)
       .eq('project_id', props.projectId)
       .eq('is_active', true)
       .in('media_type', ['video', 'both'])

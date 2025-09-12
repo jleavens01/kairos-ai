@@ -800,15 +800,31 @@ const fetchImages = async () => {
     // 1. AI 생성 이미지 조회 (gen_images)
     let genImagesQuery = supabase
       .from('gen_images')
-      .select('*')
+      .select(`
+        id,
+        result_image_url,
+        storage_image_url,
+        thumbnail_url,
+        element_name,
+        image_type,
+        prompt_used,
+        style_name,
+        generation_status,
+        is_kept,
+        is_shared,
+        created_at
+      `)
       .eq('project_id', props.projectId)
     
-    // 보관함 필터 적용
+    // 보관함 필터 적용 (컬럼이 존재하는 경우에만)
+    // 임시로 비활성화하여 테스트
+    /*
     if (showKeptOnly.value) {
       genImagesQuery = genImagesQuery.eq('is_kept', true)
     } else {
       genImagesQuery = genImagesQuery.or('is_kept.is.null,is_kept.eq.false')
     }
+    */
     
     // 카테고리 필터 적용
     if (filterCategory.value) {
@@ -823,9 +839,15 @@ const fetchImages = async () => {
     // 2. 저장된 자료 이미지 조회 (reference_materials - 이미지만)
     let refImagesQuery = supabase
       .from('reference_materials')
-      .select('*')
+      .select(`
+        id,
+        title,
+        image_url,
+        thumbnail_url,
+        created_at
+      `)
       .eq('project_id', props.projectId)
-      .not('storage_url', 'is', null) // 이미지가 있는 것만
+      .not('image_url', 'is', null) // 이미지가 있는 것만
     
     // reference_materials는 보관함 필터 없음 (항상 표시)
     // 카테고리 필터도 적용하지 않음 (자료는 별도 분류)

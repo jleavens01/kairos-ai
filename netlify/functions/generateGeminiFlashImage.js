@@ -250,7 +250,7 @@ export const handler = async (event) => {
           
           // Supabase Storage에 업로드
           const { error: uploadError } = await supabaseAdmin.storage
-            .from('generated-images')
+            .from('gen-images')
             .upload(fileName, buffer, {
               contentType: 'image/png',
               cacheControl: '3600'
@@ -258,20 +258,54 @@ export const handler = async (event) => {
 
           if (uploadError) {
             console.error('Storage upload error:', uploadError);
-            // 업로드 실패 시 Base64 Data URL 사용 (백업)
-            imageUrl = `data:image/png;base64,${imageData}`;
+            
+            // 업로드 재시도 (최대 3회)
+            let retryCount = 0;
+            let retrySuccess = false;
+            
+            while (retryCount < 3 && !retrySuccess) {
+              retryCount++;
+              console.log(`Storage 업로드 재시도 ${retryCount}/3...`);
+              
+              try {
+                const retryFileName = `gemini_flash_${Date.now()}_retry${retryCount}.png`;
+                const { error: retryError } = await supabaseAdmin.storage
+                  .from('gen-images')
+                  .upload(retryFileName, buffer, {
+                    contentType: 'image/png',
+                    cacheControl: '3600'
+                  });
+                
+                if (!retryError) {
+                  const { data: urlData } = supabaseAdmin.storage
+                    .from('gen-images')
+                    .getPublicUrl(retryFileName);
+                  imageUrl = urlData.publicUrl;
+                  retrySuccess = true;
+                  console.log('재시도 성공:', imageUrl);
+                  break;
+                }
+                
+                await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+              } catch (retryErr) {
+                console.error(`재시도 ${retryCount} 실패:`, retryErr);
+              }
+            }
+            
+            if (!retrySuccess) {
+              throw new Error('Storage 업로드가 3회 모두 실패했습니다.');
+            }
           } else {
             // 업로드 성공 시 공개 URL 생성
             const { data: urlData } = supabaseAdmin.storage
-              .from('generated-images')
+              .from('gen-images')
               .getPublicUrl(fileName);
             imageUrl = urlData.publicUrl;
             console.log('Image uploaded to storage:', imageUrl);
           }
         } catch (storageError) {
           console.error('Storage processing error:', storageError);
-          // 저장소 처리 실패 시 Base64 Data URL 사용 (백업)
-          imageUrl = `data:image/png;base64,${imageData}`;
+          throw new Error(`이미지 저장 실패: ${storageError.message}`);
         }
       }
     }
@@ -286,7 +320,7 @@ export const handler = async (event) => {
       .update({
         generation_status: 'completed',
         result_image_url: imageUrl,
-        storage_image_url: imageUrl,
+        
         metadata: {
           ...dbImage.metadata,
           text_response: textResponse,

@@ -34,7 +34,29 @@ export const handler = async (event) => {
   try {
     const webhookData = JSON.parse(event.body);
     console.log('=== FAL WEBHOOK DATA ===');
-    console.log('Full webhook data:', JSON.stringify(webhookData, null, 2));
+    // base64 데이터 등 민감한 정보는 제외하고 로그 출력
+    const safeWebhookData = {
+      request_id: webhookData.request_id,
+      status: webhookData.status,
+      output: webhookData.output ? {
+        ...webhookData.output,
+        // base64 이미지 데이터가 있으면 길이만 표시
+        ...(webhookData.output.image && typeof webhookData.output.image === 'string' && webhookData.output.image.startsWith('data:') 
+          ? { image: `[Base64 Data URL, length: ${webhookData.output.image.length}]` } 
+          : {}),
+        // images 배열 처리
+        ...(webhookData.output.images ? {
+          images: webhookData.output.images.map(img => 
+            typeof img === 'string' && img.startsWith('data:') 
+              ? `[Base64 Data URL, length: ${img.length}]`
+              : img
+          )
+        } : {})
+      } : webhookData.output,
+      result: webhookData.result,
+      data: webhookData.data
+    };
+    console.log('Safe webhook data:', JSON.stringify(safeWebhookData, null, 2));
     console.log('Request ID:', webhookData.request_id);
     console.log('Status:', webhookData.status);
     console.log('Has output:', !!webhookData.output);
@@ -143,13 +165,21 @@ export const handler = async (event) => {
         
         let updatePayload;
         if (isUpscale) {
-          // 업스케일 완료 처리
+          // 업스케일 완료 처리 - 데이터베이스 컬럼과 metadata 모두 업데이트
           console.log(`Processing upscale completion for video ${existingVideo.id}`);
+          const currentMetadata = existingVideo.metadata || {};
           updatePayload = {
             upscale_status: 'completed',
             upscale_video_url: videoUrl,
-            upscale_file_size: fileSize,
             upscaled_at: new Date().toISOString(),
+            metadata: {
+              ...currentMetadata,
+              upscale_status: 'completed',
+              upscale_video_url: videoUrl,
+              upscaled_at: new Date().toISOString(),
+              upscale_file_size: fileSize,
+              upscale_completed_response: output
+            },
             updated_at: new Date().toISOString()
           };
         } else {
@@ -222,7 +252,7 @@ export const handler = async (event) => {
           .update({
             generation_status: 'completed',
             result_image_url: imageUrl,
-            storage_image_url: imageUrl,
+            
             file_size: fileSize,
             width: width,
             height: height,
@@ -269,11 +299,13 @@ export const handler = async (event) => {
         
         let updatePayload;
         if (isUpscale) {
-          // 업스케일 실패 처리
+          // 업스케일 실패 처리 - 데이터베이스 컬럼과 metadata 모두 업데이트
+          const currentMetadata = existingVideo?.metadata || {};
           updatePayload = {
             upscale_status: 'failed',
             metadata: {
-              ...existingVideo?.metadata,
+              ...currentMetadata,
+              upscale_status: 'failed',
               upscale_error: errorMessage,
               upscale_failed_at: new Date().toISOString(),
               webhook_data: webhookData

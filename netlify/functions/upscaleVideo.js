@@ -150,11 +150,16 @@ export const handler = async (event) => {
       .update({ credits: userProfile.credits - upscaleCost })
       .eq('user_id', user.sub);
 
-    // 원본 비디오 레코드에 업스케일 정보 추가
+    // 원본 비디오 레코드에 업스케일 정보 추가 - 컬럼과 metadata 모두 설정
     const currentMetadata = originalVideo.metadata || {};
     const { data: updatedVideo, error: updateError } = await supabaseAdmin
       .from('gen_videos')
       .update({
+        upscale_id: upscaleId,
+        upscale_factor: upscaleFactor.toString(),
+        upscale_target_fps: targetFps,
+        upscale_settings: upscaleSettings,
+        upscale_status: 'processing',
         metadata: {
           ...currentMetadata,
           upscale_id: upscaleId,
@@ -381,10 +386,14 @@ async function pollUpscaleStatus(videoId, requestId) {
           console.log(`File too large (${fileSizeInMB.toFixed(2)} MB > 50 MB), using FAL AI URL directly`);
         }
 
-        // DB 업데이트 - metadata에 업스케일 정보 저장
+        // DB 업데이트 - 컬럼과 metadata 모두 업데이트
+        const currentMetadata = existingVideo?.metadata || {};
         const updateData = {
+          upscale_status: 'completed',
+          upscale_video_url: videoUrl,
+          upscaled_at: new Date().toISOString(),
           metadata: {
-            ...existingVideo?.metadata,
+            ...currentMetadata,
             upscale_status: 'completed',
             upscale_video_url: videoUrl,
             upscaled_at: new Date().toISOString(),
@@ -409,12 +418,14 @@ async function pollUpscaleStatus(videoId, requestId) {
         console.log('Upscale video saved successfully for ID:', videoId);
         return;
       } else if (status.status === 'FAILED' || status.status === 'ERROR') {
-        // 실패 처리
+        // 실패 처리 - 컬럼과 metadata 모두 업데이트
+        const currentMetadata = existingVideo?.metadata || {};
         await supabaseAdmin
           .from('gen_videos')
           .update({
+            upscale_status: 'failed',
             metadata: {
-              ...existingVideo?.metadata,
+              ...currentMetadata,
               upscale_status: 'failed',
               upscale_error: status.error || 'Upscale failed',
               upscale_failed_at: new Date().toISOString()
@@ -434,6 +445,7 @@ async function pollUpscaleStatus(videoId, requestId) {
         await supabaseAdmin
           .from('gen_videos')
           .update({
+            upscale_status: 'failed',
             metadata: {
               ...existingVideo?.metadata,
               upscale_status: 'failed',
