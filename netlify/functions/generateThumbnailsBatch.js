@@ -19,10 +19,10 @@ export const handler = async (event, context) => {
   }
 
   try {
-    // 1. 섬네일이 없는 이미지들 조회 (최근 50개)
+    // 1. 섬네일이 없는 이미지들 조회 (최근 50개) - 프로젝트ID와 카테고리 정보 포함
     const { data: images, error: fetchError } = await supabase
       .from('gen_images')
-      .select('id, result_image_url, project_id, created_at')
+      .select('id, result_image_url, project_id, image_type, created_at')
       .is('thumbnail_url', null)
       .not('result_image_url', 'is', null)
       .eq('generation_status', 'completed')

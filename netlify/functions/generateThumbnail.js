@@ -41,6 +41,24 @@ export const handler = async (event, context) => {
 
     console.log('섬네일 생성 시작:', { imageId, imageUrl: imageUrl.substring(0, 100) + '...' })
 
+    // 이미지 정보를 데이터베이스에서 가져와서 프로젝트ID와 카테고리 확인
+    const { data: imageData, error: imageError } = await supabase
+      .from('gen_images')
+      .select('project_id, image_type')
+      .eq('id', imageId)
+      .single()
+
+    if (imageError || !imageData) {
+      throw new Error(`Failed to fetch image data: ${imageError?.message}`)
+    }
+
+    const finalProjectId = projectId || imageData.project_id
+    const category = imageData.image_type || 'images'
+
+    if (!finalProjectId) {
+      throw new Error('Project ID is required for thumbnail generation')
+    }
+
     // 1. 원본 이미지 다운로드
     const response = await fetch(imageUrl)
     if (!response.ok) {
@@ -66,14 +84,16 @@ export const handler = async (event, context) => {
 
     console.log(`섬네일 크기: ${(thumbnailBuffer.length / 1024).toFixed(2)} KB`)
 
-    // 3. Supabase Storage에 업로드
+    // 3. Supabase Storage에 업로드 (gen-images 버킷의 구조적 경로)
     const timestamp = Date.now()
     const randomId = Math.random().toString(36).substring(2, 9)
-    const fileName = `thumbnails/${imageId}_${timestamp}_${randomId}.webp`
+    const fileName = `${finalProjectId}/${category}/thumbnails/${imageId}_${timestamp}_${randomId}.webp`
+    
+    console.log(`썸네일 저장 경로: ${fileName}`)
     
     const { data: uploadData, error: uploadError } = await supabase
       .storage
-      .from('ref-images')
+      .from('gen-images')
       .upload(fileName, thumbnailBuffer, {
         contentType: 'image/webp',
         cacheControl: '31536000' // 1년 캐시
@@ -87,7 +107,7 @@ export const handler = async (event, context) => {
     // 4. Public URL 생성
     const { data: { publicUrl } } = supabase
       .storage
-      .from('ref-images')
+      .from('gen-images')
       .getPublicUrl(fileName)
 
     console.log('섬네일 URL:', publicUrl)
@@ -105,7 +125,7 @@ export const handler = async (event, context) => {
     if (dbError) {
       console.error('Database update error:', dbError)
       // 이미 업로드된 섬네일 파일 삭제
-      await supabase.storage.from('ref-images').remove([fileName])
+      await supabase.storage.from('gen-images').remove([fileName])
       throw new Error(`Failed to update database: ${dbError.message}`)
     }
 
