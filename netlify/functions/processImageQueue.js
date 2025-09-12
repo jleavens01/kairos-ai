@@ -25,10 +25,10 @@ export const handler = async (event) => {
   );
   
   try {
-    // processing 상태인 이미지들 조회
+    // processing 상태인 이미지들 조회 (production_sheets 조인)
     const { data: processingImages, error: fetchError } = await supabaseAdmin
       .from('gen_images')
-      .select('*')
+      .select('*, production_sheets (generation_model)')
       .in('generation_status', ['pending', 'processing'])
       .not('request_id', 'is', null)
       .order('created_at', { ascending: true })
@@ -65,33 +65,34 @@ export const handler = async (event) => {
           // FAL AI SDK로 상태 확인
           // 모델별로 엔드포인트가 다름
           let apiEndpoint;
-          if (image.generation_model === 'gpt-image-1') {
+          const modelName = image.production_sheets?.generation_model || image.generation_model;
+          if (modelName === 'gpt-image-1') {
             // GPT 이미지는 참조 이미지 여부에 따라 엔드포인트가 다름
             if (image.reference_image_url) {
               apiEndpoint = 'fal-ai/gpt-image-1/edit-image/byok';
             } else {
               apiEndpoint = 'fal-ai/gpt-image-1/text-to-image/byok';
             }
-          } else if (image.generation_model?.includes('flux')) {
+          } else if (modelName?.includes('flux')) {
             // Flux 모델들
-            if (image.generation_model === 'flux-schnell') {
+            if (modelName === 'flux-schnell') {
               apiEndpoint = 'fal-ai/flux/schnell';
-            } else if (image.generation_model === 'flux-pro') {
+            } else if (modelName === 'flux-pro') {
               apiEndpoint = 'fal-ai/flux-pro';
-            } else if (image.generation_model === 'flux-kontext') {
+            } else if (modelName === 'flux-kontext') {
               apiEndpoint = 'fal-ai/flux-pro/kontext';
-            } else if (image.generation_model === 'flux-kontext-multi') {
+            } else if (modelName === 'flux-kontext-multi') {
               apiEndpoint = 'fal-ai/flux-pro/kontext/max/multi';
             } else {
               apiEndpoint = 'fal-ai/flux/schnell'; // 기본값
             }
           } else {
             // 알 수 없는 모델
-            console.log(`Unknown model for image ${image.id}: ${image.generation_model}`);
+            console.log(`Unknown model for image ${image.id}: ${modelName}`);
             return { id: image.id, status: 'unknown_model' };
           }
 
-          console.log(`Checking status for image ${image.id} with model ${image.generation_model} at ${apiEndpoint}`);
+          console.log(`Checking status for image ${image.id} with model ${modelName} at ${apiEndpoint}`);
           
           let statusData;
           try {

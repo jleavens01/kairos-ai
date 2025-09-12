@@ -109,7 +109,7 @@
               <div class="processing-animation">
                 <div class="spinner"></div>
                 <p class="processing-text">{{ item.generation_status === 'pending' ? '대기 중...' : '생성 중...' }}</p>
-                <p class="processing-model">{{ item.generation_model }}</p>
+                <p class="processing-model">{{ item.production_sheets?.generation_model || 'Processing' }}</p>
               </div>
             </div>
           </template>
@@ -120,7 +120,7 @@
               <div v-if="item.generation_status === 'failed'" class="failed-image">
                 <div class="failed-icon">❌</div>
                 <p class="failed-text">생성 실패</p>
-                <p class="failed-model">{{ item.generation_model }}</p>
+                <p class="failed-model">{{ item.production_sheets?.generation_model || 'Failed' }}</p>
                 <p v-if="item.error_message" class="failed-reason">{{ item.error_message }}</p>
               </div>
               <!-- 성공한 이미지 표시 -->
@@ -184,7 +184,7 @@
                 </div>
                 <div class="info-bottom">
                   <div class="model-size-row">
-                    <p class="image-model">{{ item.generation_model || 'Unknown' }}</p>
+                    <p class="image-model">{{ item.production_sheets?.generation_model || 'Unknown' }}</p>
                     <p v-if="item.file_size" class="image-size" :class="getFileSizeColorClass(item.file_size)">
                       {{ formatFileSize(item.file_size) }}
                     </p>
@@ -725,11 +725,13 @@ const fetchImagesWithPagination = async ({ page, pageSize: size }) => {
   const to = from + size - 1
   try {
     // 필요한 컬럼만 선택하여 성능 최적화
+    // production_sheets 테이블과 join하여 generation_model 가져오기
     const selectColumns = `
-      id, project_id, user_id, element_name, image_type, generation_model,
+      id, project_id, user_id, element_name, image_type,
       result_image_url, thumbnail_url, generation_status,
       style_name, style_id, is_kept, is_favorite, tags, production_sheet_id,
-      scene_number, created_at, updated_at
+      scene_number, created_at, updated_at,
+      production_sheets (generation_model)
     `
     
     let query = supabase
