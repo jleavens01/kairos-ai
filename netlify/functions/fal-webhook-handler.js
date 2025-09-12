@@ -1,10 +1,66 @@
 import { createClient } from '@supabase/supabase-js';
+import sharp from 'sharp';
 
 // Supabase 클라이언트 초기화 (서비스 키 사용)
 const supabase = createClient(
   process.env.VITE_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
+
+// 썸네일 생성 함수
+async function generateThumbnail(imageUrl, imageId) {
+  try {
+    console.log(`Generating thumbnail for image ${imageId}`);
+    
+    // 이미지 다운로드
+    const response = await fetch(imageUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.status}`);
+    }
+    
+    const imageBuffer = await response.arrayBuffer();
+    
+    // Sharp로 썸네일 생성 (400px 너비, WebP 포맷, 품질 80%)
+    const thumbnailBuffer = await sharp(Buffer.from(imageBuffer))
+      .resize(400, null, {
+        fit: 'inside',
+        withoutEnlargement: true
+      })
+      .webp({ quality: 80 })
+      .toBuffer();
+    
+    // 썸네일 파일명 생성
+    const timestamp = Date.now();
+    const randomStr = Math.random().toString(36).substring(2, 9);
+    const thumbnailFileName = `${imageId}_${timestamp}_${randomStr}.webp`;
+    const thumbnailPath = `thumbnails/${thumbnailFileName}`;
+    
+    // Supabase Storage에 업로드
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('gen-images')
+      .upload(thumbnailPath, thumbnailBuffer, {
+        contentType: 'image/webp',
+        cacheControl: '3600',
+        upsert: false
+      });
+    
+    if (uploadError) {
+      console.error('Thumbnail upload error:', uploadError);
+      return null;
+    }
+    
+    // 썸네일 URL 생성
+    const { data: { publicUrl } } = supabase.storage
+      .from('gen-images')
+      .getPublicUrl(thumbnailPath);
+    
+    console.log(`Thumbnail generated successfully for image ${imageId}`);
+    return publicUrl;
+  } catch (error) {
+    console.error('Thumbnail generation error:', error);
+    return null;
+  }
+}
 
 export const handler = async (event) => {
   console.log('=== WEBHOOK HANDLER START ===');
@@ -358,6 +414,31 @@ export const handler = async (event) => {
           updatePayload,
           updatedRecords: updateData?.length || 0
         });
+        
+        // 일반 이미지 생성인 경우 자동으로 썸네일 생성 (업스케일은 제외)
+        if (!isUpscale && imageUrl) {
+          console.log(`Starting automatic thumbnail generation for image ${existingImage.id}`);
+          
+          // 비동기로 썸네일 생성 (webhook 응답 지연 방지)
+          generateThumbnail(imageUrl, existingImage.id).then(thumbnailUrl => {
+            if (thumbnailUrl) {
+              // 썸네일 URL 업데이트
+              supabase
+                .from('gen_images')
+                .update({ thumbnail_url: thumbnailUrl })
+                .eq('id', existingImage.id)
+                .then(({ error: thumbnailError }) => {
+                  if (thumbnailError) {
+                    console.error('Failed to update thumbnail_url:', thumbnailError);
+                  } else {
+                    console.log(`Thumbnail URL updated for image ${existingImage.id}`);
+                  }
+                });
+            }
+          }).catch(error => {
+            console.error('Thumbnail generation failed:', error);
+          });
+        }
       }
     } else if (status === 'FAILED' || status === 'failed' || status === 'ERROR' || status === 'error') {
       // 실패 처리 (이미지/비디오 공통)
