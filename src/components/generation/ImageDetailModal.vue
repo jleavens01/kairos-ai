@@ -837,7 +837,8 @@ const handleImageRegenerate = () => {
     category: props.image.image_type || 'scene',
     name: props.image.element_name || '',
     prompt: props.image.prompt_used || '',
-    referenceImage: props.image.storage_image_url || props.image.result_image_url || props.image.thumbnail_url
+    referenceImage: props.image.storage_image_url || props.image.result_image_url || props.image.thumbnail_url,
+    projectId: props.image.project_id // projectId 추가!
   }
   
   emit('edit-image', editData)
