@@ -72,6 +72,17 @@
                   {{ size }} ({{ getSizeRatio(size) }})
                 </option>
               </template>
+              <!-- Seedream 4.0 Edit 모델용 크기 (FAL AI 형식) -->
+              <template v-else-if="selectedModel === 'seedream-4-edit'">
+                <option value="square_hd">정사각형 HD</option>
+                <option value="square">정사각형</option>
+                <option value="landscape_4_3">가로형 4:3</option>
+                <option value="landscape_16_9">가로형 16:9</option>
+                <option value="portrait_4_3">세로형 4:3</option>
+                <option value="portrait_16_9">세로형 16:9</option>
+                <option value="custom_1280_720">커스텀 1280x720</option>
+                <option value="custom_1920_1080">커스텀 1920x1080</option>
+              </template>
               <!-- Flux, Gemini 모델용 비율 -->
               <template v-else-if="selectedModel.includes('flux') || selectedModel.includes('gemini')">
                 <option value="21:9">울트라와이드 (21:9)</option>

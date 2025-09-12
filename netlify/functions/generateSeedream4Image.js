@@ -59,19 +59,34 @@ export const generateImage = async ({
   }
 
   // 이미지 크기를 FAL AI 형식으로 변환
-  const imageSizeMap = {
-    '1:1': 'square_hd',
-    '4:3': 'portrait_4_3',
-    '3:4': 'landscape_4_3',
-    '16:9': 'landscape_16_9',
-    '9:16': 'portrait_16_9',
-    '21:9': { width: 1680, height: 720 },
-    '3:2': { width: 1080, height: 720 },
-    '2:3': { width: 720, height: 1080 },
-    '9:21': { width: 720, height: 1680 }
-  };
-
-  const falImageSize = imageSizeMap[imageSize] || 'square_hd';
+  let falImageSize;
+  
+  // 새로운 Seedream 4.0 형식이 직접 전달된 경우
+  if (imageSize.includes('square') || imageSize.includes('portrait') || imageSize.includes('landscape')) {
+    // FAL AI enum 값을 직접 사용
+    falImageSize = imageSize;
+  } else if (imageSize.startsWith('custom_')) {
+    // 커스텀 크기 처리 (custom_1280_720 → {width: 1280, height: 720})
+    const [, width, height] = imageSize.split('_');
+    falImageSize = {
+      width: parseInt(width),
+      height: parseInt(height)
+    };
+  } else {
+    // 기존 비율 형식 지원 (하위 호환성)
+    const imageSizeMap = {
+      '1:1': 'square_hd',
+      '4:3': 'landscape_4_3', 
+      '3:4': 'portrait_4_3',
+      '16:9': 'landscape_16_9',
+      '9:16': 'portrait_16_9',
+      '21:9': { width: 1680, height: 720 },
+      '3:2': { width: 1080, height: 720 },
+      '2:3': { width: 720, height: 1080 },
+      '9:21': { width: 720, height: 1680 }
+    };
+    falImageSize = imageSizeMap[imageSize] || 'square_hd';
+  }
 
   let dbImage;
   
