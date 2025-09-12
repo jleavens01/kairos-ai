@@ -445,23 +445,23 @@
               <option value="scene">씬</option>
               <option value="character">캐릭터</option>
               <option value="background">배경</option>
-              <option value="object">오브젝트</option>
+              <option value="prop">소품</option>
             </select>
           </div>
 
-          <!-- 캐릭터/배경/오브젝트인 경우 이름 입력 -->
+          <!-- 캐릭터/배경/소품인 경우 이름 입력 -->
           <div v-if="category !== 'scene'" class="inline-item scene-item">
             <label class="inline-label">
               {{ category === 'character' ? '캐릭터 이름' : 
                  category === 'background' ? '배경 이름' : 
-                 '오브젝트 이름' }}
+                 '소품 이름' }}
             </label>
             <input 
               v-model="characterName" 
               type="text"
               :placeholder="category === 'character' ? '캐릭터 이름' : 
                            category === 'background' ? '배경 설명' : 
-                           '오브젝트 설명'"
+                           '소품 설명'"
               class="form-input"
             />
           </div>
@@ -494,6 +494,26 @@
                 </option>
               </select>
             </div>
+          </div>
+        </div>
+
+        <!-- 카테고리별 제안 리스트 -->
+        <div v-if="category !== 'scene' && categorySuggestions.length > 0" class="suggestion-list">
+          <div class="suggestion-label">
+            {{ category === 'character' ? '추천 캐릭터' : 
+               category === 'background' ? '추천 배경' : 
+               '추천 소품' }}:
+          </div>
+          <div class="suggestion-tags">
+            <button 
+              v-for="suggestion in categorySuggestions" 
+              :key="suggestion"
+              @click="characterName = suggestion"
+              class="suggestion-tag"
+              type="button"
+            >
+              {{ suggestion }}
+            </button>
           </div>
         </div>
 
@@ -833,6 +853,37 @@ watch(selectedModel, (newModel) => {
 })
 
 // Computed
+
+// 카테고리별 제안 리스트
+const categorySuggestions = computed(() => {
+  if (category.value === 'character') {
+    // 캐릭터 제안
+    return [
+      '주인공', '친구', '멘토', '악역', '조연',
+      '아이', '청년', '중년', '노인',
+      '학생', '선생님', '회사원', '의사', '경찰',
+      '엄마', '아빠', '할머니', '할아버지'
+    ]
+  } else if (category.value === 'background') {
+    // 배경 제안
+    return [
+      '교실', '사무실', '집', '거리', '공원',
+      '카페', '식당', '병원', '학교', '회사',
+      '숲', '바다', '산', '하늘', '도시',
+      '밤거리', '일출', '일몰', '비오는날', '눈오는날'
+    ]
+  } else if (category.value === 'prop') {
+    // 소품 제안
+    return [
+      '책', '펜', '노트북', '휴대폰', '가방',
+      '안경', '시계', '열쇠', '지갑', '카메라',
+      '컵', '접시', '의자', '테이블', '침대',
+      '자동차', '자전거', '비행기', '배', '기차'
+    ]
+  }
+  return []
+})
+
 const canGenerate = computed(() => {
   // 기본 조건: 프롬프트 있고, 생성 중이 아님
   const hasPrompt = prompt.value.trim().length > 0
@@ -1763,7 +1814,7 @@ const generateImage = async () => {
           finalPrompt = `${finalPrompt}, Draw the character from the second image in a front-facing view using the style of the first image. Show the full figure completely. Aspect ratio: ${imageSize.value}. ${stylePrompt}`
         } else if (category.value === 'background') {
           finalPrompt = `${finalPrompt}, Draw the background from the second image using the style of the first image. Aspect ratio: ${imageSize.value}. ${stylePrompt}`
-        } else if (category.value === 'object') {
+        } else if (category.value === 'prop') {
           finalPrompt = `${finalPrompt}, Draw the props/objects from the second image using the style of the first image. Aspect ratio: ${imageSize.value}. ${stylePrompt}`
         }
       } else {
@@ -1774,7 +1825,7 @@ const generateImage = async () => {
         } else if (category.value === 'background') {
           const nameDesc = characterName.value || 'background'
           finalPrompt = `${finalPrompt}, Draw a ${nameDesc} background using the attached reference image style. Aspect ratio: ${imageSize.value}. ${stylePrompt}`
-        } else if (category.value === 'object') {
+        } else if (category.value === 'prop') {
           const nameDesc = characterName.value || 'object'
           finalPrompt = `${finalPrompt}, Draw a ${nameDesc} prop/object using the attached reference image style. Aspect ratio: ${imageSize.value}. ${stylePrompt}`
         } else if (category.value === 'scene') {
@@ -2469,6 +2520,44 @@ onMounted(async () => {
 .btn-add-image:hover {
   background: var(--primary-light);
   border-style: solid;
+}
+
+.suggestion-list {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.suggestion-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.suggestion-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.suggestion-tag {
+  padding: 6px 12px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.suggestion-tag:hover {
+  background: var(--primary-light);
+  color: var(--primary-color);
+  border-color: var(--primary-color);
 }
 
 .advanced-params {
