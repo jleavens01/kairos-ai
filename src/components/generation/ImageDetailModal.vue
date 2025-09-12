@@ -965,13 +965,7 @@ const applyEdit = async () => {
         console.error('프로젝트 ID를 찾을 수 없습니다.')
         alert('프로젝트 ID를 찾을 수 없습니다. 프로젝트를 선택해주세요.')
         return
-      } || projectsStore.currentProject?.id
-    
-    if (!projectId) {
-      console.error('프로젝트 ID를 찾을 수 없습니다.')
-      alert('프로젝트 ID를 찾을 수 없습니다. 프로젝트를 선택해주세요.')
-      return
-    }
+      }
       const userId = authStore.user?.id
       
       // 카테고리 결정 (image_type 기반)
@@ -1146,13 +1140,7 @@ const applyEdit = async () => {
         console.error('프로젝트 ID를 찾을 수 없습니다.')
         alert('프로젝트 ID를 찾을 수 없습니다. 프로젝트를 선택해주세요.')
         return
-      } || projectsStore.currentProject?.id
-    
-    if (!projectId) {
-      console.error('프로젝트 ID를 찾을 수 없습니다.')
-      alert('프로젝트 ID를 찾을 수 없습니다. 프로젝트를 선택해주세요.')
-      return
-    }
+      }
       const userId = authStore.user?.id
       
       // 카테고리 결정 (image_type 기반)
