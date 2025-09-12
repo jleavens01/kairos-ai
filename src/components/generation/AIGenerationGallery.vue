@@ -1063,14 +1063,14 @@ const markImagesAsFailed = async (imageIds, errorMessage = '생성 실패') => {
     if (!session) return
 
     const { error } = await supabase
-      .from('ai_images')
+      .from('gen_images')
       .update({
         generation_status: 'failed',
         error_message: errorMessage,
         completed_at: new Date().toISOString()
       })
       .in('id', imageIds)
-      .eq('user_id', session.user.id)
+      .eq('created_by', session.user.id)
 
     if (error) {
       console.error('Failed to mark images as failed:', error)

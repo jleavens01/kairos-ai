@@ -203,7 +203,7 @@ export const useGenerationStore = defineStore('generation', {
           .from('gen_videos')
           .select(`
             id,
-            user_id,
+            created_by,
             project_id,
             type,
             status,
@@ -217,7 +217,7 @@ export const useGenerationStore = defineStore('generation', {
             updated_at,
             is_kept
           `)
-          .eq('user_id', user.user.id)
+          .eq('created_by', user.user.id)
           .order('created_at', { ascending: false })
           .limit(50)
 
