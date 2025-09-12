@@ -224,53 +224,10 @@ export const handler = async (event) => {
       promptLength: finalPrompt.length
     });
 
-    // 3. Gemini 2.5 Flash Image Preview로 이미지 생성
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image-preview',
-      contents: promptContents,
-    });
+    // 3. 백그라운드에서 이미지 생성 처리
+    processImageGeneration(dbImage.id, promptContents, supabaseAdmin, ai);
 
-    // 4. 응답 처리
-    let imageUrl = null;
-    let textResponse = null;
-
-    for (const part of response.candidates[0].content.parts) {
-      if (part.text) {
-        textResponse = part.text;
-        console.log('Generated text:', part.text.substring(0, 100));
-      } else if (part.inlineData) {
-        // base64 이미지 데이터를 Data URL로 변환
-        const imageData = part.inlineData.data;
-        imageUrl = `data:image/png;base64,${imageData}`;
-        console.log('Generated image data received');
-      }
-    }
-
-    if (!imageUrl) {
-      throw new Error('생성된 이미지 데이터를 찾을 수 없습니다.');
-    }
-
-    // 4. 성공 시 DB 업데이트
-    const { error: updateError } = await supabaseAdmin
-      .from('gen_images')
-      .update({
-        generation_status: 'completed',
-        result_image_url: imageUrl,
-        storage_image_url: imageUrl,
-        metadata: {
-          ...dbImage.metadata,
-          gemini_response: response,
-          text_response: textResponse,
-          processing_time: Date.now() - Date.parse(dbImage.created_at)
-        },
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', dbImage.id);
-
-    if (updateError) {
-      console.error('Database update error:', updateError);
-    }
-
+    // 4. 즉시 응답 반환 (다른 모델들과 동일한 패턴)
     return {
       statusCode: 200,
       headers,
@@ -278,10 +235,8 @@ export const handler = async (event) => {
         success: true,
         data: {
           ...dbImage,
-          result_image_url: imageUrl,
-          status: 'completed',
-          message: 'Gemini 2.5 Flash Image Preview 이미지가 생성되었습니다.',
-          text_response: textResponse
+          status: 'processing',
+          message: 'Gemini 2.5 Flash Image Preview 이미지 생성이 시작되었습니다.'
         }
       })
     };
@@ -322,3 +277,73 @@ export const handler = async (event) => {
     };
   }
 };
+
+// 백그라운드에서 이미지 생성을 처리하는 함수
+async function processImageGeneration(imageId, promptContents, supabaseAdmin, ai) {
+  try {
+    console.log('Background image generation started for ID:', imageId);
+    
+    // Gemini 2.5 Flash Image Preview로 이미지 생성
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash-image-preview',
+      contents: promptContents,
+    });
+
+    // 응답 처리
+    let imageUrl = null;
+    let textResponse = null;
+
+    for (const part of response.candidates[0].content.parts) {
+      if (part.text) {
+        textResponse = part.text;
+        console.log('Generated text:', part.text.substring(0, 100));
+      } else if (part.inlineData) {
+        // base64 이미지 데이터를 Data URL로 변환
+        const imageData = part.inlineData.data;
+        imageUrl = `data:image/png;base64,${imageData}`;
+        console.log('Generated image data received');
+      }
+    }
+
+    if (!imageUrl) {
+      throw new Error('생성된 이미지 데이터를 찾을 수 없습니다.');
+    }
+
+    // DB 업데이트 - 성공
+    const { error: updateError } = await supabaseAdmin
+      .from('gen_images')
+      .update({
+        generation_status: 'completed',
+        result_image_url: imageUrl,
+        storage_image_url: imageUrl,
+        metadata: {
+          gemini_response: response,
+          text_response: textResponse,
+          processing_time: Date.now() - Date.parse(new Date().toISOString()),
+          completed_at: new Date().toISOString()
+        },
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', imageId);
+
+    if (updateError) {
+      console.error('Background DB update error:', updateError);
+      throw updateError;
+    }
+
+    console.log('Background image generation completed for ID:', imageId);
+
+  } catch (error) {
+    console.error('Background image generation failed for ID:', imageId, error);
+    
+    // DB 업데이트 - 실패
+    await supabaseAdmin
+      .from('gen_images')
+      .update({
+        generation_status: 'failed',
+        error_message: error.message || 'Background generation failed',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', imageId);
+  }
+}
