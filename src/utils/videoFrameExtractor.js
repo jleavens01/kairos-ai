@@ -16,6 +16,12 @@ export class VideoFrameExtractor {
    */
   async initialize() {
     return new Promise((resolve, reject) => {
+      // 비디오 URL 검증
+      if (!this.videoUrl) {
+        reject(new Error('비디오 URL이 제공되지 않았습니다'))
+        return
+      }
+      
       // 비디오 엘리먼트 생성
       this.video = document.createElement('video')
       this.video.src = this.videoUrl
@@ -35,8 +41,11 @@ export class VideoFrameExtractor {
         resolve()
       })
       
-      this.video.addEventListener('error', (error) => {
-        reject(new Error('비디오 로드 실패: ' + error.message))
+      this.video.addEventListener('error', (event) => {
+        const errorMsg = event.target?.error?.message || 
+                        event.message || 
+                        '알 수 없는 비디오 로드 오류'
+        reject(new Error('비디오 로드 실패: ' + errorMsg))
       })
       
       // 비디오 로드 시작

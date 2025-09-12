@@ -75,7 +75,9 @@ export const handler = async (event) => {
       prompt: prompt.substring(0, 100), 
       resolution, 
       duration,
-      cameraFixed 
+      cameraFixed,
+      imageUrl: imageUrl?.substring(0, 200) + '...',
+      endImageUrl: endImageUrl ? endImageUrl.substring(0, 200) + '...' : null
     });
 
     // 환경 체크 (개발/프로덕션)
@@ -99,6 +101,27 @@ export const handler = async (event) => {
     if (endImageUrl) {
       falRequestBody.end_image_url = endImageUrl;
       console.log('Using end image for SeedDance Lite:', endImageUrl);
+    }
+
+    // 요청 크기 로깅
+    const requestSize = JSON.stringify(falRequestBody).length;
+    console.log('FAL AI request size:', requestSize, 'bytes');
+    console.log('Image URL lengths:', {
+      imageUrl: imageUrl?.length || 0,
+      endImageUrl: endImageUrl?.length || 0
+    });
+    
+    // 요청 크기가 너무 큰 경우 에러 발생
+    if (requestSize > 512 * 1024) { // 512KB 초과시 에러
+      throw new Error(`Request too large (${Math.round(requestSize/1024)}KB). Please use smaller images or shorter URLs.`);
+    }
+    
+    // 이미지 URL이 너무 긴 경우 경고
+    if (imageUrl && imageUrl.length > 2000) {
+      console.warn('Image URL is very long:', imageUrl.length, 'characters');
+    }
+    if (endImageUrl && endImageUrl.length > 2000) {
+      console.warn('End image URL is very long:', endImageUrl.length, 'characters');
     }
 
     if (seed !== undefined) {
@@ -128,20 +151,10 @@ export const handler = async (event) => {
       webhookConfigured: !!submitOptions.webhookUrl
     });
 
-    // 크레딧 계산 (Lite 버전은 더 저렴)
+    // 크레딧 계산 (실제 비용 기준 조정)
     const calculateCredits = () => {
-      // 기본: 480p 3초 = 10 크레딧 ($0.10)
-      let credits = 10;
-      
-      // 해상도에 따른 가중치
-      if (resolution === '720p') credits = 15; // $0.15
-      
-      // 길이에 따른 추가 (3초 기준, 추가 1초당 +10%)
-      if (duration > 3) {
-        credits = Math.round(credits * (1 + (duration - 3) * 0.1));
-      }
-      
-      return credits;
+      // SeedDance v1 Lite: 고정 1000 크레딧 ($10.00)
+      return 1000;
     };
 
     // 데이터베이스 업데이트 (라우터에서 이미 생성된 레코드 업데이트)

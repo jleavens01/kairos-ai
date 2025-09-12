@@ -127,6 +127,7 @@ export const generateImage = async ({
         model_version: '4.0-edit',
         created_by: user.sub
       },
+      credits_cost: getCreditCost(),
       tags: []
     };
 
@@ -328,4 +329,10 @@ async function pollImageStatus(imageId, requestId) {
       }
     }
   }
+}
+
+// 크레딧 비용 계산
+function getCreditCost() {
+  // Seedream 4.0 Edit 크레딧 비용 (실제 비용 기준 조정)
+  return 50; // $0.50 → 50 크레딧
 }

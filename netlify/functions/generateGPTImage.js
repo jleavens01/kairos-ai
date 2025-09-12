@@ -57,6 +57,7 @@ export async function generateImage({
           image_size: imageSize,
           style_id: styleId
         },
+        credits_cost: getCreditCost(),
         tags: category === 'character' && characterName ? [characterName] : []
       })
       .select()
@@ -169,4 +170,10 @@ export async function generateImage({
 
     throw error;
   }
+}
+
+// 크레딧 비용 계산
+function getCreditCost() {
+  // GPT-Image-1 크레딧 비용 (실제 비용 기준 조정)
+  return 250; // $2.50 → 250 크레딧
 }

@@ -8,8 +8,8 @@ fal.config({
   credentials: process.env.FAL_API_KEY
 });
 
-const VIDEO_GENERATION_COST_STANDARD = 1200; // Hailou 02 Standard 비용
-const VIDEO_GENERATION_COST_PRO = 1800; // Hailou 02 Pro 비용
+const VIDEO_GENERATION_COST_STANDARD = 1000; // Hailou 02 Standard 비용 ($10.00)
+const VIDEO_GENERATION_COST_PRO = 1500; // Hailou 02 Pro 비용 ($15.00)
 
 export const handler = async (event) => {
   const headers = { 

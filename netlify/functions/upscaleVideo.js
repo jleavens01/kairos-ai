@@ -20,6 +20,7 @@ export const handler = async (event) => {
   }
 
   let user;
+  let userProfile;
   const supabaseAdmin = createClient(
     process.env.VITE_SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -106,22 +107,63 @@ export const handler = async (event) => {
     // 업스케일 작업 ID 생성
     const upscaleId = `upscale_${originalVideoId}_${Date.now()}`;
 
+    // 크레딧 비용 계산 (150 크레딧 per second)
+    const calculateUpscaleCost = (videoDuration) => {
+      // Topaz Video AI 업스케일: 150 크레딧 per second ($1.50)
+      const baseCostPerSecond = 150;
+      const duration = videoDuration || 3; // 기본값 3초
+      return Math.ceil(duration * baseCostPerSecond);
+    };
+
+    const videoDuration = originalVideo.metadata?.duration || originalVideo.duration || 3;
+    const upscaleCost = calculateUpscaleCost(videoDuration);
+
     console.log('Updating original video with upscale settings:', {
       upscaleId,
       upscaleFactor,
       targetFps,
-      upscaleSettings
+      upscaleSettings,
+      videoDuration,
+      upscaleCost
     });
 
+    // 사용자 크레딧 확인 및 차감
+    const { data: profileData, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('credits')
+      .eq('user_id', user.sub)
+      .single();
+
+    if (profileError || !profileData) {
+      throw new Error('사용자 프로필을 찾을 수 없습니다.');
+    }
+
+    userProfile = profileData; // 전역 변수에 할당
+
+    if (userProfile.credits < upscaleCost) {
+      throw new Error(`크레딧이 부족합니다. 필요: ${upscaleCost}, 보유: ${userProfile.credits}`);
+    }
+
+    // 크레딧 차감
+    await supabaseAdmin
+      .from('profiles')
+      .update({ credits: userProfile.credits - upscaleCost })
+      .eq('user_id', user.sub);
+
     // 원본 비디오 레코드에 업스케일 정보 추가
+    const currentMetadata = originalVideo.metadata || {};
     const { data: updatedVideo, error: updateError } = await supabaseAdmin
       .from('gen_videos')
       .update({
-        upscale_id: upscaleId,
-        upscale_factor: upscaleFactor, // 숫자로 저장 (데이터베이스가 double precision 타입)
-        upscale_target_fps: targetFps,
-        upscale_settings: upscaleSettings,
-        upscale_status: 'processing',
+        metadata: {
+          ...currentMetadata,
+          upscale_id: upscaleId,
+          upscale_factor: upscaleFactor,
+          upscale_target_fps: targetFps,
+          upscale_settings: upscaleSettings,
+          upscale_status: 'processing',
+          upscale_credits_used: upscaleCost
+        },
         updated_at: new Date().toISOString()
       })
       .eq('id', originalVideoId)
@@ -218,6 +260,19 @@ export const handler = async (event) => {
 
   } catch (error) {
     console.error('Upscale error:', error);
+    
+    // 크레딧 복구 (에러 발생 시)
+    if (user?.sub && userProfile) {
+      try {
+        await supabaseAdmin
+          .from('profiles')
+          .update({ credits: userProfile.credits })
+          .eq('user_id', user.sub);
+        console.log('Credits restored due to error:', userProfile.credits);
+      } catch (refundError) {
+        console.error('Failed to restore credits:', refundError);
+      }
+    }
     
     return {
       statusCode: error.statusCode || 500,
@@ -326,18 +381,19 @@ async function pollUpscaleStatus(videoId, requestId) {
           console.log(`File too large (${fileSizeInMB.toFixed(2)} MB > 50 MB), using FAL AI URL directly`);
         }
 
-        // DB 업데이트 - 업스케일 필드만 업데이트
+        // DB 업데이트 - metadata에 업스케일 정보 저장
         const updateData = {
-          upscale_status: 'completed',
-          upscale_video_url: videoUrl,
-          upscaled_at: new Date().toISOString(),
           metadata: {
             ...existingVideo?.metadata,
+            upscale_status: 'completed',
+            upscale_video_url: videoUrl,
+            upscaled_at: new Date().toISOString(),
             upscale_completed_response: result.data || result,
             upscale_processing_time: attempt * pollInterval,
             upscale_file_size_mb: fileSizeInMB,
             upscale_storage_uploaded: !!storageUrl
-          }
+          },
+          updated_at: new Date().toISOString()
         };
         
         const { error: updateError } = await supabaseAdmin
@@ -357,12 +413,13 @@ async function pollUpscaleStatus(videoId, requestId) {
         await supabaseAdmin
           .from('gen_videos')
           .update({
-            upscale_status: 'failed',
             metadata: {
               ...existingVideo?.metadata,
+              upscale_status: 'failed',
               upscale_error: status.error || 'Upscale failed',
               upscale_failed_at: new Date().toISOString()
-            }
+            },
+            updated_at: new Date().toISOString()
           })
           .eq('id', videoId);
 
@@ -377,12 +434,13 @@ async function pollUpscaleStatus(videoId, requestId) {
         await supabaseAdmin
           .from('gen_videos')
           .update({
-            upscale_status: 'failed',
             metadata: {
               ...existingVideo?.metadata,
+              upscale_status: 'failed',
               upscale_error: 'Polling timeout',
               upscale_failed_at: new Date().toISOString()
-            }
+            },
+            updated_at: new Date().toISOString()
           })
           .eq('id', videoId);
       }

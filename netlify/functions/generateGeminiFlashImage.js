@@ -3,7 +3,7 @@ import { GoogleGenAI } from '@google/genai';
 import { createClient } from '@supabase/supabase-js';
 import jwt from 'jsonwebtoken';
 
-const IMAGE_GENERATION_COST = 100; // Gemini 2.5 Flash Image Preview 생성 비용
+const IMAGE_GENERATION_COST = 60; // Gemini 2.5 Flash Image Preview 생성 비용 (약 54원)
 
 export const handler = async (event) => {
   const headers = { 

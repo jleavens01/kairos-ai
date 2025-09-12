@@ -131,24 +131,10 @@ export const handler = async (event) => {
       console.log('Using polling for development environment');
     }
     
-    // 크레딧 계산 (대략적인 가격 기준)
+    // 크레딧 계산 (실제 비용 기준 조정)
     const calculateCredits = () => {
-      // 기본: 480p 3초 = 20 크레딧 ($0.20)
-      let credits = 20;
-      
-      // 해상도에 따른 가중치 (validResolution 사용)
-      const resolutionMultipliers = {
-        '480p': 1.0,
-        '720p': 1.5,
-        '1080p': 2.0
-      };
-      
-      // 지속시간에 따른 가중치 (3초 기준)
-      const durationMultiplier = duration / 3;
-      
-      credits = Math.ceil(credits * (resolutionMultipliers[validResolution] || 1.0) * durationMultiplier);
-      
-      return credits;
+      // SeedDance v1 Pro: 고정 2000 크레딧 ($20.00)
+      return 2000;
     };
 
     const creditsUsed = calculateCredits();

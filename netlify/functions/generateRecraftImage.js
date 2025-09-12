@@ -374,23 +374,15 @@ function convertSizeFormat(sizeRatio) {
 
 // 크레딧 비용 계산
 function getCreditCost(model, style) {
-  // Recraft 모델별 크레딧 비용
+  // Recraft 모델별 크레딧 비용 (실제 비용 기준 조정)
   const baseCosts = {
-    'recraft-v3': 120,
-    'recraft-realistic': 100,
-    'recraft-v2': 80
+    'recraft-v3': 80,        // Flux Pro와 유사한 품질
+    'recraft-realistic': 80, // Flux Pro와 유사한 품질
+    'recraft-v2': 60        // 이전 버전은 더 저렴
   }
   
-  const baseCost = baseCosts[model] || 120
+  const baseCost = baseCosts[model] || 80
   
-  // 스타일별 추가 비용 (필요시)
-  const styleCosts = {
-    'digital_illustration': 0,
-    'realistic_image': 10,
-    'vector_illustration': -10
-  }
-  
-  const styleCost = styleCosts[style] || 0
-  
-  return baseCost + styleCost
+  // 스타일별 추가 비용 제거 (단순화)
+  return baseCost
 }

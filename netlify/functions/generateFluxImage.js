@@ -65,6 +65,7 @@ export async function generateImage({
           style_id: styleId,
           style_name: styleName
         },
+        credits_cost: getCreditCost(model),
         tags: category === 'character' && characterName ? [characterName] : []
       })
       .select()
@@ -248,4 +249,17 @@ export async function generateImage({
 
     throw error;
   }
+}
+
+// 크레딧 비용 계산
+function getCreditCost(model) {
+  // Flux 모델별 크레딧 비용 (실제 비용 기준 조정)
+  const baseCosts = {
+    'flux-pro': 80,           // $0.80 → 80 크레딧
+    'flux-schnell': 40,       // 더 저렴한 버전
+    'flux-kontext': 120,      // Kontext 기능 추가
+    'flux-kontext-multi': 150 // Multi-Kontext 기능
+  }
+  
+  return baseCosts[model] || 80; // 기본값은 80 크레딧
 }
