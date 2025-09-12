@@ -224,10 +224,83 @@ export const handler = async (event) => {
       promptLength: finalPrompt.length
     });
 
-    // 3. 백그라운드에서 이미지 생성 처리
-    processImageGeneration(dbImage.id, promptContents, supabaseAdmin, ai);
+    // 3. Gemini 2.5 Flash Image Preview로 이미지 생성 (동기식)
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash-image-preview',
+      contents: promptContents,
+    });
 
-    // 4. 즉시 응답 반환 (다른 모델들과 동일한 패턴)
+    // 4. 응답 처리
+    let imageUrl = null;
+    let textResponse = null;
+
+    for (const part of response.candidates[0].content.parts) {
+      if (part.text) {
+        textResponse = part.text;
+        console.log('Generated text:', part.text.substring(0, 100));
+      } else if (part.inlineData) {
+        // base64 이미지 데이터를 Supabase Storage에 업로드
+        const imageData = part.inlineData.data;
+        console.log('Generated image data received, uploading to storage...');
+        
+        try {
+          // Base64를 Buffer로 변환
+          const buffer = Buffer.from(imageData, 'base64');
+          const fileName = `gemini-flash-${dbImage.id}-${Date.now()}.png`;
+          
+          // Supabase Storage에 업로드
+          const { error: uploadError } = await supabaseAdmin.storage
+            .from('generated-images')
+            .upload(fileName, buffer, {
+              contentType: 'image/png',
+              cacheControl: '3600'
+            });
+
+          if (uploadError) {
+            console.error('Storage upload error:', uploadError);
+            // 업로드 실패 시 Base64 Data URL 사용 (백업)
+            imageUrl = `data:image/png;base64,${imageData}`;
+          } else {
+            // 업로드 성공 시 공개 URL 생성
+            const { data: urlData } = supabaseAdmin.storage
+              .from('generated-images')
+              .getPublicUrl(fileName);
+            imageUrl = urlData.publicUrl;
+            console.log('Image uploaded to storage:', imageUrl);
+          }
+        } catch (storageError) {
+          console.error('Storage processing error:', storageError);
+          // 저장소 처리 실패 시 Base64 Data URL 사용 (백업)
+          imageUrl = `data:image/png;base64,${imageData}`;
+        }
+      }
+    }
+
+    if (!imageUrl) {
+      throw new Error('생성된 이미지 데이터를 찾을 수 없습니다.');
+    }
+
+    // 5. 성공 시 DB 업데이트
+    const { error: updateError } = await supabaseAdmin
+      .from('gen_images')
+      .update({
+        generation_status: 'completed',
+        result_image_url: imageUrl,
+        storage_image_url: imageUrl,
+        metadata: {
+          ...dbImage.metadata,
+          text_response: textResponse,
+          completed_at: new Date().toISOString(),
+          model_version: '2.5-flash-image-preview'
+        },
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', dbImage.id);
+
+    if (updateError) {
+      console.error('Database update error:', updateError);
+    }
+
     return {
       statusCode: 200,
       headers,
@@ -235,8 +308,10 @@ export const handler = async (event) => {
         success: true,
         data: {
           ...dbImage,
-          status: 'processing',
-          message: 'Gemini 2.5 Flash Image Preview 이미지 생성이 시작되었습니다.'
+          result_image_url: imageUrl,
+          status: 'completed',
+          message: 'Gemini 2.5 Flash Image Preview 이미지가 생성되었습니다.',
+          text_response: textResponse
         }
       })
     };
@@ -277,118 +352,3 @@ export const handler = async (event) => {
     };
   }
 };
-
-// 백그라운드에서 이미지 생성을 처리하는 함수
-async function processImageGeneration(imageId, promptContents, supabaseAdmin, ai) {
-  try {
-    console.log('Background image generation started for ID:', imageId);
-    
-    // Gemini 2.5 Flash Image Preview로 이미지 생성
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image-preview',
-      contents: promptContents,
-    });
-
-    // 응답 처리
-    let imageUrl = null;
-    let textResponse = null;
-
-    for (const part of response.candidates[0].content.parts) {
-      if (part.text) {
-        textResponse = part.text;
-        console.log('Generated text:', part.text.substring(0, 100));
-      } else if (part.inlineData) {
-        // base64 이미지 데이터를 Supabase Storage에 업로드
-        const imageData = part.inlineData.data;
-        console.log('Generated image data received, uploading to storage...');
-        
-        try {
-          // Base64를 Buffer로 변환
-          const buffer = Buffer.from(imageData, 'base64');
-          const fileName = `gemini-flash-${imageId}-${Date.now()}.png`;
-          
-          // Supabase Storage에 업로드
-          const { error: uploadError } = await supabaseAdmin.storage
-            .from('generated-images')
-            .upload(fileName, buffer, {
-              contentType: 'image/png',
-              cacheControl: '3600'
-            });
-
-          if (uploadError) {
-            console.error('Storage upload error:', uploadError);
-            // 업로드 실패 시 Base64 Data URL 사용 (백업)
-            imageUrl = `data:image/png;base64,${imageData}`;
-          } else {
-            // 업로드 성공 시 공개 URL 생성
-            const { data: urlData } = supabaseAdmin.storage
-              .from('generated-images')
-              .getPublicUrl(fileName);
-            imageUrl = urlData.publicUrl;
-            console.log('Image uploaded to storage:', imageUrl);
-          }
-        } catch (storageError) {
-          console.error('Storage processing error:', storageError);
-          // 저장소 처리 실패 시 Base64 Data URL 사용 (백업)
-          imageUrl = `data:image/png;base64,${imageData}`;
-        }
-      }
-    }
-
-    if (!imageUrl) {
-      throw new Error('생성된 이미지 데이터를 찾을 수 없습니다.');
-    }
-
-    // DB 업데이트 - 성공 (간결하게 타임아웃 방지)
-    const { error: updateError } = await supabaseAdmin
-      .from('gen_images')
-      .update({
-        generation_status: 'completed',
-        result_image_url: imageUrl,
-        storage_image_url: imageUrl,
-        metadata: {
-          text_response: textResponse,
-          completed_at: new Date().toISOString(),
-          model_version: '2.5-flash-image-preview'
-        },
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', imageId);
-
-    if (updateError) {
-      console.error('Background DB update error:', updateError);
-      throw updateError;
-    }
-
-    console.log('Background image generation completed for ID:', imageId);
-
-  } catch (error) {
-    console.error('Background image generation failed for ID:', imageId, error);
-    
-    // DB 업데이트 - 실패 (재시도 포함)
-    try {
-      await supabaseAdmin
-        .from('gen_images')
-        .update({
-          generation_status: 'failed',
-          error_message: error.message || 'Background generation failed',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', imageId);
-      
-      console.log('Failed status updated successfully for ID:', imageId);
-    } catch (statusUpdateError) {
-      console.error('Failed to update failure status for ID:', imageId, statusUpdateError);
-      
-      // 최후의 재시도 - 간단한 상태 업데이트만
-      try {
-        await supabaseAdmin
-          .from('gen_images')
-          .update({ generation_status: 'failed' })
-          .eq('id', imageId);
-      } catch (finalError) {
-        console.error('Final status update failed for ID:', imageId, finalError);
-      }
-    }
-  }
-}

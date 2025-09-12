@@ -564,7 +564,10 @@
             class="btn-primary"
             :disabled="!canGenerate || generating"
           >
-            <span v-if="generating">생성 중...</span>
+            <span v-if="generating" class="generating-content">
+              <div class="spinner-small"></div>
+              <span>생성 중...</span>
+            </span>
             <span v-else>이미지 생성</span>
           </button>
         </div> <!-- modal-footer end -->
@@ -1807,9 +1810,19 @@ const generateImage = async () => {
     // 프로젝트의 마지막 사용 설정 저장
     await saveLastUsedSettings()
     
-    // 생성 시작 성공 - Realtime으로 자동 업데이트됨
+    // 생성 성공 처리
     emit('success', result.data)
-    alert('이미지 생성이 시작되었습니다. 잠시 후 갤러리에 표시됩니다.')
+    
+    // Gemini 모델은 동기식이므로 즉시 완료, 다른 모델은 비동기
+    if (selectedModel.value === 'gemini-25-flash-edit' || selectedModel.value === 'gemini-25-flash-image-preview') {
+      if (result.data.status === 'completed') {
+        alert('이미지 생성이 완료되었습니다!')
+      } else {
+        alert('이미지 생성이 시작되었습니다. 잠시 후 갤러리에 표시됩니다.')
+      }
+    } else {
+      alert('이미지 생성이 시작되었습니다. 잠시 후 갤러리에 표시됩니다.')
+    }
     close()
     
   } catch (error) {
@@ -2632,6 +2645,14 @@ onMounted(async () => {
   border-top-color: var(--primary-color);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
+}
+
+/* 생성 중 버튼 내용 스타일 */
+.generating-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
 }
 
 /* 번역된 프롬프트 미리보기 */
