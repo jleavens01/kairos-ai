@@ -144,10 +144,10 @@
                 @loadedmetadata="onVideoMetadataLoaded"
                 class="preview-video hover-video"
               ></video>
-              <!-- 기본 썸네일 이미지 (reference_image_url 사용, 항상 표시) -->
+              <!-- 기본 썸네일 이미지 (thumbnail_url 우선, 없으면 reference_image_url 사용) -->
               <LazyImage 
-                v-if="video.reference_image_url"
-                :src="video.reference_image_url"
+                v-if="video.thumbnail_url || video.reference_image_url"
+                :src="video.thumbnail_url || video.reference_image_url"
                 :alt="video.description || 'Video thumbnail'"
                 root-margin="200px"
                 :class="{ 'thumbnail-hidden': hoveredVideoId === video.id && video.storage_video_url }"

@@ -61,7 +61,7 @@
               :title="image.element_name || image.prompt_used"
             >
               <img 
-                :src="image.result_image_url" 
+                :src="image.thumbnail_url || image.result_image_url" 
                 :alt="image.element_name"
                 @error="handleImageError($event)"
               />
@@ -263,7 +263,7 @@ const handleDragStart = (event, item, type) => {
       : (item.storage_video_url || item.result_video_url || item.video_url),
     thumbnailUrl: type === 'video' 
       ? (item.thumbnail_url || item.reference_image_url)
-      : item.result_image_url,
+      : (item.thumbnail_url || item.result_image_url),
     name: item.element_name,
     prompt: item.prompt_used
   }

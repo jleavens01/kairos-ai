@@ -94,23 +94,31 @@ export const handler = async (event) => {
                         output?.video_url || 
                         output?.video || 
                         (output?.videos && output.videos[0]?.url) ||
+                        (Array.isArray(output?.videos) && output.videos.length > 0 && output.videos[0]) ||
                         // SeedDance 모델들의 다양한 응답 형태 지원
                         output?.data?.video_url ||
                         output?.data?.video ||
+                        output?.result?.video_url ||
+                        output?.result?.video ||
+                        // 웹훅 데이터에서 직접 추출
                         webhookData.data?.video_url ||
                         webhookData.data?.video ||
+                        webhookData.result?.video_url ||
+                        webhookData.result?.video ||
                         webhookData.video_url ||
                         webhookData.video ||
                         webhookData.url;
         
         console.log('Extracted video URL:', videoUrl);
         
-        // SeedDance Lite 디버깅을 위한 상세 로그
+        // SeedDance 모델 디버깅을 위한 상세 로그
         if (webhookData.request_id && webhookData.request_id.includes('seedance')) {
-          console.log('=== SEEDANCE LITE DEBUG ===');
+          console.log('=== SEEDANCE DEBUG ===');
+          console.log('Request ID:', webhookData.request_id);
           console.log('Full output object:', JSON.stringify(output, null, 2));
           console.log('Full webhookData object keys:', Object.keys(webhookData));
-          console.log('=== END SEEDANCE LITE DEBUG ===');
+          console.log('Video URL found:', videoUrl);
+          console.log('=== END SEEDANCE DEBUG ===');
         }
         
         if (!videoUrl) {
@@ -235,9 +243,13 @@ export const handler = async (event) => {
         });
       } else {
         // 이미지 처리
-        const imageUrl = output?.images?.[0]?.url || output?.image_url || output?.url;
+        const imageUrl = output?.images?.[0]?.url || output?.image_url || output?.url || 
+                        output?.image || output?.output_url || webhookData.url;
         
         if (!imageUrl) {
+          console.error('Could not find image URL in webhook data');
+          console.error('Available keys in output:', Object.keys(output || {}));
+          console.error('Available keys in webhookData:', Object.keys(webhookData || {}));
           throw new Error('No image URL in webhook output');
         }
 
@@ -265,25 +277,87 @@ export const handler = async (event) => {
           console.warn('Failed to get file size for image:', error.message);
         }
 
-        const { error: dbError } = await supabase
+        console.log(`Processing image webhook for request_id: ${request_id}`);
+        
+        // 먼저 request_id로 이미지를 찾기
+        let existingImage;
+        let fetchError;
+        
+        ({ data: existingImage, error: fetchError } = await supabase
           .from('gen_images')
-          .update({
+          .select('*')
+          .eq('request_id', request_id)
+          .single());
+        
+        // request_id로 못 찾으면 upscale_id로 검색
+        if (fetchError || !existingImage) {
+          console.log(`No image found with request_id: ${request_id}, checking upscale_id`);
+          
+          ({ data: existingImage, error: fetchError } = await supabase
+            .from('gen_images')
+            .select('*')
+            .eq('upscale_id', request_id)
+            .single());
+          
+          if (existingImage) {
+            console.log(`Found image with upscale_id: ${request_id}`);
+          }
+        }
+
+        if (fetchError || !existingImage) {
+          console.error(`No image found with request_id or upscale_id: ${request_id}`);
+          throw new Error(`No image record found with request_id: ${request_id}`);
+        }
+
+        // 업스케일 작업인지 일반 이미지 생성인지 확인
+        const isUpscale = existingImage.upscale_id === request_id || 
+                         existingImage.upscale_status === 'processing';
+        
+        let updatePayload;
+        if (isUpscale) {
+          // Topaz 업스케일 완료 처리
+          console.log(`Processing Topaz upscale completion for image ${existingImage.id}`);
+          updatePayload = {
+            upscale_status: 'completed',
+            upscale_image_url: imageUrl,
+            upscaled_at: new Date().toISOString(),
+            // 업스케일된 이미지의 크기 정보도 업데이트
+            upscale_width: width,
+            upscale_height: height,
+            upscale_file_size: fileSize,
+            updated_at: new Date().toISOString()
+          };
+        } else {
+          // 일반 이미지 생성 완료 처리
+          console.log(`Processing image generation completion for ${request_id}`);
+          updatePayload = {
             generation_status: 'completed',
             result_image_url: imageUrl,
-            
             file_size: fileSize,
             width: width,
             height: height,
             updated_at: new Date().toISOString()
-          })
-          .eq('request_id', request_id);
+          };
+        }
+
+        // 업데이트 실행
+        const { data: updateData, error: dbError } = await supabase
+          .from('gen_images')
+          .update(updatePayload)
+          .eq('id', existingImage.id)
+          .select();
 
         if (dbError) {
           console.error('DB update error (image):', dbError);
           throw dbError;
         }
 
-        console.log(`Image ${request_id} marked as completed`);
+        console.log(`Image ${request_id} marked as completed (${isUpscale ? 'upscale' : 'generation'})`, {
+          imageId: existingImage.id,
+          isUpscale,
+          updatePayload,
+          updatedRecords: updateData?.length || 0
+        });
       }
     } else if (status === 'FAILED' || status === 'failed' || status === 'ERROR' || status === 'error') {
       // 실패 처리 (이미지/비디오 공통)
@@ -363,26 +437,68 @@ export const handler = async (event) => {
         console.log(`Video ${request_id} marked as failed (${isUpscale ? 'upscale' : 'generation'}):`, errorMessage);
       } else {
         // 이미지 실패 처리
-        const { error: dbError } = await supabase
-          .from(table)
-          .update({
+        // 먼저 request_id로 이미지를 찾기
+        let existingImage;
+        let fetchError;
+        
+        ({ data: existingImage, error: fetchError } = await supabase
+          .from('gen_images')
+          .select('*')
+          .eq('request_id', request_id)
+          .single());
+        
+        // request_id로 못 찾으면 upscale_id로 검색
+        if (fetchError || !existingImage) {
+          ({ data: existingImage, error: fetchError } = await supabase
+            .from('gen_images')
+            .select('*')
+            .eq('upscale_id', request_id)
+            .single());
+        }
+
+        const isUpscale = existingImage?.upscale_id === request_id || 
+                         existingImage?.upscale_status === 'processing';
+        
+        let updatePayload;
+        if (isUpscale) {
+          // 업스케일 실패 처리
+          updatePayload = {
+            upscale_status: 'failed',
+            metadata: {
+              ...existingImage?.metadata,
+              upscale_error: errorMessage,
+              upscale_failed_at: new Date().toISOString(),
+              webhook_data: webhookData
+            },
+            updated_at: new Date().toISOString()
+          };
+        } else {
+          // 일반 이미지 생성 실패 처리
+          updatePayload = {
             generation_status: 'failed',
             error_message: errorMessage,
             metadata: {
+              ...existingImage?.metadata,
               error: errorMessage,
               failed_at: new Date().toISOString(),
               webhook_data: webhookData
             },
             updated_at: new Date().toISOString()
-          })
-          .eq('request_id', request_id);
+          };
+        }
+
+        const { error: dbError } = await supabase
+          .from('gen_images')
+          .update(updatePayload)
+          .eq('id', existingImage?.id || request_id)
+          .select();
 
         if (dbError) {
-          console.error(`DB update error (${table} failed):`, dbError);
+          console.error(`DB update error (image failed):`, dbError);
           throw dbError;
         }
 
-        console.log(`Image ${request_id} marked as failed:`, errorMessage);
+        console.log(`Image ${request_id} marked as failed (${isUpscale ? 'upscale' : 'generation'}):`, errorMessage);
       }
     } else if (status === 'IN_PROGRESS' || status === 'in_progress' || status === 'processing') {
       // 진행 중 상태 업데이트 (선택사항)

@@ -14,8 +14,8 @@
         class="video-thumbnail"
       >
         <img 
-          v-if="item.reference_image_url" 
-          :src="item.reference_image_url" 
+          v-if="item.thumbnail_url || item.reference_image_url" 
+          :src="item.thumbnail_url || item.reference_image_url" 
           :alt="item.prompt"
           loading="lazy"
           class="thumbnail-image"

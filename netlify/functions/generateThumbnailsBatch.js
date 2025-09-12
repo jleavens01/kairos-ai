@@ -22,9 +22,9 @@ export const handler = async (event, context) => {
     // 1. 섬네일이 없는 이미지들 조회 (최근 50개) - 프로젝트ID와 카테고리 정보 포함
     const { data: images, error: fetchError } = await supabase
       .from('gen_images')
-      .select('id, result_image_url, project_id, image_type, created_at')
+      .select('id, result_image_url, storage_image_url, project_id, image_type, created_at')
       .is('thumbnail_url', null)
-      .not('result_image_url', 'is', null)
+      .or('result_image_url.not.is.null,storage_image_url.not.is.null')
       .eq('generation_status', 'completed')
       .order('created_at', { ascending: false })
       .limit(50)
@@ -62,7 +62,7 @@ export const handler = async (event, context) => {
           },
           body: JSON.stringify({
             imageId: image.id,
-            imageUrl: image.result_image_url,
+            imageUrl: image.result_image_url || image.storage_image_url,
             projectId: image.project_id
           })
         })
