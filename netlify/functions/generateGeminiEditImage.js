@@ -1,11 +1,5 @@
-// Gemini 2.5 Flash Image Edit 모델을 사용한 이미지 생성/편집
-import { fal } from '@fal-ai/client';
-import { createClient } from '@supabase/supabase-js';
-
-// FAL AI 클라이언트 설정
-fal.config({
-  credentials: process.env.FAL_API_KEY
-});
+// Google Imagen 3을 직접 사용하는 이미지 생성/편집 (기존 FAL AI 대체)
+import { handler as googleImagenHandler } from './generateGeminiFlashImage.js';
 
 export const generateImage = async ({
   prompt,
@@ -22,316 +16,40 @@ export const generateImage = async ({
   supabaseAdmin,
   metadata = {}
 }) => {
-  console.log('Generating Gemini 2.5 Flash Edit image with params:', {
-    prompt,
-    imageCount: referenceImages?.length || 0,
-    imageSize,
-    style: style?.name || 'none',
-    projectId,
-    sceneNumber
-  });
-
-  // Gemini Edit는 1-5개의 참조 이미지 지원
-  if (!referenceImages || referenceImages.length < 1 || referenceImages.length > 5) {
-    throw new Error('Gemini 2.5 Flash Edit 모델은 1-5개의 참조 이미지가 필요합니다.');
-  }
-
-  // 참조 이미지 URL 추출
-  const imageUrls = referenceImages.map(img => {
-    // 다양한 형식의 이미지 URL 처리
-    if (typeof img === 'string') return img;
-    if (img.url) return img.url;
-    if (img.storage_image_url) return img.storage_image_url;
-    if (img.result_image_url) return img.result_image_url;
-    throw new Error('유효한 이미지 URL을 찾을 수 없습니다.');
-  });
-
-  console.log('Image URLs:', imageUrls);
-
-  // 스타일이 있는 경우 프롬프트에 추가
-  let finalPrompt = prompt;
-  if (style && style.prompt_suffix) {
-    finalPrompt = `${prompt}, ${style.prompt_suffix}`;
-  }
-
-  // 이미지 크기를 픽셀로 변환 (FAL AI 형식)
-  const imageSizeMap = {
-    '21:9': { width: 1680, height: 720 },
-    '16:9': { width: 1280, height: 720 },
-    '4:3': { width: 1024, height: 768 },
-    '3:2': { width: 1080, height: 720 },
-    '1:1': { width: 1024, height: 1024 },
-    '2:3': { width: 720, height: 1080 },
-    '3:4': { width: 768, height: 1024 },
-    '9:16': { width: 720, height: 1280 },
-    '9:21': { width: 720, height: 1680 }
+  console.log('Redirecting to Google Imagen 3 direct API...');
+  
+  // 새로운 Google 직접 연결 방식으로 리다이렉트
+  // HTTP 이벤트 객체 구성
+  const mockEvent = {
+    httpMethod: 'POST',
+    headers: {
+      authorization: `Bearer ${JSON.stringify(user)}`  // 임시로 user 객체를 JWT처럼 처리
+    },
+    body: JSON.stringify({
+      prompt,
+      referenceImages,
+      imageSize,
+      style,
+      projectId,
+      sceneNumber,
+      sceneId,
+      sceneName,
+      category,
+      elementName,
+      metadata
+    })
   };
 
-  const dimensions = imageSizeMap[imageSize] || { width: 1024, height: 1024 };
-
-  let dbImage; // 변수를 try 블록 외부에 선언
+  // Google Imagen 3 핸들러 호출
+  const result = await googleImagenHandler(mockEvent);
   
-  try {
-    // element_name 결정 로직
-    let finalElementName = elementName;
-    
-    // elementName이 없는 경우 카테고리에 따라 설정
-    if (!finalElementName) {
-      if (category === 'scene' && sceneName) {
-        finalElementName = sceneName;
-      } else if (category === 'scene' && sceneNumber) {
-        finalElementName = `씬 ${sceneNumber}`;
-      } else if (category === 'character' || category === 'background' || category === 'object') {
-        // 프롬프트에서 첫 부분 추출
-        finalElementName = prompt.split(',')[0].substring(0, 50);
-      } else {
-        finalElementName = prompt.substring(0, 50);
-      }
-    }
-    
-    // 1. gen_images 테이블에 초기 레코드 생성
-    const imageRecord = {
-      project_id: projectId,
-      production_sheet_id: sceneId || sceneNumber,  // sceneId 우선 사용
-      element_name: finalElementName,
-      image_type: category || 'scene',  // 카테고리를 image_type으로 설정
-      generation_model: 'gemini-25-flash-edit',
-      prompt_used: finalPrompt,  // generation_prompt가 아닌 prompt_used
-      custom_prompt: prompt,
-      generation_status: 'pending',
-      reference_image_url: imageUrls[0] || null,  // 첫 번째 참조 이미지
-      style_id: style?.id || null,
-      style_name: style?.name || null,
-      metadata: {
-        ...metadata,
-        aspect_ratio: imageSize,
-        resolution: `${dimensions.width}x${dimensions.height}`,
-        reference_images: imageUrls,
-        reference_count: imageUrls.length,
-        model_version: '2.5-flash',
-        created_by: user.sub
-      },
-      tags: []
-    };
-
-    const { data: createdImage, error: dbError } = await supabaseAdmin
-      .from('gen_images')
-      .insert([imageRecord])
-      .select()
-      .single();
-
-    if (dbError) {
-      console.error('Database insert error details:', {
-        error: dbError,
-        message: dbError.message,
-        details: dbError.details,
-        hint: dbError.hint,
-        code: dbError.code,
-        imageRecord: imageRecord
-      });
-      throw new Error(`이미지 레코드 생성 실패: ${dbError.message || dbError}`);
-    }
-    
-    dbImage = createdImage; // 외부 변수에 할당
-    console.log('Created image record:', dbImage.id);
-
-    // 2. FAL AI로 이미지 생성 요청
-    // API 문서에 맞는 형식으로 파라미터 구성
-    const falParams = {
-      prompt: finalPrompt,
-      image_urls: imageUrls, // 모든 이미지를 배열로 전달
-      num_images: 1
-    };
-
-    console.log('Submitting to FAL AI Gemini Flash Edit:', falParams);
-
-    // 개발 환경 확인
-    const isDevelopment = process.env.CONTEXT === 'dev' || 
-                         process.env.NETLIFY_DEV === 'true' ||
-                         (process.env.URL && process.env.URL.includes('localhost'));
-
-    let requestId;
-    
-    if (!isDevelopment) {
-      // 프로덕션: 웹훅 사용
-      const baseUrl = process.env.URL || process.env.DEPLOY_URL || 'https://kairos-ai-pd.netlify.app';
-      const submitResult = await fal.queue.submit('fal-ai/gemini-25-flash-image/edit', {
-        input: {
-          prompt: finalPrompt,
-          image_urls: imageUrls,  // 모든 이미지를 배열로 전달
-          num_images: 1
-        },
-        webhookUrl: `${baseUrl}/.netlify/functions/fal-webhook-handler`
-      });
-      requestId = submitResult.request_id;
-      console.log('Image generation submitted with webhook:', requestId);
-    } else {
-      // 개발: 폴링 사용
-      const submitResult = await fal.queue.submit('fal-ai/gemini-25-flash-image/edit', {
-        input: {
-          prompt: finalPrompt,
-          image_urls: imageUrls,  // 모든 이미지를 배열로 전달
-          num_images: 1
-        }
-      });
-      requestId = submitResult.request_id;
-      console.log('Image generation submitted for polling:', requestId);
-    }
-
-    // 3. request_id로 DB 업데이트
-    const { error: updateError } = await supabaseAdmin
-      .from('gen_images')
-      .update({
-        request_id: requestId,
-        generation_status: 'processing',
-        metadata: {
-          ...dbImage.metadata,
-          fal_request_id: requestId,
-          submitted_at: new Date().toISOString()
-        }
-      })
-      .eq('id', dbImage.id);
-
-    if (updateError) {
-      console.error('Failed to update request_id:', updateError);
-    }
-
-    // 4. 개발 환경에서 폴링 시작 (선택적)
-    if (isDevelopment) {
-      // 비동기로 폴링 시작 (응답은 즉시 반환)
-      pollImageStatus(dbImage.id, requestId);
-    }
-
-    return {
-      success: true,
-      data: {
-        ...dbImage,
-        request_id: requestId,
-        status: 'processing',
-        message: 'Gemini 2.5 Flash Edit 이미지 생성이 시작되었습니다.'
-      }
-    };
-
-  } catch (error) {
-    console.error('Gemini Edit image generation error:', error);
-    
-    // DB에 실패 상태 기록
-    if (dbImage?.id) {
-      await supabaseAdmin
-        .from('gen_images')
-        .update({
-          generation_status: 'failed',
-          error_message: error.message || 'Unknown error'
-        })
-        .eq('id', dbImage.id);
-    }
-    
-    throw error;
+  if (result.statusCode === 200) {
+    const responseData = JSON.parse(result.body);
+    return responseData;
+  } else {
+    const errorData = JSON.parse(result.body);
+    throw new Error(errorData.error || 'Image generation failed');
   }
 };
 
-// 개발 환경용 폴링 함수
-async function pollImageStatus(imageId, requestId) {
-  const supabaseAdmin = createClient(
-    process.env.VITE_SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-  );
-
-  const maxAttempts = 60; // 최대 60번 시도 (5분)
-  const pollInterval = 5000; // 5초마다
-
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    await new Promise(resolve => setTimeout(resolve, pollInterval));
-
-    try {
-      const status = await fal.queue.status('fal-ai/gemini-25-flash-image/edit', {
-        requestId: requestId,
-        logs: true
-      });
-
-      console.log(`Gemini Edit status (attempt ${attempt + 1}):`, status.status);
-
-      if (status.status === 'COMPLETED') {
-        // 결과 가져오기
-        const result = await fal.queue.result('fal-ai/gemini-25-flash-image/edit', {
-          requestId: requestId
-        });
-
-        console.log('Gemini Edit completed:', result);
-
-        // 이미지 URL 추출
-        const imageUrl = result.data?.images?.[0]?.url || 
-                        result.images?.[0]?.url ||
-                        result.image?.url ||
-                        result.url;
-        
-        const description = result.data?.description || 
-                          result.description || 
-                          '';
-
-        if (!imageUrl) {
-          throw new Error('No image URL in result');
-        }
-
-        // DB 업데이트
-        // 현재 메타데이터 가져오기
-        const { data: currentImage } = await supabaseAdmin
-          .from('gen_images')
-          .select('metadata')
-          .eq('id', imageId)
-          .single();
-        
-        const { error: updateError } = await supabaseAdmin
-          .from('gen_images')
-          .update({
-            generation_status: 'completed',
-            result_image_url: imageUrl,
-            storage_image_url: imageUrl,
-            metadata: {
-              ...currentImage?.metadata,
-              completion_response: result.data || result,
-              processing_time: attempt * pollInterval,
-              gemini_description: description
-            },
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', imageId);
-
-        if (updateError) {
-          console.error('Database update error:', updateError);
-          throw updateError;
-        }
-
-        console.log('Gemini Edit image saved successfully for ID:', imageId);
-        return;
-      } else if (status.status === 'FAILED' || status.status === 'ERROR') {
-        // 실패 처리
-        await supabaseAdmin
-          .from('gen_images')
-          .update({
-            generation_status: 'failed',
-            error_message: status.error || 'Generation failed',
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', imageId);
-
-        console.error('Gemini Edit failed:', status);
-        return;
-      }
-    } catch (error) {
-      console.error('Polling error:', error);
-      
-      // 마지막 시도에서 에러 발생 시 실패로 처리
-      if (attempt === maxAttempts - 1) {
-        await supabaseAdmin
-          .from('gen_images')
-          .update({
-            generation_status: 'failed',
-            error_message: 'Polling timeout',
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', imageId);
-      }
-    }
-  }
-}
+// 기존 FAL AI 폴링 함수는 더 이상 필요하지 않음 (Google 직접 연결로 대체됨)

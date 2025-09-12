@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { generateImage as generateGPTImage } from './generateGPTImage.js';
 import { generateImage as generateFluxImage } from './generateFluxImage.js';
 import { generateImage as generateGeminiEditImage } from './generateGeminiEditImage.js';
+import { handler as generateGoogleImagen } from './generateGeminiFlashImage.js';
 import { generateImage as generateRecraftImage } from './generateRecraftImage.js';
 
 export const handler = async (event) => {
@@ -71,11 +72,35 @@ export const handler = async (event) => {
           break;
           
         case 'gemini-25-flash-edit':
-          result = await generateGeminiEditImage({
-            ...requestData,
-            user,
-            supabaseAdmin
-          });
+          // 기존 FAL AI 기반 Gemini Edit를 Gemini 2.5 Flash Image Preview 직접 연결로 대체
+          const geminiEditEvent = {
+            ...event,
+            body: JSON.stringify(requestData)
+          };
+          const geminiEditResponse = await generateGoogleImagen(geminiEditEvent);
+          
+          if (geminiEditResponse.statusCode === 200) {
+            result = JSON.parse(geminiEditResponse.body);
+          } else {
+            const errorData = JSON.parse(geminiEditResponse.body);
+            throw new Error(errorData.error || 'Gemini 2.5 Flash Image Preview generation failed');
+          }
+          break;
+          
+        case 'gemini-25-flash-image-preview':
+          // Gemini 2.5 Flash Image Preview 직접 연결
+          const imagenEvent = {
+            ...event,
+            body: JSON.stringify(requestData)
+          };
+          const imagenResponse = await generateGoogleImagen(imagenEvent);
+          
+          if (imagenResponse.statusCode === 200) {
+            result = JSON.parse(imagenResponse.body);
+          } else {
+            const errorData = JSON.parse(imagenResponse.body);
+            throw new Error(errorData.error || 'Gemini 2.5 Flash Image Preview generation failed');
+          }
           break;
           
         case 'recraft-v3':
