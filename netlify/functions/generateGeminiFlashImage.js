@@ -137,6 +137,7 @@ export const handler = async (event) => {
     const imageRecord = {
       project_id: projectId,
       production_sheet_id: sceneId || sceneNumber,
+      scene_number: sceneNumber || null,  // 씬 번호 추가
       element_name: finalElementName,
       image_type: category || 'scene',
       generation_model: 'gemini-25-flash-image-preview',

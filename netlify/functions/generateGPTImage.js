@@ -37,6 +37,7 @@ export async function generateImage({
       .insert({
         project_id: projectId,
         production_sheet_id: sceneId,
+        scene_number: sceneNumber || null,  // 씬 번호 추가
         image_type: category,
         element_name: category === 'scene' ? 
           (sceneName || (sceneNumber ? `씬 ${sceneNumber}` : '제목 없음')) : 

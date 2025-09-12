@@ -94,6 +94,8 @@ export const generateImage = async (data) => {
       .from('gen_images')
       .insert({
         project_id: requestData.projectId,
+        production_sheet_id: requestData.sceneId || requestData.sceneNumber,
+        scene_number: requestData.sceneNumber || null,  // 씬 번호 추가
         image_type: requestData.category || 'scene',
         element_name: requestData.characterName || 'Generated Image',
         generation_status: 'completed',
