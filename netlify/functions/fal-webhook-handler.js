@@ -79,26 +79,44 @@ export const handler = async (event) => {
       };
     }
 
-    // 이미지 또는 비디오 판별
+    // 이미지 또는 비디오 판별 (SeedDance Lite 포함)
     const isVideo = output?.video_url || output?.video || 
                    (Array.isArray(output?.videos) && output.videos.length > 0) ||
-                   webhookData.video_url || webhookData.video;
+                   webhookData.video_url || webhookData.video ||
+                   // SeedDance 모델들의 다양한 응답 형태 지원
+                   output?.data?.video_url || output?.data?.video ||
+                   webhookData.data?.video_url || webhookData.data?.video;
     
     if (status === 'COMPLETED' || status === 'completed' || status === 'OK') {
       if (isVideo) {
-        // 비디오 처리 - 다양한 경로에서 URL 찾기
+        // 비디오 처리 - 다양한 경로에서 URL 찾기 (SeedDance Lite 포함)
         const videoUrl = output?.video?.url ||  // payload.video.url 형식 처리
                         output?.video_url || 
                         output?.video || 
                         (output?.videos && output.videos[0]?.url) ||
+                        // SeedDance 모델들의 다양한 응답 형태 지원
+                        output?.data?.video_url ||
+                        output?.data?.video ||
+                        webhookData.data?.video_url ||
+                        webhookData.data?.video ||
                         webhookData.video_url ||
                         webhookData.video ||
                         webhookData.url;
         
         console.log('Extracted video URL:', videoUrl);
         
+        // SeedDance Lite 디버깅을 위한 상세 로그
+        if (webhookData.request_id && webhookData.request_id.includes('seedance')) {
+          console.log('=== SEEDANCE LITE DEBUG ===');
+          console.log('Full output object:', JSON.stringify(output, null, 2));
+          console.log('Full webhookData object keys:', Object.keys(webhookData));
+          console.log('=== END SEEDANCE LITE DEBUG ===');
+        }
+        
         if (!videoUrl) {
           console.error('Could not find video URL in webhook data');
+          console.error('Available keys in output:', Object.keys(output || {}));
+          console.error('Available keys in webhookData:', Object.keys(webhookData || {}));
           throw new Error('No video URL in webhook output');
         }
 

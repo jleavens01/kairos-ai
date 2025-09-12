@@ -1141,14 +1141,14 @@ const markVideosAsFailed = async (videoIds, errorMessage = '생성 실패') => {
     if (!session) return
 
     const { error } = await supabase
-      .from('ai_videos')
+      .from('gen_videos')
       .update({
         generation_status: 'failed',
         error_message: errorMessage,
         completed_at: new Date().toISOString()
       })
       .in('id', videoIds)
-      .eq('user_id', session.user.id)
+      .eq('created_by', session.user.id)
 
     if (error) {
       console.error('Failed to mark videos as failed:', error)
@@ -1193,7 +1193,7 @@ const startPolling = () => {
           console.warn(`- ${video.prompt} (ID: ${video.id})`)
         })
         await markVideosAsFailed(stuckVideos.map(video => video.id), '생성 시간 초과 (5분)')
-        await loadVideos() // 갤러리 새로고침
+        await fetchVideos() // 갤러리 새로고침
       }
     }
     
