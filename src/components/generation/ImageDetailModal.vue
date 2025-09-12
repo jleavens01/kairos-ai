@@ -368,6 +368,7 @@ import { ref, computed, nextTick, watch, onMounted, onUnmounted } from 'vue'
 import { supabase } from '@/utils/supabase'
 import { createImageEditor, CROP_RATIOS, EDIT_MODES } from '@/utils/imageEditor'
 import { useAuthStore } from '@/stores/auth'
+import { useProjectsStore } from '@/stores/projects'
 import DrawCanvas from './DrawCanvas.vue'
 import { formatFileSize, getFileSizeColorClass } from '@/utils/fileSize'
 
@@ -390,6 +391,7 @@ const emit = defineEmits(['close', 'update', 'edit-tags', 'connect-scene', 'edit
 
 // Stores
 const authStore = useAuthStore()
+const projectsStore = useProjectsStore()
 
 // State
 const isZoomed = ref(false)
@@ -748,7 +750,13 @@ const handleDrawCanvasSave = async (data) => {
   try {
     // 그리기가 추가된 이미지를 저장
     const fileName = `drawn_${Date.now()}.png`
-    const projectId = props.projectId || props.image.project_id
+    const projectId = props.projectId || props.image.project_id || projectsStore.currentProject?.id
+    
+    if (!projectId) {
+      console.error('프로젝트 ID를 찾을 수 없습니다.')
+      alert('프로젝트 ID를 찾을 수 없습니다. 프로젝트를 선택해주세요.')
+      return
+    }
     const userId = authStore.user?.id
     
     if (!userId) {
@@ -912,7 +920,13 @@ const removeLayer = (index) => {
 // 사용 가능한 이미지 로드
 const loadAvailableImages = async () => {
   try {
-    const projectId = props.projectId || props.image.project_id
+    const projectId = props.projectId || props.image.project_id || projectsStore.currentProject?.id
+    
+    if (!projectId) {
+      console.error('프로젝트 ID를 찾을 수 없습니다.')
+      alert('프로젝트 ID를 찾을 수 없습니다. 프로젝트를 선택해주세요.')
+      return
+    }
     const { data, error } = await supabase
       .from('gen_images')
       .select('id, element_name, result_image_url, thumbnail_url, image_type')
@@ -945,7 +959,19 @@ const applyEdit = async () => {
       
       // 새 이미지로 저장 (Supabase Storage에 업로드)
       const fileName = `edited_${Date.now()}.png`
-      const projectId = props.projectId || props.image.project_id
+      const projectId = props.projectId || props.image.project_id || projectsStore.currentProject?.id
+      
+      if (!projectId) {
+        console.error('프로젝트 ID를 찾을 수 없습니다.')
+        alert('프로젝트 ID를 찾을 수 없습니다. 프로젝트를 선택해주세요.')
+        return
+      } || projectsStore.currentProject?.id
+    
+    if (!projectId) {
+      console.error('프로젝트 ID를 찾을 수 없습니다.')
+      alert('프로젝트 ID를 찾을 수 없습니다. 프로젝트를 선택해주세요.')
+      return
+    }
       const userId = authStore.user?.id
       
       // 카테고리 결정 (image_type 기반)
@@ -1114,7 +1140,19 @@ const applyEdit = async () => {
       
       // 새 이미지로 저장 (Supabase Storage에 업로드)
       const fileName = `layered_${Date.now()}.png`
-      const projectId = props.projectId || props.image.project_id
+      const projectId = props.projectId || props.image.project_id || projectsStore.currentProject?.id
+      
+      if (!projectId) {
+        console.error('프로젝트 ID를 찾을 수 없습니다.')
+        alert('프로젝트 ID를 찾을 수 없습니다. 프로젝트를 선택해주세요.')
+        return
+      } || projectsStore.currentProject?.id
+    
+    if (!projectId) {
+      console.error('프로젝트 ID를 찾을 수 없습니다.')
+      alert('프로젝트 ID를 찾을 수 없습니다. 프로젝트를 선택해주세요.')
+      return
+    }
       const userId = authStore.user?.id
       
       // 카테고리 결정 (image_type 기반)
