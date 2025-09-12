@@ -661,15 +661,6 @@ const filteredImages = computed(() => {
   }
   
   // 최종 필터링 결과 반환
-  return {
-    samples: filtered.slice(0, 3).map(img => ({
-      id: img.id,
-      status: img.generation_status,
-      hasThumb: !!img.thumbnail_url,
-      hasResult: !!img.result_image_url
-    }))
-  })
-  
   return filtered
 })
 // 이미지 갤러리용 아이템 (제안 카드 제외)
