@@ -53,13 +53,6 @@ const { elementRef, hasLoaded } = useLazyLoad(() => {
 })
 
 const onImageLoad = () => {
-  const imageSrc = currentSrc.value || props.src
-  // base64 데이터 URL인 경우 길이만 표시
-  if (imageSrc.startsWith('data:')) {
-    console.log('✅ 이미지 로딩 성공: [Base64 Data URL, length:', imageSrc.length, ']')
-  } else {
-    console.log('✅ 이미지 로딩 성공:', imageSrc)
-  }
   imageLoaded.value = true
   imageError.value = false
 }

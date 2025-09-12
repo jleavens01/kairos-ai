@@ -170,9 +170,6 @@ const removeBackground = async () => {
       return
     }
 
-    console.log('Starting background removal...')
-    console.log('Original image:', props.originalImage)
-    console.log('Remove mode:', removeMode.value)
 
     // Recraft 배경 제거 API 호출
     const response = await fetch('/.netlify/functions/generateRecraftRemoveBackground', {
@@ -225,7 +222,6 @@ const downloadProcessed = async () => {
     window.URL.revokeObjectURL(url)
     document.body.removeChild(a)
     
-    console.log('Background removed image downloaded successfully')
   } catch (error) {
     console.error('Download failed:', error)
     alert('다운로드에 실패했습니다.')

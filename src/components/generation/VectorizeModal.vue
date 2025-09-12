@@ -108,11 +108,7 @@ const handleImageError = (event) => {
 }
 
 const handleImageLoad = (event) => {
-  console.log('VectorizeModal - Image loaded successfully:', {
-    src: event.target.src,
-    originalImage: props.originalImage,
-    imageId: props.imageId
-  })
+  // Image loaded successfully
 }
 
 const vectorizeImage = async () => {
@@ -130,7 +126,6 @@ const vectorizeImage = async () => {
       return
     }
 
-    console.log('Starting vectorization for:', props.originalImage)
 
     // Recraft 벡터라이즈 API 호출
     const response = await fetch('/.netlify/functions/generateRecraftVectorize', {

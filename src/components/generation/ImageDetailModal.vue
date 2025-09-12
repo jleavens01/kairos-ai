@@ -500,7 +500,6 @@ const fetchProcessedImages = async () => {
     }))
     
     processedImages.value = mappedData
-    console.log('All processed images loaded:', processedImages.value)
   } catch (error) {
     console.error('Failed to fetch processed images:', error)
   }
@@ -759,11 +758,6 @@ const handleDrawCanvasSave = async (data) => {
     // ref-images 버킷에 저장 (user_id/edited/projectId/fileName 형식)
     const filePath = `${userId}/edited/${projectId}/${fileName}`
     
-    console.log('Saving drawn image:', {
-      bucket: 'ref-images',
-      path: filePath,
-      fileSize: data.file.size
-    })
     
     const { error: uploadError } = await supabase.storage
       .from('ref-images')
@@ -1033,7 +1027,6 @@ const applyEdit = async () => {
       // ref-images 버킷 사용 (gen-images 버킷의 RLS 정책 문제 회피)
       const refImagePath = `${userId}/edited/${projectId}/${fileName}`
       
-      console.log('Trying ref-images bucket with path:', refImagePath)
       
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('ref-images')
@@ -1163,7 +1156,6 @@ const applyEdit = async () => {
       // ref-images 버킷 사용 (gen-images 버킷의 RLS 정책 문제 회피)
       const refImagePath = `${userId}/edited/${projectId}/${fileName}`
       
-      console.log('Trying ref-images bucket with path:', refImagePath)
       
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('ref-images')

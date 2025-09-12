@@ -642,31 +642,26 @@ const characterSuggestions = computed(() => {
 })
 // 필터링된 이미지 목록 (모든 이미지 포함)
 const filteredImages = computed(() => {
-  console.log('🔍 필터링 시작 - 전체 이미지:', images.value.length)
   
   // completed 또는 failed 상태의 모든 이미지 표시 (캐릭터 포함)
   let filtered = images.value.filter(img => {
     const isVisibleStatus = img.generation_status === 'completed' || img.generation_status === 'failed'
     return isVisibleStatus
   })
-  console.log('📊 상태 필터 후 (completed/failed):', filtered.length)
   
   // 보관함 필터
   if (showKeptOnly.value) {
     filtered = filtered.filter(img => img.is_kept === true)
-    console.log('📦 보관함만 표시:', filtered.length)
   } else {
     filtered = filtered.filter(img => !img.is_kept) // 보관함이 아닐 때는 보관되지 않은 것만
-    console.log('🗂️ 보관되지 않은 이미지만:', filtered.length)
   }
   
   if (filterCategory.value) {
     filtered = filtered.filter(img => img.image_type === filterCategory.value)
-    console.log(`🏷️ 카테고리 필터 (${filterCategory.value}):`, filtered.length)
   }
   
-  console.log('✨ 최종 필터링된 이미지:', {
-    count: filtered.length,
+  // 최종 필터링 결과 반환
+  return {
     samples: filtered.slice(0, 3).map(img => ({
       id: img.id,
       status: img.generation_status,
@@ -861,7 +856,6 @@ const fetchImages = async () => {
     
     if (genError) throw genError
     
-    console.log(`✅ 이미지 로딩 완료: ${genImages?.length || 0}개`)
     
     // 필터링 로직 단순화
     let filteredImages = genImages || []
@@ -871,7 +865,6 @@ const fetchImages = async () => {
       filteredImages = filteredImages.filter(img => !img.is_kept)
     }
     
-    console.log(`📊 필터링 후: ${filteredImages.length}개`)
     
     // 페이지네이션
     const from = (currentPage.value - 1) * pageSize.value
@@ -1075,7 +1068,7 @@ const markImagesAsFailed = async (imageIds, errorMessage = '생성 실패') => {
     if (error) {
       console.error('Failed to mark images as failed:', error)
     } else {
-      console.log(`✅ ${imageIds.length}개 이미지를 실패 처리했습니다`)
+      // 이미지 실패 처리 완료
     }
   } catch (error) {
     console.error('Error marking images as failed:', error)
@@ -1405,18 +1398,15 @@ const getOptimizedImageUrl = (item) => {
   
   // 1. 썸네일이 있고 유효하면 우선 사용 (빠른 로딩)
   if (item.thumbnail_url && item.thumbnail_url.length > 10) {
-    console.log('✅ 썸네일 사용:', item.thumbnail_url)
     return item.thumbnail_url
   }
   
   // 2. 썸네일이 없으면 result_image_url 사용
   if (item.result_image_url) {
-    console.log('⚠️ 원본 이미지 사용 (느림):', item.result_image_url)
     return item.result_image_url
   }
   
   // 3. 모든 URL이 없으면 기본 이미지
-  console.log('❌ 이미지 URL 없음, 기본 이미지 사용')
   return 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="300" height="300"%3E%3Crect fill="%23f0f0f0" width="300" height="300"/%3E%3Ctext x="50%25" y="50%25" text-anchor="middle" dy=".3em" fill="%23999" font-size="14"%3E이미지 없음%3C/text%3E%3C/svg%3E'
 }
 
@@ -1505,12 +1495,10 @@ const handleGenerateVideo = (videoData) => {
 
 // Recraft 편집 핸들러들
 const handleVectorize = (image) => {
-  console.log('handleVectorize called with image:', image)
   vectorizeImageData.value = {
     imageUrl: image.imageUrl,
     imageId: image.imageId
   }
-  console.log('vectorizeImageData set to:', vectorizeImageData.value)
   showVectorizeModal.value = true
   showDetailModal.value = false
 }

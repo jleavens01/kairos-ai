@@ -171,9 +171,6 @@ const upscaleImage = async () => {
       return
     }
 
-    console.log('Starting image upscale...')
-    console.log('Original image:', props.originalImage)
-    console.log('Upscale factor:', upscaleFactor.value)
 
     // Recraft 업스케일 API 호출
     const response = await fetch('/.netlify/functions/generateRecraftUpscale', {
@@ -226,7 +223,6 @@ const downloadUpscaled = async () => {
     window.URL.revokeObjectURL(url)
     document.body.removeChild(a)
     
-    console.log('Upscaled image downloaded successfully')
   } catch (error) {
     console.error('Download failed:', error)
     alert('다운로드에 실패했습니다.')
