@@ -6,6 +6,7 @@ import { generateImage as generateFluxImage } from './generateFluxImage.js';
 import { generateImage as generateGeminiEditImage } from './generateGeminiEditImage.js';
 import { handler as generateGoogleImagen } from './generateGeminiFlashImage.js';
 import { generateImage as generateRecraftImage } from './generateRecraftImage.js';
+import { generateImage as generateSeedream4Image } from './generateSeedream4Image.js';
 
 export const handler = async (event) => {
   const headers = {
@@ -101,6 +102,14 @@ export const handler = async (event) => {
             const errorData = JSON.parse(imagenResponse.body);
             throw new Error(errorData.error || 'Gemini 2.5 Flash Image Preview generation failed');
           }
+          break;
+          
+        case 'seedream-4-edit':
+          result = await generateSeedream4Image({
+            ...requestData,
+            user,
+            supabaseAdmin
+          });
           break;
           
         case 'recraft-v3':

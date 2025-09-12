@@ -44,6 +44,23 @@
           </svg>
           비디오 다운로드
         </button>
+        <button @click="mergeSelectedScenes" class="btn-merge" :disabled="selectedScenes.length < 2">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m8 6 4-4 4 4"/>
+            <path d="M12 2v10.3a4 4 0 0 1-1.172 2.872L4 22"/>
+            <path d="m20 22-6.928-6.928A4 4 0 0 1 12 12.3V2"/>
+          </svg>
+          씬 병합
+        </button>
+        <button @click="showGroupingModal = true" class="btn-group" :disabled="selectedScenes.length < 1">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7"/>
+            <rect x="14" y="3" width="7" height="7"/>
+            <rect x="14" y="14" width="7" height="7"/>
+            <rect x="3" y="14" width="7" height="7"/>
+          </svg>
+          그룹화
+        </button>
         <button @click="deleteSelectedScenes" class="btn-delete">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="3 6 5 6 21 6"></polyline>
@@ -153,6 +170,7 @@
       <table class="production-table">
         <thead>
           <tr>
+            <th class="sequence-group-col">시퀀스</th>
             <th class="scene-number-col">
             <input 
               type="checkbox" 
@@ -246,13 +264,41 @@
         </tr>
       </thead>
       <tbody>
-        <template v-for="(scene, index) in scenes" :key="scene.id">
-          <tr 
-            class="production-sheet-data-row"
-            :class="{ selected: isSelected(scene.id) }"
-            @mouseover="setHoveredItem(scene.id)"
-            @mouseleave="clearHoveredItem()"
-          >
+        <template v-for="group in groupedScenes" :key="group.id">
+          <template v-for="(scene, sceneIdx) in group.scenes" :key="scene.id">
+            <tr 
+              class="production-sheet-data-row"
+              :class="{ 
+                selected: isSelected(scene.id),
+                'being-dragged': draggedItem === scene.id,
+                'drop-target': dropTarget === scene.id && dropTarget !== draggedItem
+              }"
+              :draggable="true"
+              @dragstart="handleDragStart(scene, $event)"
+              @dragover.prevent="handleDragOver(scene, $event)"
+              @dragenter.prevent="handleDragEnter(scene)"
+              @dragleave="handleDragLeave"
+              @drop.prevent="handleDrop(scene, $event)"
+              @dragend="handleDragEnd"
+              @mouseover="setHoveredItem(scene.id)"
+              @mouseleave="clearHoveredItem()"
+            >
+              <!-- 시퀀스 컬럼 (모든 씬에 생성, 첫 번째가 아니면 빈 셀) -->
+              <td v-if="!isMobile" 
+                  class="sequence-group-col" 
+                  :class="{
+                    'sequence-first': sceneIdx === 0,
+                    'sequence-middle': sceneIdx > 0 && sceneIdx < group.scenes.length - 1,
+                    'sequence-last': sceneIdx === group.scenes.length - 1
+                  }"
+                  :data-label="'시퀀스'">
+                <div v-if="sceneIdx === 0" class="sequence-group-cell">
+                  <div class="sequence-name-vertical">
+                    {{ group.name === 'Sequence 1' ? '시퀀스 1' : group.name }}
+                  </div>
+                </div>
+                <div v-else class="sequence-group-cell-empty"></div>
+              </td>
             <td v-if="!isMobile" class="scene-number-col" :data-label="'씬 번호'">
               <div class="scene-number-wrapper">
                 <input 
@@ -263,6 +309,7 @@
                 <span class="scene-number">#S{{ scene.scene_number }}</span>
               </div>
             </td>
+            
             <td v-if="!isMobile" class="scene-image-col" :data-label="'이미지/비디오'">
               <SceneImageUploader
                 :scene-id="scene.id"
@@ -276,7 +323,7 @@
               />
             </td>
             <!-- 모바일에서는 씬 번호와 이미지를 하나의 셀로 합침 -->
-            <td v-if="isMobile" class="mobile-scene-header" colspan="2">
+            <td v-if="isMobile" class="mobile-scene-header" colspan="3">
               <div class="mobile-header-row">
                 <input 
                   type="checkbox" 
@@ -284,6 +331,15 @@
                   @change="toggleSelect(scene.id)"
                 >
                 <span class="scene-number">#S{{ scene.scene_number }}</span>
+                <div v-if="scene.sequence_name && scene.sequence_name !== 'Sequence 1'" class="sequence-badge mobile">
+                  {{ scene.sequence_name }}
+                </div>
+                <div v-else-if="scene.sequence_id && scene.sequence_id !== 1" class="sequence-badge mobile">
+                  시퀀스 {{ scene.sequence_id }}
+                </div>
+                <span v-else class="sequence-badge default-sequence mobile">
+                  시퀀스 1
+                </span>
                 <div class="mobile-media-switch-inline">
                   <span class="media-label-small" :class="{ active: sceneMediaTypes[scene.id] === 'image' }">이미지</span>
                   <label class="media-switch-small">
@@ -316,13 +372,21 @@
                 <textarea 
                   :id="`edit-${scene.id}-original_script_text`"
                   v-model="editedValue"
-                  @blur="saveEdit(scene, 'original_script_text')"
-                  @keydown.esc.prevent="cancelEdit"
+                  @blur="handleBlurWithConfirmation(scene, 'original_script_text')"
+                  @input="handleInputChange"
+                  @keydown.esc.prevent="handleEscapeKey"
                   @keydown.enter.ctrl="saveEdit(scene, 'original_script_text')"
                   @keydown.enter.shift.prevent="splitSceneAtCursor(scene)"
                   rows="3"
                   class="edit-input edit-textarea"
+                  :class="{ 'has-changes': hasUnsavedChanges }"
                 ></textarea>
+                <div v-if="hasUnsavedChanges" class="edit-status">
+                  <span class="unsaved-indicator">• 저장되지 않은 변경사항</span>
+                </div>
+                <div class="edit-hint">
+                  Ctrl+Enter: 저장 | Shift+Enter: 씬 분할 | Esc: 취소
+                </div>
               </template>
               <template v-else>
                 {{ scene.original_script_text }}
@@ -335,6 +399,7 @@
                 {{ getSceneType(scene) }}
               </span>
             </td>
+            
             
             <!-- 연출가이드 컬럼 -->
             <td class="director-guide-col editable-cell" :data-label="isMobile ? '연출가이드' : ''" @click="startEditingDirectorGuide(scene.id, scene.director_guide)">
@@ -560,13 +625,13 @@
             </td>
           </tr>
           <!-- 모바일에서 씬 추가 버튼 (씬 사이에 겹쳐짐) -->
-          <div v-if="isMobile && index < scenes.length - 1" class="mobile-scene-divider">
+          <div v-if="isMobile && sceneIdx < group.scenes.length - 1" class="mobile-scene-divider">
             <button @click="addRow(scene.scene_number)" class="mobile-add-scene-floating-btn">
               + 씬 추가
             </button>
           </div>
           <!-- 데스크탑 씬 추가 버튼 오버레이 -->
-          <tr v-if="!isMobile && index < scenes.length - 1" class="scene-divider-row">
+          <tr v-if="!isMobile && sceneIdx < group.scenes.length - 1" class="scene-divider-row">
             <td colspan="6" class="scene-divider-cell">
               <div 
                 class="add-scene-overlay"
@@ -580,6 +645,7 @@
               </div>
             </td>
           </tr>
+          </template>
         </template>
       </tbody>
     </table>
@@ -598,6 +664,81 @@
       :project-id="projectId"
       @panel-toggle="mediaPanelOpen = $event"
     />
+
+    <!-- 씬 그룹화 모달 -->
+    <div v-if="showGroupingModal" class="modal-overlay" @click.self="closeGroupingModal">
+      <div class="modal-content grouping-modal">
+        <div class="modal-header">
+          <h3>씬 그룹화</h3>
+          <button @click="closeGroupingModal" class="modal-close">×</button>
+        </div>
+        
+        <div class="modal-body">
+          <div class="selected-scenes-preview">
+            <h4>선택된 씬: {{ selectedScenes.length }}개</h4>
+            <div class="scene-list">
+              <div v-for="sceneId in selectedScenes" :key="sceneId" class="scene-item">
+                <span class="scene-number">#S{{ getSceneNumber(sceneId) }}</span>
+                <span class="scene-text">{{ getSceneText(sceneId) }}</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="grouping-options">
+            <div class="option-group">
+              <h4>그룹 타입 선택</h4>
+              <div class="radio-group">
+                <label>
+                  <input type="radio" value="new" v-model="groupingType">
+                  새 그룹 생성
+                </label>
+                <label>
+                  <input type="radio" value="sequence" v-model="groupingType">
+                  시퀀스로 그룹화
+                </label>
+              </div>
+            </div>
+            
+            <div v-if="groupingType === 'new'" class="input-group">
+              <label>그룹 이름</label>
+              <input 
+                v-model="newGroupName" 
+                type="text" 
+                placeholder="예: '오프닝 시퀀스', '결말 전투' 등"
+                class="form-input"
+              >
+            </div>
+            
+            <div v-if="groupingType === 'sequence'" class="input-group">
+              <label>시퀀스 선택</label>
+              <select v-model="selectedSequenceId" class="form-select">
+                <option v-for="(name, index) in sequenceNames" :key="index" :value="index + 1">
+                  {{ name }}
+                </option>
+              </select>
+              <button @click="addNewSequence" class="btn-add-sequence">
+                새 시퀀스 추가
+              </button>
+            </div>
+            
+            <div class="input-group">
+              <label>씬 태그 (선택사항)</label>
+              <input 
+                v-model="sceneTags" 
+                type="text" 
+                placeholder="콤마로 구분 (예: 액션, 대화, 회상)"
+                class="form-input"
+              >
+            </div>
+          </div>
+        </div>
+        
+        <div class="modal-footer">
+          <button @click="closeGroupingModal" class="btn-cancel">취소</button>
+          <button @click="applyGrouping" class="btn-apply" :disabled="!canApplyGrouping">적용</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -660,6 +801,38 @@ const handleResize = () => {
 }
 window.addEventListener('resize', handleResize)
 
+// 시퀀스별로 그룹화된 씬들
+const groupedScenes = computed(() => {
+  const groups = new Map()
+  
+  props.scenes.forEach(scene => {
+    // sequence_id가 null, undefined, 0인 경우 모두 기본값 1로 처리
+    const sequenceId = scene.sequence_id && scene.sequence_id > 0 ? scene.sequence_id : 1
+    // sequence_name이 없거나 빈 문자열인 경우, sequenceId에 따라 기본값 설정
+    const sequenceName = scene.sequence_name && scene.sequence_name.trim() 
+      ? scene.sequence_name 
+      : `Sequence ${sequenceId}`
+    
+    if (!groups.has(sequenceId)) {
+      groups.set(sequenceId, {
+        id: sequenceId,
+        name: sequenceName,
+        scenes: []
+      })
+    }
+    
+    groups.get(sequenceId).scenes.push(scene)
+  })
+  
+  // 각 그룹 내 씬들을 scene_number 순으로 정렬하고, 시퀀스 ID 순으로 정렬
+  return Array.from(groups.values())
+    .map(group => ({
+      ...group,
+      scenes: group.scenes.sort((a, b) => (a.scene_number || 0) - (b.scene_number || 0))
+    }))
+    .sort((a, b) => a.id - b.id)
+})
+
 // 모바일에서 각 씬별 미디어 타입 관리 (기본값: image)
 const sceneMediaTypes = ref({})
 
@@ -678,6 +851,25 @@ const loadingTTS = ref({})
 const ttsData = ref({}) // { sceneId: { file_url, duration, version } }
 const playingTTS = ref({})
 const audioElements = ref({})
+
+// 드래그 앤 드롭 관련 상태
+const draggedItem = ref(null)
+const dropTarget = ref(null)
+const dragOverPosition = ref('') // 'before' | 'after'
+const isDragging = ref(false)
+
+// 인라인 편집 안전장치 관련 상태
+const originalValue = ref('') // 원본 값 보관
+const editTimeout = ref(null) // 디바운스 타이머
+const hasUnsavedChanges = ref(false) // 저장되지 않은 변경사항 유무
+
+// 씬 그룹화 관련 상태
+const showGroupingModal = ref(false)
+const newGroupName = ref('')
+const selectedSequenceId = ref(1)
+const sequenceNames = ref(['Sequence 1'])
+const groupingType = ref('new')
+const sceneTags = ref('')
 
 // Computed
 const isAllSelected = computed(() => {
@@ -721,19 +913,43 @@ const toggleSelectAll = () => {
   }
 }
 
-// 인라인 편집 관련 함수들
-const startEditing = (sceneId, field, value) => {
-  editingCell.value = `${sceneId}-${field}`
-  editedValue.value = value || ''
-  nextTick(() => {
-    const input = document.querySelector(`#edit-${sceneId}-${field}`)
-    if (input) {
-      input.focus()
-      if (input.type === 'textarea') {
-        input.setSelectionRange(input.value.length, input.value.length)
+// 인라인 편집 관련 함수들 (안전장치 강화)
+const startEditing = async (sceneId, field, value) => {
+  // 이미 편집 중인 다른 셀이 있으면 저장 확인
+  if (editingCell.value && editingCell.value !== `${sceneId}-${field}`) {
+    if (hasUnsavedChanges.value) {
+      const confirmSave = confirm('저장되지 않은 변경사항이 있습니다. 저장하시겠습니까?')
+      if (confirmSave) {
+        // 현재 편집 중인 셀 저장 후 새 편집 시작
+        await savePreviousEdit()
+      } else {
+        // 취소 후 새 편집 시작
+        cancelEdit()
       }
     }
-  })
+  }
+  
+  // 디바운스 처리 (빠른 클릭 방지)
+  if (editTimeout.value) {
+    clearTimeout(editTimeout.value)
+  }
+  
+  editTimeout.value = setTimeout(() => {
+    editingCell.value = `${sceneId}-${field}`
+    originalValue.value = value || '' // 원본 값 보관
+    editedValue.value = value || ''
+    hasUnsavedChanges.value = false
+    
+    nextTick(() => {
+      const input = document.querySelector(`#edit-${sceneId}-${field}`)
+      if (input) {
+        input.focus()
+        if (input.type === 'textarea') {
+          input.setSelectionRange(input.value.length, input.value.length)
+        }
+      }
+    })
+  }, 200) // 200ms 디바운스
 }
 
 const startEditingCharacters = (sceneId, characters) => {
@@ -773,8 +989,56 @@ const startEditingProps = (sceneId, props) => {
   })
 }
 
+// 입력 변경 감지
+const handleInputChange = () => {
+  hasUnsavedChanges.value = editedValue.value !== originalValue.value
+}
+
+// blur 이벤트 처리 (확인 절차 포함)
+const handleBlurWithConfirmation = async (scene, field) => {
+  // 변경사항이 없으면 그냥 취소
+  if (!hasUnsavedChanges.value) {
+    cancelEdit()
+    return
+  }
+  
+  // 빈 값으로 변경되었는지 확인
+  if (!editedValue.value.trim() && originalValue.value.trim()) {
+    const confirmEmpty = confirm('스크립트 내용을 비우시겠습니까? 이 작업은 되돌릴 수 없습니다.')
+    if (!confirmEmpty) {
+      // 취소 시 원본 값으로 복원
+      editedValue.value = originalValue.value
+      hasUnsavedChanges.value = false
+      return
+    }
+  }
+  
+  // 중요한 변경사항인 경우 확인
+  const significantChange = Math.abs(editedValue.value.length - originalValue.value.length) > 50
+  if (significantChange) {
+    const confirmSave = confirm('대량의 텍스트가 변경되었습니다. 저장하시겠습니까?')
+    if (!confirmSave) {
+      editedValue.value = originalValue.value
+      hasUnsavedChanges.value = false
+      cancelEdit()
+      return
+    }
+  }
+  
+  await saveEdit(scene, field)
+}
+
+// 이전 편집 저장
+const savePreviousEdit = async () => {
+  const [sceneId, field] = editingCell.value.split('-')
+  const scene = props.scenes.find(s => s.id === sceneId)
+  if (scene) {
+    await saveEdit(scene, field)
+  }
+}
+
 const saveEdit = async (scene, field) => {
-  if (editedValue.value === scene[field]) {
+  if (editedValue.value === originalValue.value) {
     cancelEdit()
     return
   }
@@ -796,24 +1060,32 @@ const saveEdit = async (scene, field) => {
     if (error) {
       console.error('Supabase error:', error)
       alert(`저장에 실패했습니다: ${error.message}`)
+      return
     } else {
       console.log(`${field} saved successfully, data:`, data)
-      console.log('Full scene data after save:', data)
       
-      // 로컬 상태 업데이트 - 해당 필드만 업데이트
+      // 로컬 상태 업데이트
       if (data[field] !== undefined) {
         scene[field] = data[field]
       }
       
-      // Store 상태도 업데이트 - 해당 필드만 업데이트
+      // Store 상태 업데이트
       const index = productionStore.productionSheets.findIndex(sheet => sheet.id === scene.id)
       if (index !== -1 && data[field] !== undefined) {
         productionStore.productionSheets[index][field] = data[field]
       }
+      
+      // 성공 메시지 (짧게)
+      const toast = document.createElement('div')
+      toast.textContent = '저장되었습니다'
+      toast.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #10b981; color: white; padding: 8px 16px; border-radius: 6px; z-index: 9999; font-size: 14px;'
+      document.body.appendChild(toast)
+      setTimeout(() => document.body.removeChild(toast), 2000)
     }
   } catch (err) {
     console.error('Unexpected error:', err)
     alert('예상치 못한 오류가 발생했습니다.')
+    return
   }
   
   cancelEdit()
@@ -1004,8 +1276,16 @@ const savePropsEdit = async (scene) => {
 }
 
 const cancelEdit = () => {
+  // 타임아웃 정리
+  if (editTimeout.value) {
+    clearTimeout(editTimeout.value)
+    editTimeout.value = null
+  }
+  
   editingCell.value = null
   editedValue.value = ''
+  originalValue.value = ''
+  hasUnsavedChanges.value = false
 }
 
 const isEditing = (sceneId, field) => {
@@ -1166,6 +1446,8 @@ const handleEmptyAssetClick = (scene) => {
   }
   // 참고자료는 자동 추출이므로 수동 편집 비활성화
 }
+
+// 시퀀스는 자동 생성되므로 편집 기능 없음
 
 // 호버 관련 함수들
 const setHoveredItem = (itemId) => {
@@ -2926,8 +3208,326 @@ onUnmounted(() => {
 })
 
 
+// 드래그 앤 드롭 메서드들
+const handleDragStart = (scene, event) => {
+  draggedItem.value = scene.id
+  isDragging.value = true
+  event.dataTransfer.effectAllowed = 'move'
+  event.dataTransfer.setData('text/plain', scene.id)
+  
+  // 드래그 이미지 설정
+  const dragImage = event.target.cloneNode(true)
+  dragImage.style.opacity = '0.8'
+  dragImage.style.transform = 'rotate(3deg)'
+  document.body.appendChild(dragImage)
+  event.dataTransfer.setDragImage(dragImage, 0, 0)
+  setTimeout(() => document.body.removeChild(dragImage), 0)
+}
+
+const handleDragOver = (scene, event) => {
+  if (draggedItem.value && draggedItem.value !== scene.id) {
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+  }
+}
+
+const handleDragEnter = (scene) => {
+  if (draggedItem.value && draggedItem.value !== scene.id) {
+    dropTarget.value = scene.id
+  }
+}
+
+const handleDragLeave = () => {
+  // 짧은 딜레이 후 dropTarget 클리어 (자식 요소로 이동할 때 깜빡임 방지)
+  setTimeout(() => {
+    if (!document.querySelector(':hover')?.closest('.production-sheet-data-row')) {
+      dropTarget.value = null
+    }
+  }, 50)
+}
+
+const handleDrop = async (targetScene, event) => {
+  event.preventDefault()
+  
+  if (!draggedItem.value || draggedItem.value === targetScene.id) {
+    return
+  }
+  
+  try {
+    const draggedSceneId = draggedItem.value
+    const draggedScene = props.scenes.find(s => s.id === draggedSceneId)
+    const targetSceneIndex = props.scenes.findIndex(s => s.id === targetScene.id)
+    
+    if (!draggedScene || targetSceneIndex === -1) {
+      return
+    }
+    
+    // 새로운 씬 순서 계산
+    const newScenes = [...props.scenes]
+    const draggedIndex = newScenes.findIndex(s => s.id === draggedSceneId)
+    
+    // 배열에서 드래그된 씬 제거
+    const [movedScene] = newScenes.splice(draggedIndex, 1)
+    
+    // 타겟 위치에 삽입
+    newScenes.splice(targetSceneIndex, 0, movedScene)
+    
+    // 씬 번호 재정렬
+    await reorderScenes(newScenes)
+    
+  } catch (error) {
+    console.error('씬 재정렬 실패:', error)
+    alert('씬 재정렬에 실패했습니다.')
+  }
+}
+
+const handleDragEnd = () => {
+  draggedItem.value = null
+  dropTarget.value = null
+  isDragging.value = false
+}
+
+// 씬 재정렬 함수 (중복 번호 문제 해결)
+const reorderScenes = async (newScenes) => {
+  try {
+    // 1단계: 모든 씬을 임시 번호로 업데이트 (중복 방지)
+    console.log('씬 재정렬 시작: 1단계 - 임시 번호 할당')
+    for (let i = 0; i < newScenes.length; i++) {
+      const tempNumber = 9000 + i // 임시 번호 (9000번대 사용)
+      const { error } = await supabase
+        .from('production_sheets')
+        .update({ scene_number: tempNumber })
+        .eq('id', newScenes[i].id)
+      
+      if (error) {
+        console.error(`임시 번호 할당 실패 (${newScenes[i].id}):`, error)
+        throw error
+      }
+    }
+    
+    // 짧은 대기 시간
+    await new Promise(resolve => setTimeout(resolve, 100))
+    
+    // 2단계: 정상 번호로 업데이트
+    console.log('씬 재정렬: 2단계 - 정상 번호 할당')
+    for (let i = 0; i < newScenes.length; i++) {
+      const finalNumber = i + 1
+      const { error } = await supabase
+        .from('production_sheets')
+        .update({ scene_number: finalNumber })
+        .eq('id', newScenes[i].id)
+      
+      if (error) {
+        console.error(`정상 번호 할당 실패 (${newScenes[i].id}):`, error)
+        throw error
+      }
+    }
+    
+    // 스토어 새로고침
+    await productionStore.fetchProductionSheets(props.projectId)
+    
+    // 성공 메시지
+    const toast = document.createElement('div')
+    toast.textContent = '씬 순서가 변경되었습니다'
+    toast.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #10b981; color: white; padding: 8px 16px; border-radius: 6px; z-index: 9999; font-size: 14px;'
+    document.body.appendChild(toast)
+    setTimeout(() => document.body.removeChild(toast), 2000)
+    
+  } catch (error) {
+    console.error('씬 재정렬 업데이트 실패:', error)
+    throw error
+  }
+}
+
+
+// 씬 병합 함수
+const mergeSelectedScenes = async () => {
+  if (props.selectedScenes.length < 2) {
+    alert('병합하려면 2개 이상의 씬을 선택해주세요.')
+    return
+  }
+  
+  // 선택된 씬들을 번호 순으로 정렬
+  const selectedScenesData = props.scenes
+    .filter(scene => props.selectedScenes.includes(scene.id))
+    .sort((a, b) => a.scene_number - b.scene_number)
+  
+  if (!confirm(`선택된 ${selectedScenesData.length}개 씬을 하나로 병합하시겠습니까?`)) {
+    return
+  }
+  
+  try {
+    const firstScene = selectedScenesData[0]
+    const mergedText = selectedScenesData
+      .map(scene => scene.original_script_text)
+      .join('\n\n')
+    
+    // 첫 번째 씬을 병합된 텍스트로 업데이트
+    const { error: updateError } = await supabase
+      .from('production_sheets')
+      .update({ original_script_text: mergedText })
+      .eq('id', firstScene.id)
+    
+    if (updateError) throw updateError
+    
+    // 나머지 씬들 삭제
+    const scenesToDelete = selectedScenesData.slice(1).map(s => s.id)
+    const { error: deleteError } = await supabase
+      .from('production_sheets')
+      .delete()
+      .in('id', scenesToDelete)
+    
+    if (deleteError) throw deleteError
+    
+    // 씬 번호 재정렬
+    await reorderAllScenes()
+    
+    // 데이터 새로고침
+    await productionStore.fetchProductionSheets(props.projectId)
+    
+    alert(`${selectedScenesData.length}개 씬이 성공적으로 병합되었습니다.`)
+    
+    // 선택 해제
+    emit('update:selected', [])
+    
+  } catch (error) {
+    console.error('씬 병합 실패:', error)
+    alert('씬 병합에 실패했습니다.')
+  }
+}
+
+// 모든 씬 번호 재정렬
+const reorderAllScenes = async () => {
+  const { data: scenes, error } = await supabase
+    .from('production_sheets')
+    .select('id')
+    .eq('project_id', props.projectId)
+    .order('scene_number', { ascending: true })
+  
+  if (error) throw error
+  
+  for (let i = 0; i < scenes.length; i++) {
+    const { error: updateError } = await supabase
+      .from('production_sheets')
+      .update({ scene_number: i + 1 })
+      .eq('id', scenes[i].id)
+    
+    if (updateError) throw updateError
+  }
+}
+
+// 씬 그룹화 관련 computed
+const canApplyGrouping = computed(() => {
+  if (groupingType.value === 'new') {
+    return newGroupName.value.trim().length > 0
+  }
+  return selectedSequenceId.value > 0
+})
+
+// 씬 그룹화 메서드들
+const getSceneNumber = (sceneId) => {
+  const scene = props.scenes.find(s => s.id === sceneId)
+  return scene ? scene.scene_number : '?'
+}
+
+const getSceneText = (sceneId) => {
+  const scene = props.scenes.find(s => s.id === sceneId)
+  if (!scene) return ''
+  const text = scene.original_script_text || ''
+  return text.length > 50 ? text.substring(0, 50) + '...' : text
+}
+
+const closeGroupingModal = () => {
+  showGroupingModal.value = false
+  newGroupName.value = ''
+  sceneTags.value = ''
+  groupingType.value = 'new'
+}
+
+const addNewSequence = () => {
+  const newSequenceName = prompt('새 시퀀스 이름을 입력하세요:')
+  if (newSequenceName && newSequenceName.trim()) {
+    sequenceNames.value.push(newSequenceName.trim())
+    selectedSequenceId.value = sequenceNames.value.length
+  }
+}
+
+const applyGrouping = async () => {
+  if (!canApplyGrouping.value) return
+  
+  try {
+    const updates = []
+    const tagsArray = sceneTags.value.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0)
+    
+    if (groupingType.value === 'new') {
+      // 새 그룹 생성
+      for (const sceneId of props.selectedScenes) {
+        updates.push({
+          id: sceneId,
+          scene_group: newGroupName.value.trim(),
+          scene_tags: tagsArray,
+          metadata: { grouping_date: new Date().toISOString() }
+        })
+      }
+    } else {
+      // 시퀀스로 그룹화
+      const sequenceName = sequenceNames.value[selectedSequenceId.value - 1]
+      for (const sceneId of props.selectedScenes) {
+        updates.push({
+          id: sceneId,
+          sequence_id: selectedSequenceId.value,
+          sequence_name: sequenceName,
+          scene_tags: tagsArray,
+          metadata: { 
+            sequence_grouping_date: new Date().toISOString(),
+            original_sequence: 1 // 기존 시퀀스 기록
+          }
+        })
+      }
+    }
+    
+    // 데이터베이스 업데이트
+    for (const update of updates) {
+      const { id, ...updateData } = update
+      const { error } = await supabase
+        .from('production_sheets')
+        .update(updateData)
+        .eq('id', id)
+      
+      if (error) {
+        throw error
+      }
+    }
+    
+    // 데이터 새로고침
+    await productionStore.fetchProductionSheets(props.projectId)
+    
+    alert(`${props.selectedScenes.length}개 씬이 성공적으로 그룹화되었습니다.`)
+    
+    // 선택 해제 및 모달 닫기
+    emit('update:selected', [])
+    closeGroupingModal()
+    
+  } catch (error) {
+    console.error('씬 그룹화 실패:', error)
+    alert('씬 그룹화에 실패했습니다.')
+  }
+}
+
+// ESC 키 처리 (변경사항 확인)
+const handleEscapeKey = () => {
+  if (hasUnsavedChanges.value) {
+    const confirmCancel = confirm('저장되지 않은 변경사항이 있습니다. 정말 취소하시겠습니까?')
+    if (confirmCancel) {
+      cancelEdit()
+    }
+  } else {
+    cancelEdit()
+  }
+}
+
 // export deleteSelectedScenes for parent component
-defineExpose({ deleteSelectedScenes })
+defineExpose({ deleteSelectedScenes, mergeSelectedScenes })
 </script>
 
 <style scoped>
@@ -3104,6 +3704,344 @@ defineExpose({ deleteSelectedScenes })
   box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
 }
 
+.btn-merge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background-color: #f59e0b;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-merge:hover:not(:disabled) {
+  background-color: #d97706;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+}
+
+.btn-merge:disabled {
+  background-color: #9ca3af;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.btn-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background-color: #8b5cf6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-group:hover:not(:disabled) {
+  background-color: #7c3aed;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+}
+
+.btn-group:disabled {
+  background-color: #9ca3af;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* 그룹화 모달 스타일 */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: var(--bg-primary);
+  border-radius: 12px;
+  max-width: 600px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+}
+
+.grouping-modal {
+  max-width: 700px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.modal-close:hover {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.modal-body {
+  padding: 24px;
+}
+
+.selected-scenes-preview {
+  margin-bottom: 24px;
+  padding: 16px;
+  background-color: var(--bg-secondary);
+  border-radius: 8px;
+}
+
+.selected-scenes-preview h4 {
+  margin: 0 0 12px 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.scene-list {
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.scene-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.scene-item:last-child {
+  border-bottom: none;
+}
+
+.scene-number {
+  font-weight: 600;
+  color: var(--primary-color);
+  min-width: 40px;
+}
+
+.scene-text {
+  flex: 1;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.grouping-options {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.option-group h4,
+.input-group label {
+  margin: 0 0 8px 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.radio-group label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.radio-group input[type="radio"] {
+  margin: 0;
+}
+
+.form-input,
+.form-select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+.form-input:focus,
+.form-select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.btn-add-sequence {
+  margin-top: 8px;
+  padding: 8px 16px;
+  background-color: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-add-sequence:hover {
+  background-color: var(--primary-dark);
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 20px 24px;
+  border-top: 1px solid var(--border-color);
+}
+
+.btn-cancel,
+.btn-apply {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-cancel {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.btn-cancel:hover {
+  background-color: var(--bg-primary);
+}
+
+.btn-apply {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.btn-apply:hover:not(:disabled) {
+  background-color: var(--primary-dark);
+}
+
+.btn-apply:disabled {
+  background-color: #9ca3af;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* 그룹/시퀀스 컴럼 스타일 */
+.scene-group-col {
+  min-width: 120px;
+  padding: 8px;
+}
+
+.group-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sequence-tag {
+  background-color: #dbeafe;
+  color: #1e40af;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-align: center;
+}
+
+.group-tag {
+  background-color: #fef3c7;
+  color: #92400e;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-align: center;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.tag {
+  background-color: #f3f4f6;
+  color: #374151;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 0.7rem;
+  border: 1px solid #d1d5db;
+}
+
+/* 인라인 편집 안전장치 스타일 */
+.edit-textarea.has-changes {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
+}
+
+.edit-status {
+  margin-top: 4px;
+  font-size: 0.75rem;
+}
+
+.unsaved-indicator {
+  color: #f59e0b;
+  font-weight: 500;
+}
+
+.edit-hint {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  font-style: italic;
+}
+
 .btn-tts svg,
 .btn-download-tts svg,
 .btn-download-images svg,
@@ -3187,6 +4125,7 @@ defineExpose({ deleteSelectedScenes })
   width: 100%;
   border-collapse: collapse;
   background-color: var(--bg-primary);
+  table-layout: fixed;
 }
 
 .production-table thead {
@@ -3217,6 +4156,27 @@ defineExpose({ deleteSelectedScenes })
 
 .production-table tbody tr.selected {
   background-color: rgba(74, 222, 128, 0.1);
+}
+
+/* 드래그 앤 드롭 스타일 */
+.production-table tbody tr.being-dragged {
+  opacity: 0.5;
+  transform: rotate(2deg);
+  cursor: grabbing;
+}
+
+.production-table tbody tr.drop-target {
+  border-top: 3px solid var(--primary-color);
+  background-color: rgba(79, 70, 229, 0.1);
+}
+
+.production-table tbody tr[draggable="true"] {
+  cursor: grab;
+}
+
+.production-table tbody tr[draggable="true"]:hover {
+  border-left: 3px solid var(--primary-color);
+  background-color: rgba(79, 70, 229, 0.05);
 }
 
 .production-table td {
@@ -3414,6 +4374,173 @@ defineExpose({ deleteSelectedScenes })
   min-width: 80px;
   max-width: 100px;
   text-align: center;
+}
+
+.scene-group-col {
+  min-width: 120px;
+  max-width: 160px;
+  text-align: center;
+}
+
+.group-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+}
+
+.group-badge {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-align: center;
+  min-width: 60px;
+}
+
+.sequence-badge {
+  background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-align: center;
+  min-width: 60px;
+}
+
+.sequence-badge.default-sequence {
+  background: linear-gradient(135deg, #6b7280, #4b5563);
+  opacity: 0.7;
+}
+
+.sequence-badge.mobile {
+  font-size: 0.7rem;
+  padding: 1px 6px;
+  margin: 0 4px;
+}
+
+/* 시퀀스 그룹 컬럼 스타일 */
+.sequence-group-col {
+  width: 80px;
+  min-width: 80px;
+  max-width: 80px;
+  padding: 0;
+  text-align: center;
+  vertical-align: middle;
+  background: var(--bg-secondary);
+  border-right: 2px solid var(--border-color);
+  position: relative;
+}
+
+.sequence-group-cell {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 4px;
+  background: var(--bg-secondary);
+}
+
+.sequence-group-cell-empty {
+  height: 100%;
+  background: var(--bg-secondary);
+}
+
+/* 시퀀스 그룹 시각적 병합 - 실제 적용 */
+@media (min-width: 769px) {
+  .production-table tbody tr td.sequence-group-col.sequence-first {
+    border-bottom: 1px solid var(--bg-secondary) !important;
+    position: relative;
+  }
+
+  .production-table tbody tr td.sequence-group-col.sequence-middle {
+    border-top: 1px solid var(--bg-secondary) !important;
+    border-bottom: 1px solid var(--bg-secondary) !important;
+    position: relative;
+  }
+
+  .production-table tbody tr td.sequence-group-col.sequence-last {
+    border-top: 1px solid var(--bg-secondary) !important;
+    position: relative;
+  }
+  
+  /* 경계선을 덮어서 숨김 */
+  /* 시퀀스 그룹 셀의 배경색을 통일하고 경계를 숨겨서 시각적으로 병합된 것처럼 보이게 함 */
+  .production-table tbody tr td.sequence-group-col.sequence-first,
+  .production-table tbody tr td.sequence-group-col.sequence-middle,
+  .production-table tbody tr td.sequence-group-col.sequence-last {
+    background-color: var(--bg-secondary) !important;
+    position: relative;
+  }
+
+  /* 인접한 시퀀스 셀 사이의 경계선을 제거하여 연결된 모양 만들기 */
+  .production-table tbody tr td.sequence-group-col.sequence-first::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: var(--bg-secondary);
+    z-index: 2;
+  }
+  
+  .production-table tbody tr td.sequence-group-col.sequence-middle::before,
+  .production-table tbody tr td.sequence-group-col.sequence-middle::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: var(--bg-secondary);
+    z-index: 2;
+  }
+  
+  .production-table tbody tr td.sequence-group-col.sequence-middle::before {
+    top: -1px;
+  }
+  
+  .production-table tbody tr td.sequence-group-col.sequence-middle::after {
+    bottom: -1px;
+  }
+  
+  .production-table tbody tr td.sequence-group-col.sequence-last::before {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: var(--bg-secondary);
+    z-index: 2;
+  }
+}
+
+.sequence-name-vertical {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.1;
+  letter-spacing: 0.5px;
+}
+
+.sequence-name-horizontal {
+  writing-mode: horizontal-tb;
+  text-align: center;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+  letter-spacing: 1px;
+  white-space: nowrap;
+  /* transform: rotate(180deg) 제거 - 텍스트가 뒤집히는 원인 */
 }
 
 .director-guide-col {

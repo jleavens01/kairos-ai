@@ -52,6 +52,7 @@
                 <option value="flux-kontext">Flux Kontext (참조 이미지 1개)</option>
                 <option value="flux-kontext-multi">Flux Kontext Multi (참조 이미지 여러개)</option>
                 <option value="gemini-25-flash-edit">Gemini 2.5 Flash Edit (이미지 편집 1-5개)</option>
+                <option value="seedream-4-edit">Seedream 4.0 Edit (참조 이미지 1-10개)</option>
                 <option value="recraft-i2i">Recraft I2I (이미지 변환)</option>
               </template>
             </select>
@@ -825,8 +826,10 @@ const canGenerate = computed(() => {
   
   // I2I 전용 모델인 경우 참조 이미지가 필수
   if (requiresReferenceImages.value) {
+    // I2I 모드에서 스타일이 선택되었거나 참고이미지가 있으면 생성 가능
     const hasReferenceImages = referenceImages.value.length > 0
-    return hasPrompt && notGenerating && hasReferenceImages
+    const hasStyleSelected = selectedStyle.value !== null && selectedStyle.value !== undefined
+    return hasPrompt && notGenerating && (hasReferenceImages || hasStyleSelected)
   }
   
   // T2I 지원 모델인 경우 참조 이미지는 선택사항

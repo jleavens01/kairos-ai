@@ -2,6 +2,68 @@
 import { createClient } from '@supabase/supabase-js';
 import jwt from 'jsonwebtoken';
 
+// 숫자를 한글로 변환하는 함수 (Gemini 2.0 Flash 사용)
+async function convertNumbersToKorean(text) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    console.warn('GEMINI_API_KEY not found, 숫자 변환 건너뛰기');
+    return text;
+  }
+
+  // 숫자가 포함된 텍스트인지 확인
+  const hasNumbers = /\d+/.test(text);
+  if (!hasNumbers) return text;
+
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{
+            text: `다음 텍스트에서 숫자를 한국어 TTS에 적합하도록 변환해주세요. 
+
+규칙:
+1. 연도 (예: 1997년 → 천 구백 구십칠년)
+2. 금액 (예: 1023500원 → 백 이만 삼천 오백원)
+3. 일반 숫자 (예: 12345 → 만 이천 삼백 사십오)
+4. 소수점 (예: 3.14 → 삼점 일사)
+5. 퍼센트 (예: 85% → 팔십오 퍼센트)
+
+다른 텍스트는 그대로 유지하고, 숫자 부분만 한글로 변환하세요.
+
+텍스트: "${text}"`
+          }]
+        }],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 2048,
+        }
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Gemini API 오류: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const convertedText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    
+    if (convertedText && convertedText.trim()) {
+      console.log('숫자 변환 완료:', text.substring(0, 50), '→', convertedText.substring(0, 50));
+      return convertedText.trim();
+    } else {
+      console.warn('Gemini 응답이 비어있음');
+      return text;
+    }
+  } catch (error) {
+    console.error('Gemini 숫자 변환 오류:', error);
+    return text;
+  }
+}
+
 // Supabase 클라이언트 초기화
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -123,6 +185,7 @@ export const handler = async (event) => {
     processedText = processedText.replace(/[`´]/g, ''); // 백틱과 억음 부호 제거
     
     // 4. 특수 문자 처리
+    processedText = processedText.replace(/[<>]/g, ''); // 꺾쇠 괄호 제거
     processedText = processedText.replace(/[♪♫♬♭♮♯]/g, ''); // 음악 기호
     processedText = processedText.replace(/[★☆♥♡]/g, ''); // 별, 하트 등
     processedText = processedText.replace(/[※▶◀■□▲△▼▽○●◎◇◆]/g, ''); // 도형
@@ -132,12 +195,19 @@ export const handler = async (event) => {
     processedText = processedText.replace(/\.{3,}/g, '...'); // 연속된 마침표를 ...로
     processedText = processedText.replace(/[~]{2,}/g, '~'); // 연속된 물결표를 하나로
     
-    // 6. 줄바꿈 및 공백 정리
+    // 6. 숫자 한글 변환 (Gemini 2.0 Flash 사용)
+    try {
+      processedText = await convertNumbersToKorean(processedText);
+    } catch (error) {
+      console.warn('숫자 변환 실패, 원본 텍스트 사용:', error.message);
+    }
+
+    // 7. 줄바꿈 및 공백 정리
     processedText = processedText.replace(/\n{3,}/g, '\n\n'); // 3개 이상의 줄바꿈을 2개로
     processedText = processedText.replace(/\s+/g, ' '); // 연속된 공백을 하나로
     processedText = processedText.trim(); // 앞뒤 공백 제거
     
-    // 7. 빈 텍스트 체크
+    // 8. 빈 텍스트 체크
     if (!processedText || processedText.length === 0) {
       throw new Error('텍스트 처리 후 내용이 없습니다.');
     }
