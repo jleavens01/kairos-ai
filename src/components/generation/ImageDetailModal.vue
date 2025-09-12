@@ -832,9 +832,9 @@ const handleDrawCanvasSave = async (data) => {
 }
 
 const handleImageRegenerate = () => {
-  // 이미지 재생성을 위한 데이터 전달 - Gemini 2.5 Flash를 기본 모델로 설정
+  // 이미지 재생성을 위한 데이터 전달 - Gemini 2.5 Flash Image Preview를 기본 모델로 설정
   const editData = {
-    model: 'gemini-2.5-flash-edit',
+    model: 'gemini-2.5-flash-image-preview',
     size: props.image.metadata?.image_size || '1024x1024',
     category: props.image.image_type || 'scene',
     name: props.image.element_name || '',
