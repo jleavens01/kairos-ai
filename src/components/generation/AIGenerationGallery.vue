@@ -753,11 +753,6 @@ const fetchImagesWithPagination = async ({ page, pageSize: size }) => {
       throw error
     }
     
-    console.log('이미지 조회 결과:', {
-      count: data?.length || 0,
-      totalCount: count,
-      sampleData: data?.slice(0, 2)
-    })
     
     return {
       data: data || [],
@@ -810,7 +805,6 @@ const fetchCharacterImages = async () => {
 const fetchImages = async () => {
   loading.value = true
   try {
-    console.log('🔍 이미지 로딩 시작')
     
     // 성능 개선: 쿼리 단순화 및 제한 추가
     let query = supabase
@@ -994,7 +988,7 @@ const startPollingWorker = () => {
     
     // 5분(300초) 경과 시 강제로 상태 체크 1회 실행
     if (!forceCheckDone && elapsedTime > 300000) {
-      console.log('🔍 5분 경과 - 강제 상태 체크 실행')
+      // 5분 경과 - 강제 상태 체크 실행
       forceCheckDone = true
       await callPollingWorker()
       
@@ -1380,12 +1374,6 @@ const handleSceneConnection = async (result) => {
 }
 // 최적화된 이미지 URL 선택
 const getOptimizedImageUrl = (item) => {
-  console.log('🖼️ 이미지 URL 선택:', {
-    id: item.id,
-    thumbnail_url: item.thumbnail_url,
-    result_image_url: item.result_image_url,
-    generation_status: item.generation_status
-  })
   
   // 1. 썸네일이 있고 유효하면 우선 사용 (빠른 로딩)
   if (item.thumbnail_url && item.thumbnail_url.length > 10) {
