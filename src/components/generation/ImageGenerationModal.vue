@@ -52,7 +52,7 @@
                 <option value="flux-kontext">Flux Kontext (참조 이미지 1개)</option>
                 <option value="flux-kontext-multi">Flux Kontext Multi (참조 이미지 여러개)</option>
                 <option value="gemini-25-flash-edit">Gemini 2.5 Flash Edit (이미지 편집 1-5개)</option>
-                <option value="seedream-4-edit">Seedream 4.0 Edit (참조 이미지 1-10개)</option>
+                <option value="seedream-4-edit">Seedream 4.0 Edit (참조 이미지 1-5개)</option>
                 <option value="recraft-i2i">Recraft I2I (이미지 변환)</option>
               </template>
             </select>
@@ -875,8 +875,9 @@ const getMaxImages = () => {
     return 1
   } else if (selectedModel.value === 'gemini-25-flash-edit' || 
              selectedModel.value === 'flux-kontext-multi' || 
-             selectedModel.value === 'gpt-image-1') {
-    return 5  // Gemini Edit, Flux Multi, GPT는 최대 5개
+             selectedModel.value === 'gpt-image-1' ||
+             selectedModel.value === 'seedream-4-edit') {
+    return 5  // Gemini Edit, Flux Multi, GPT, Seedream 4는 최대 5개
   }
   return 0
 }

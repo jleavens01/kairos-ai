@@ -718,11 +718,28 @@ const fetchImagesWithPagination = async ({ page, pageSize: size }) => {
   const from = (page - 1) * size
   const to = from + size - 1
   try {
-    // 모든 이미지 가져오기 (캐릭터 포함)
-    const { data, error, count } = await supabase
+    // 필요한 컬럼만 선택하여 성능 최적화
+    const selectColumns = `
+      id, project_id, user_id, element_name, image_type, generation_model,
+      result_image_url, storage_image_url, thumbnail_url, generation_status,
+      style_name, style_id, is_kept, is_favorite, tags, production_sheet_id,
+      scene_number, created_at, updated_at
+    `
+    
+    let query = supabase
       .from('gen_images')
-      .select('*', { count: 'exact' })
+      .select(selectColumns, { count: 'exact' })
       .eq('project_id', props.projectId)
+      .in('generation_status', ['completed', 'failed']) // 완료된 것만
+    
+    // 보관함 필터를 DB 쿼리에서 처리
+    if (showKeptOnly.value) {
+      query = query.eq('is_kept', true)
+    } else {
+      query = query.or('is_kept.is.null,is_kept.eq.false') // 보관되지 않은 것만
+    }
+    
+    const { data, error, count } = await query
       .order('created_at', { ascending: false })
       .range(from, to)
     if (error) throw error
@@ -751,10 +768,15 @@ watch(paginatedImages, (newImages) => {
 // 캐릭터 이미지만 별도로 로드 (상단 제안 섹션용)
 const fetchCharacterImages = async () => {
   try {
-    // 모든 캐릭터 이미지 가져오기 (페이지네이션 없이)
+    // 캐릭터 이미지만 효율적으로 가져오기 (필요한 컬럼만)
+    const selectColumns = `
+      id, element_name, image_type, result_image_url, storage_image_url,
+      thumbnail_url, generation_status, style_name, is_kept, created_at
+    `
+    
     const { data, error } = await supabase
       .from('gen_images')
-      .select('*')
+      .select(selectColumns)
       .eq('project_id', props.projectId)
       .eq('image_type', 'character')
       .eq('generation_status', 'completed')

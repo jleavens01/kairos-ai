@@ -36,9 +36,9 @@ export const generateImage = async ({
     throw new Error('Seedream 4.0 Edit 모델은 최소 1개의 참조 이미지가 필요합니다.');
   }
 
-  // 최대 10개 이미지만 지원
-  if (referenceImages.length > 10) {
-    throw new Error('Seedream 4.0 Edit 모델은 최대 10개의 참조 이미지만 지원합니다.');
+  // 최대 5개 이미지만 지원
+  if (referenceImages.length > 5) {
+    throw new Error('Seedream 4.0 Edit 모델은 최대 5개의 참조 이미지만 지원합니다.');
   }
 
   // 참조 이미지 URL 추출
