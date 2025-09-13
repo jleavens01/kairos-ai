@@ -12,12 +12,39 @@
     
     <!-- 스토리보드 영역 -->
     <div v-else class="production-content">
+      <!-- 모바일 헤더 (원고 입력 + 미디어 스위치) -->
+      <div v-if="isMobile" class="mobile-production-header">
+        <button @click="handleOpenScriptInput" class="btn-script-input">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+            <line x1="16" y1="13" x2="8" y2="13"></line>
+            <line x1="16" y1="17" x2="8" y2="17"></line>
+          </svg>
+          <span>원고 입력</span>
+        </button>
+        
+        <div class="media-switch-container">
+          <span class="media-label" :class="{ active: mediaType === 'image' }">이미지</span>
+          <label class="media-switch">
+            <input 
+              type="checkbox" 
+              :checked="mediaType === 'video'"
+              @change="switchMediaType"
+            >
+            <span class="switch-slider"></span>
+          </label>
+          <span class="media-label" :class="{ active: mediaType === 'video' }">비디오</span>
+        </div>
+      </div>
+      
       <!-- 스토리보드 테이블 -->
       <ProductionTable 
         :scenes="scenes"
         :selected-scenes="selectedScenes"
         :project-id="projectId"
         :can-edit="canEdit"
+        :media-type="mediaType"
         @update:selected="updateSelectedScenes"
         @edit-scene="handleEditScene"
         @add-scene="handleAddScene"
@@ -25,6 +52,7 @@
         @update-scene="handleUpdateScene"
         @character-extraction="handleOpenCharacterExtraction"
         @open-news-collector="handleOpenNewsCollector"
+        @update:media-type="mediaType = $event"
       />
     </div>
 
@@ -66,7 +94,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useProductionStore } from '@/stores/production'
 import ScriptInputModal from './ScriptInputModal.vue'
 import ProductionTable from './ProductionTable.vue'
@@ -93,6 +121,21 @@ const showScriptModal = ref(false)
 const showCharacterModal = ref(false)
 const showNewsModal = ref(false)
 const selectedScenes = ref([])
+const mediaType = ref('image')
+const isMobile = ref(window.innerWidth <= 768)
+
+// 화면 크기 감지
+const handleResize = () => {
+  isMobile.value = window.innerWidth <= 768
+}
+
+onMounted(() => {
+  window.addEventListener('resize', handleResize)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+})
 
 // Computed - store의 데이터를 직접 사용
 const scenes = computed(() => productionStore.productionSheets)
@@ -109,6 +152,13 @@ const handleOpenCharacterExtraction = () => {
 
 const handleOpenNewsCollector = () => {
   showNewsModal.value = true
+}
+
+// 미디어 타입 전환
+const switchMediaType = () => {
+  mediaType.value = mediaType.value === 'image' ? 'video' : 'image'
+  // ProductionTable에 전달하기 위해 이벤트 발생
+  emit('update:mediaType', mediaType.value)
 }
 
 const handleScriptAnalyzed = async (data) => {
@@ -292,6 +342,100 @@ defineExpose({
 .btn-primary-large:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgba(74, 222, 128, 0.3);
+}
+
+/* 모바일 프로덕션 헤더 */
+.mobile-production-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.btn-script-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-script-input:hover {
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+}
+
+.media-switch-container {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.media-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  transition: color 0.2s;
+}
+
+.media-label.active {
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+.media-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+
+.media-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.switch-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--border-color);
+  transition: 0.3s;
+  border-radius: 24px;
+}
+
+.switch-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.3s;
+  border-radius: 50%;
+}
+
+.media-switch input:checked + .switch-slider {
+  background-color: var(--primary-color);
+}
+
+.media-switch input:checked + .switch-slider:before {
+  transform: translateX(20px);
 }
 
 /* 모바일 반응형 */

@@ -166,6 +166,7 @@
       </div>
     </div>
     
+    
     <div class="production-table-container">
       <table class="production-table">
         <thead>
@@ -179,7 +180,7 @@
             >
           </th>
           <th class="scene-image-col">
-            <div class="media-header">
+            <div class="media-header" v-if="!isMobile">
               <div class="media-switch-container">
                 <span class="media-label" :class="{ active: globalMediaType === 'image' }">이미지</span>
                 <label class="media-switch">
@@ -340,18 +341,6 @@
                 <span v-else class="sequence-badge default-sequence mobile">
                   시퀀스 1
                 </span>
-                <div class="mobile-media-switch-inline">
-                  <span class="media-label-small" :class="{ active: sceneMediaTypes[scene.id] === 'image' }">이미지</span>
-                  <label class="media-switch-small">
-                    <input 
-                      type="checkbox" 
-                      :checked="sceneMediaTypes[scene.id] === 'video'"
-                      @change="toggleSceneMediaType(scene.id)"
-                    >
-                    <span class="switch-slider-small"></span>
-                  </label>
-                  <span class="media-label-small" :class="{ active: sceneMediaTypes[scene.id] === 'video' }">비디오</span>
-                </div>
               </div>
               <div class="mobile-media-container">
                 <SceneImageUploader
@@ -359,7 +348,7 @@
                   :scene-number="scene.scene_number"
                   :image-url="scene.scene_image_url"
                   :video-url="scene.scene_video_url"
-                  :media-type="sceneMediaTypes[scene.id] || 'image'"
+                  :media-type="globalMediaType"
                   :project-id="projectId"
                   :hide-switch="true"
                   @update="handleImageUpdate(scene.id, $event)"
@@ -564,22 +553,23 @@
               </div>
             </td>
             <td class="tts-col" :data-label="isMobile ? '' : 'TTS 컨트롤'">
-              <div class="tts-controls">
+              <div class="tts-controls" :class="{ 'mobile-inline': isMobile }">
                 <!-- TTS가 없을 때 -->
                 <button 
                   v-if="!ttsData[scene.id]"
                   @click="generateTTS(scene)"
                   class="tts-generate-btn"
+                  :class="{ 'mobile-compact': isMobile }"
                   :disabled="!scene.original_script_text || loadingTTS[scene.id]"
                 >
                   <span v-if="loadingTTS[scene.id]" class="loading-spinner-small"></span>
-                  <span v-else>생성</span>
+                  <span v-else>{{ isMobile ? 'TTS' : '생성' }}</span>
                 </button>
                 
                 <!-- TTS가 있을 때 -->
                 <template v-else>
                   <!-- 검증 실패 시 경고 표시 -->
-                  <div v-if="ttsData[scene.id]?.validation_failed" class="tts-validation-warning">
+                  <div v-if="ttsData[scene.id]?.validation_failed && !isMobile" class="tts-validation-warning">
                     ⚠️ 로드 실패
                   </div>
                   
@@ -588,37 +578,45 @@
                     class="tts-play-btn"
                     :class="{ 
                       'playing': playingTTS[scene.id],
-                      'validation-failed': ttsData[scene.id]?.validation_failed
+                      'validation-failed': ttsData[scene.id]?.validation_failed,
+                      'mobile-compact': isMobile
                     }"
                     :disabled="ttsData[scene.id]?.validation_failed"
                     :title="ttsData[scene.id]?.validation_failed ? 'TTS 파일을 로드할 수 없습니다' : '재생'"
                   >
-                    <Pause v-if="playingTTS[scene.id]" :size="14" />
-                    <Play v-else :size="14" />
+                    <Pause v-if="playingTTS[scene.id]" :size="isMobile ? 12 : 14" />
+                    <Play v-else :size="isMobile ? 12 : 14" />
                   </button>
                   
-                  <span class="tts-duration" v-if="ttsData[scene.id]?.duration && !ttsData[scene.id]?.validation_failed">
+                  <span class="tts-duration" :class="{ 'mobile-compact': isMobile }" v-if="ttsData[scene.id]?.duration && !ttsData[scene.id]?.validation_failed">
                     {{ formatDuration(ttsData[scene.id].duration) }}
                   </span>
                   
                   <button 
                     @click="generateTTS(scene, true)"
                     class="tts-regenerate-btn"
-                    :class="{ 'validation-failed-regenerate': ttsData[scene.id]?.validation_failed }"
+                    :class="{ 
+                      'validation-failed-regenerate': ttsData[scene.id]?.validation_failed,
+                      'mobile-compact': isMobile 
+                    }"
                     :disabled="loadingTTS[scene.id]"
                     :title="ttsData[scene.id]?.validation_failed ? '파일 재생성 권장' : '재생성'"
                   >
                     <span v-if="loadingTTS[scene.id]" class="loading-spinner-small"></span>
-                    <span v-else>{{ ttsData[scene.id]?.validation_failed ? '재생성' : '재생성' }}</span>
+                    <svg v-else-if="isMobile" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                    </svg>
+                    <span v-else>재생성</span>
                   </button>
                   
                   <button 
                     @click="downloadTTS(scene)"
                     class="tts-download-btn"
+                    :class="{ 'mobile-compact': isMobile }"
                     :disabled="ttsData[scene.id]?.validation_failed"
                     :title="ttsData[scene.id]?.validation_failed ? '다운로드 불가' : '다운로드'"
                   >
-                    <Download :size="14" />
+                    <Download :size="isMobile ? 12 : 14" />
                   </button>
                 </template>
               </div>
@@ -764,10 +762,14 @@ const props = defineProps({
   projectId: {
     type: String,
     required: true
+  },
+  mediaType: {
+    type: String,
+    default: 'image'
   }
 })
 
-const emit = defineEmits(['update:selected', 'edit-scene', 'add-scene', 'delete-scene', 'update-scene', 'character-extraction'])
+const emit = defineEmits(['update:selected', 'edit-scene', 'add-scene', 'delete-scene', 'update-scene', 'character-extraction', 'update:media-type'])
 
 const productionStore = useProductionStore()
 const projectsStore = useProjectsStore()
@@ -778,7 +780,11 @@ const editedValue = ref('')
 const hoveredItemId = ref(null)
 const hoveredAsset = ref(null)
 const isSaving = ref(false)
-const globalMediaType = ref('image') // 전체 미디어 타입 (image/video)
+// 미디어 타입 관리 - props로 받은 값 사용
+const globalMediaType = computed({
+  get: () => props.mediaType,
+  set: (value) => emit('update:media-type', value)
+})
 const pollingInterval = ref(null) // 자동 새로고침용 interval
 
 // 에셋 필터링 상태
@@ -2781,7 +2787,6 @@ const showFullImage = (mediaUrl) => {
 const switchGlobalMediaType = (newType) => {
   globalMediaType.value = newType
   console.log(`전체 미디어 타입이 ${newType}로 변경되었습니다.`)
-}
 
 // 모바일에서 개별 씬 미디어 타입 토글
 const toggleSceneMediaType = (sceneId) => {
@@ -5146,6 +5151,45 @@ input[type="checkbox"] {
     padding: 5px 2px;
   }
   
+  /* 모바일 컨트롤 헤더 (컴팩트) */
+  .mobile-control-header {
+    padding: 8px 12px;
+    background: var(--bg-secondary);
+    border-radius: 6px;
+    margin: 8px 0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+  
+  .mobile-controls-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  
+  .media-switch-compact {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  
+  .media-label-compact {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    transition: color 0.2s;
+  }
+  
+  .media-label-compact.active {
+    color: var(--primary-color);
+    font-weight: 600;
+  }
+  
+  .mobile-action-buttons {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  
   /* TTS 플레이어 모바일 스타일 */
   .tts-player {
     padding: 12px;
@@ -5271,11 +5315,9 @@ input[type="checkbox"] {
     margin-right: auto;
   }
   
-  /* 인라인 미디어 스위치 (작은 버전) */
+  /* 인라인 미디어 스위치 (작은 버전) - 더 이상 사용하지 않음 */
   .mobile-media-switch-inline {
-    display: flex;
-    align-items: center;
-    gap: 6px;
+    display: none; /* 모바일에서 개별 스위치 숨김 */
   }
   
   .media-label-small {
@@ -5416,8 +5458,51 @@ input[type="checkbox"] {
   .production-table td.tts-col .tts-controls {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 6px; /* 갭 감소 */
+    gap: 6px;
+  }
+  
+  /* 모바일 TTS 컨트롤 인라인 스타일 */
+  .tts-controls.mobile-inline {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+  
+  /* 모바일 컴팩트 버튼 스타일 */
+  .tts-generate-btn.mobile-compact,
+  .tts-play-btn.mobile-compact,
+  .tts-regenerate-btn.mobile-compact,
+  .tts-download-btn.mobile-compact {
+    min-width: auto;
+    padding: 6px 10px;
+    font-size: 0.8rem;
+    height: 32px;
+  }
+  
+  .tts-play-btn.mobile-compact {
+    width: 32px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .tts-regenerate-btn.mobile-compact,
+  .tts-download-btn.mobile-compact {
+    width: 32px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .tts-duration.mobile-compact {
+    font-size: 0.75rem;
+    white-space: nowrap;
+    min-width: 35px;
   }
   
   /* 씬 구분자 행 - 모바일에서는 숨기기 */
