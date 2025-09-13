@@ -180,7 +180,7 @@
                 @click="toggleLibraryImage(image)"
               >
                 <img 
-                  :src="image.storage_image_url || image.result_image_url" 
+                  :src="image.thumbnail_url || image.storage_image_url || image.result_image_url" 
                   :alt="image.element_name || 'Library image'"
                 />
                 <div class="library-item-overlay">
@@ -956,16 +956,15 @@ const loadLibraryImages = async () => {
         image_type,
         prompt_used,
         style_name,
-        created_at
+        created_at,
+        is_kept
       `)
       .eq('project_id', props.projectId)
       .eq('generation_status', 'completed')
-    
-    // 보관함 및 공유 필터는 컬럼 존재 확인 후 적용 예정
+      .neq('is_kept', true)  // 보관함에 넣은 이미지 제외
     
     const { data, error } = await query
       .order('created_at', { ascending: false })
-      .limit(20) // 타임아웃 방지를 위해 20개로 제한
 
     if (error) {
       console.error('라이브러리 이미지 쿼리 에러:', error)

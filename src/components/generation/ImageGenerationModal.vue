@@ -1249,6 +1249,8 @@ const loadLibraryImages = async () => {
       .from('gen_images')
       .select('*')
       .eq('generation_status', 'completed')
+      // 보관함 이미지는 항상 제외 (is_kept가 true인 것 제외)
+      .neq('is_kept', true)
     
     // 내 이미지만
     if (librarySource.value === 'my-images') {
@@ -1261,12 +1263,6 @@ const loadLibraryImages = async () => {
       //   query = query.eq('user_id', session.user.id)
       // }
       
-      // 보관함 포함 여부 - 단순화
-      if (!includeKept.value) {
-        // is_kept가 true가 아닌 것만 (null 또는 false)
-        query = query.neq('is_kept', true)
-      }
-      
       // is_shared 이미지도 포함 (제외 로직 삭제)
       // 주석처리: query = query.neq('is_shared', true)
     }
@@ -1277,7 +1273,7 @@ const loadLibraryImages = async () => {
     
     const { data, error } = await query
       .order('created_at', { ascending: false })
-      .limit(200) // 제한을 200개로 늘림
+      // limit 제거 - 모든 이미지 표시
     
     if (error) {
       console.error('라이브러리 이미지 쿼리 에러:', error)

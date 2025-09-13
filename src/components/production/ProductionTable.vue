@@ -169,9 +169,20 @@
     
     <div class="production-table-container">
       <table class="production-table">
+        <!-- 데스크탑/태블릿 컬럼 너비 설정 -->
+        <colgroup v-if="!isMobile">
+          <col style="width: 8%;">  <!-- 체크박스/씬번호 (증가) -->
+          <col style="width: 23%;"> <!-- 이미지/비디오 -->
+          <col style="width: 45%;"> <!-- 스크립트 원본 -->
+          <col style="width: 14%;"> <!-- 에셋 (감소) -->
+          <col style="width: 10%;"> <!-- TTS -->
+        </colgroup>
+        <!-- 모바일 컬럼 너비 설정 -->
+        <colgroup v-else>
+          <col style="width: 100%;"> <!-- 모바일은 카드 형식 -->
+        </colgroup>
         <thead>
           <tr>
-            <th class="sequence-group-col">시퀀스</th>
             <th class="scene-number-col">
             <input 
               type="checkbox" 
@@ -196,8 +207,7 @@
             </div>
           </th>
           <th class="script-col">스크립트 원본</th>
-          <th class="scene-type-col">씬타입</th>
-          <th class="director-guide-col">연출가이드</th>
+          <th v-if="isMobile" class="director-guide-col">연출가이드</th>
           <th class="assets-col">
             <div class="assets-header">
               <span>에셋</span>
@@ -266,6 +276,14 @@
       </thead>
       <tbody>
         <template v-for="group in groupedScenes" :key="group.id">
+          <!-- 시퀀스 이름 행 -->
+          <tr class="sequence-header-row" v-if="group.name !== 'Sequence 1'">
+            <td :colspan="!isMobile ? 9 : 1" class="sequence-header-cell">
+              <div class="sequence-header-content">
+                <span class="sequence-name-label">{{ group.name }}</span>
+              </div>
+            </td>
+          </tr>
           <template v-for="(scene, sceneIdx) in group.scenes" :key="scene.id">
             <tr 
               class="production-sheet-data-row"
@@ -284,22 +302,6 @@
               @mouseover="setHoveredItem(scene.id)"
               @mouseleave="clearHoveredItem()"
             >
-              <!-- 시퀀스 컬럼 (모든 씬에 생성, 첫 번째가 아니면 빈 셀) -->
-              <td v-if="!isMobile" 
-                  class="sequence-group-col" 
-                  :class="{
-                    'sequence-first': sceneIdx === 0,
-                    'sequence-middle': sceneIdx > 0 && sceneIdx < group.scenes.length - 1,
-                    'sequence-last': sceneIdx === group.scenes.length - 1
-                  }"
-                  :data-label="'시퀀스'">
-                <div v-if="sceneIdx === 0" class="sequence-group-cell">
-                  <div class="sequence-name-vertical">
-                    {{ group.name === 'Sequence 1' ? '시퀀스 1' : group.name }}
-                  </div>
-                </div>
-                <div v-else class="sequence-group-cell-empty"></div>
-              </td>
             <td v-if="!isMobile" class="scene-number-col" :data-label="'씬 번호'">
               <div class="scene-number-wrapper">
                 <input 
@@ -308,6 +310,9 @@
                   @change="toggleSelect(scene.id)"
                 >
                 <span class="scene-number">#S{{ scene.scene_number }}</span>
+                <span class="scene-type-badge" :class="getSceneTypeClass(scene)">
+                  {{ getSceneType(scene) }}
+                </span>
               </div>
             </td>
             
@@ -356,7 +361,7 @@
                 />
               </div>
             </td>
-            <td class="script-col editable-cell" :data-label="isMobile ? '오리지널 스크립트' : ''" @click="startEditing(scene.id, 'original_script_text', scene.original_script_text)">
+            <td class="script-col editable-cell" :data-label="isMobile ? '오리지널 스크립트' : ''" @click="!isTablet ? startEditing(scene.id, 'original_script_text', scene.original_script_text) : null">
               <template v-if="isEditing(scene.id, 'original_script_text')">
                 <textarea 
                   :id="`edit-${scene.id}-original_script_text`"
@@ -378,21 +383,64 @@
                 </div>
               </template>
               <template v-else>
-                {{ scene.original_script_text }}
+                <div class="script-content" @click="startEditing(scene.id, 'original_script_text', scene.original_script_text)">
+                  {{ scene.original_script_text }}
+                </div>
+                <!-- 태블릿과 데스크탑에서 연출가이드를 스크립트 아래에 표시 -->
+                <div v-if="isTablet || !isMobile" class="director-guide-inline">
+                  <!-- 태블릿에서만 토글 버튼 표시 -->
+                  <button 
+                    v-if="isTablet"
+                    class="director-guide-toggle"
+                    @click.stop="toggleDirectorGuide(scene.id)"
+                  >
+                    <span class="toggle-icon">{{ expandedDirectorGuides[scene.id] ? '▼' : '▶' }}</span>
+                    <span>연출가이드</span>
+                  </button>
+                  <!-- 데스크탑에서는 항상 표시, 태블릿에서는 토글 시 표시 -->
+                  <div v-if="!isTablet || expandedDirectorGuides[scene.id]" class="director-guide-content-inline">
+                    <div v-if="isEditing(scene.id, 'director_guide')">
+                      <textarea 
+                        :id="`edit-${scene.id}-director-guide`"
+                        v-model="editedValue"
+                        @blur="handleDirectorGuideBlur(scene)"
+                        @keydown.esc.prevent="cancelEdit"
+                        @keydown.ctrl.enter.prevent="handleDirectorGuideEnter(scene)"
+                        placeholder="시각적 연출 방안을 입력하세요..."
+                        class="edit-textarea"
+                        rows="3"
+                      />
+                      <div class="edit-hint">Ctrl+Enter: 저장, Esc: 취소</div>
+                    </div>
+                    <div v-else @click.stop="startEditingDirectorGuide(scene.id, scene.director_guide)">
+                      <p v-if="scene.director_guide" class="guide-text">{{ scene.director_guide }}</p>
+                      <span v-else class="empty-hint">연출가이드 추가 (클릭하여 편집)</span>
+                    </div>
+                  </div>
+                </div>
               </template>
             </td>
             
-            <!-- 씬타입 컬럼 -->
-            <td class="scene-type-col" :data-label="isMobile ? '씬타입' : ''">
-              <span class="scene-type-badge" :class="getSceneTypeClass(scene)">
-                {{ getSceneType(scene) }}
-              </span>
-            </td>
             
-            
-            <!-- 연출가이드 컬럼 -->
-            <td class="director-guide-col editable-cell" :data-label="isMobile ? '연출가이드' : ''" @click="startEditingDirectorGuide(scene.id, scene.director_guide)">
-              <template v-if="isEditing(scene.id, 'director_guide')">
+            <!-- 연출가이드 컬럼 (모바일에서만 표시) -->
+            <td v-if="isMobile" class="director-guide-col editable-cell" 
+                :data-label="'연출가이드'" 
+                @click="startEditingDirectorGuide(scene.id, scene.director_guide)">
+              <!-- 태블릿 뷰: 클릭해서 펼치기 -->
+              <template v-if="isTablet && !isEditing(scene.id, 'director_guide')">
+                <div class="director-guide-preview">
+                  <span class="preview-icon">{{ expandedDirectorGuides[scene.id] ? '▼' : '▶' }}</span>
+                  <span class="preview-text" v-if="!expandedDirectorGuides[scene.id]">
+                    {{ scene.director_guide ? (scene.director_guide.substring(0, 30) + (scene.director_guide.length > 30 ? '...' : '')) : '연출가이드 보기' }}
+                  </span>
+                  <div v-else class="expanded-content" @click.stop="startEditingDirectorGuide(scene.id, scene.director_guide)">
+                    <p v-if="scene.director_guide" class="guide-text">{{ scene.director_guide }}</p>
+                    <span v-else class="empty-hint">연출가이드 추가</span>
+                  </div>
+                </div>
+              </template>
+              <!-- 데스크탑/모바일 뷰: 기존 방식 -->
+              <template v-else-if="isEditing(scene.id, 'director_guide')">
                 <textarea 
                   :id="`edit-${scene.id}-director-guide`"
                   v-model="editedValue"
@@ -780,6 +828,8 @@ const editedValue = ref('')
 const hoveredItemId = ref(null)
 const hoveredAsset = ref(null)
 const isSaving = ref(false)
+const expandedDirectorGuides = ref({}) // 태블릿에서 펼친 연출가이드 추적
+
 // 미디어 타입 관리 - props로 받은 값 사용
 const globalMediaType = computed({
   get: () => props.mediaType,
@@ -800,11 +850,16 @@ const showAssetFilterDropdown = ref(false)
 const mediaPanel = ref(null)
 const mediaPanelOpen = ref(false)
 
-// 모바일 감지
+// 화면 크기 감지
 const isMobile = ref(window.innerWidth <= 768)
+const isTablet = ref(window.innerWidth > 768 && window.innerWidth <= 1024)
+
 const handleResize = () => {
-  isMobile.value = window.innerWidth <= 768
+  const width = window.innerWidth
+  isMobile.value = width <= 768
+  isTablet.value = width > 768 && width <= 1024
 }
+
 window.addEventListener('resize', handleResize)
 
 // 시퀀스별로 그룹화된 씬들
@@ -2797,6 +2852,11 @@ const toggleSceneMediaType = (sceneId) => {
   console.log(`Scene ${sceneId} media type changed to: ${newType}`)
 }
 
+// 태블릿에서 연출가이드 토글
+const toggleDirectorGuide = (sceneId) => {
+  expandedDirectorGuides.value[sceneId] = !expandedDirectorGuides.value[sceneId]
+}
+
 // TTS 파일 검증 함수 (개선된 버전)
 const validateTtsFile = async (audioUrl, timeout = 5000) => {
   if (!audioUrl) return false
@@ -4346,7 +4406,8 @@ defineExpose({ deleteSelectedScenes, mergeSelectedScenes })
 
 /* Column widths */
 .scene-number-col {
-  width: 60px;
+  width: 75px; /* 약간 감소 */
+  min-width: 75px;
   text-align: center;
   vertical-align: middle;
 }
@@ -4355,7 +4416,7 @@ defineExpose({ deleteSelectedScenes, mergeSelectedScenes })
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
 }
 
 .scene-number {
@@ -4365,22 +4426,29 @@ defineExpose({ deleteSelectedScenes, mergeSelectedScenes })
 }
 
 .scene-image-col {
-  width: 200px;
+  width: 150px; /* 감소 */
+  min-width: 150px;
   text-align: center;
   padding: 8px;
   vertical-align: middle;
 }
 
 .script-col {
-  min-width: 280px;
-  max-width: 380px;
+  /* width는 colgroup에서 관리 (45%) */
+  padding: 12px;
+  vertical-align: top; /* 상단 정렬 */
 }
 
-.scene-type-col {
-  min-width: 80px;
-  max-width: 100px;
-  text-align: center;
+/* 데스크톱/태블릿에서 script-col 스타일 초기화 */
+@media (min-width: 769px) {
+  .production-table td.script-col {
+    background: transparent !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+  }
 }
+
+/* scene-type-col 제거됨 - 씬 번호 칸으로 통합 */
 
 .scene-group-col {
   min-width: 120px;
@@ -4555,12 +4623,13 @@ defineExpose({ deleteSelectedScenes, mergeSelectedScenes })
 }
 
 .assets-col {
-  min-width: 180px;
-  max-width: 250px;
+  min-width: 160px; /* 최소 너비 확보 */
+  width: 180px;
 }
 
 .tts-col {
-  width: 150px;
+  width: 130px; /* 약간 감소 */
+  min-width: 130px;
   text-align: center;
 }
 
@@ -5395,7 +5464,7 @@ input[type="checkbox"] {
     margin: 0 !important;
   }
   
-  /* 오리지널 스크립트 섹션 */
+  /* 오리지널 스크립트 섹션 - 모바일에서만 배경과 라운드 */
   .production-table td.script-col {
     padding: 10px 6px; /* 패딩 감소 */
     background: var(--bg-tertiary);
@@ -5609,13 +5678,335 @@ input[type="checkbox"] {
   }
   
   .script-col {
-    min-width: 200px;
+    min-width: 300px;
+    width: 100%;
+    flex: 1;
   }
   
   .tag {
     font-size: 0.8rem;
     padding: 3px 8px;
   }
+}
+
+/* 태블릿 세로 모드 (769px - 900px): 모바일 카드 형식 사용 */
+@media (min-width: 769px) and (max-width: 900px) {
+  .production-table-wrapper {
+    padding: 10px;
+  }
+  
+  /* 모바일 스타일과 동일한 카드 형식 */
+  .production-table {
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+  
+  .production-table thead {
+    display: none;
+  }
+  
+  .production-table tbody tr {
+    display: block;
+    margin-bottom: 20px;
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    padding: 15px; /* 패딩 증가 */
+    box-shadow: var(--shadow-sm);
+  }
+  
+  /* 이미지 크기 증가 */
+  .scene-image-col img,
+  .scene-image-col video {
+    width: 100%;
+    height: auto;
+    max-height: 300px; /* 이미지 높이 증가 */
+    object-fit: contain;
+  }
+  
+  .production-table tbody tr.selected {
+    box-shadow: 0 0 0 2px var(--primary-color);
+  }
+  
+  .production-table td {
+    display: block;
+    width: 100%;
+    padding: 8px 0;
+    border: none;
+    text-align: left;
+  }
+  
+  .production-table td:before {
+    content: attr(data-label);
+    font-weight: bold;
+    display: block;
+    margin-bottom: 5px;
+    color: var(--text-secondary);
+  }
+  
+  /* 씬 번호는 카드 상단에 표시 */
+  .scene-number-col {
+    font-size: 1.1rem;
+    font-weight: bold;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-color);
+  }
+  
+  /* 연출가이드 - 클릭해서 펼치기 */
+  .director-guide-col.tablet-view {
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+  
+  .director-guide-preview {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .preview-icon {
+    display: inline-block;
+    margin-right: 8px;
+    transition: transform 0.3s;
+  }
+  
+  .preview-text {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+  }
+  
+  .expanded-content {
+    margin-top: 8px;
+    padding: 10px;
+    background: var(--bg-primary);
+    border-radius: 8px;
+    cursor: text;
+  }
+  
+  .expanded-content .guide-text {
+    margin: 0;
+    white-space: pre-wrap;
+  }
+}
+
+/* 태블릿 가로 모드 (901px - 1024px): 테이블 형식 유지, 연출가이드 접기 */
+@media (min-width: 901px) and (max-width: 1024px) {
+  .production-table-wrapper {
+    padding: 15px;
+  }
+  
+  /* 테이블 형식 유지 */
+  .production-table {
+    width: 100%;
+  }
+  
+  /* 컬럼 너비 조정 */
+  .scene-number-col {
+    width: 50px;
+  }
+  
+  .scene-image-col {
+    width: 150px; /* 이미지 크기 증가 */
+  }
+  
+  .scene-image-col img,
+  .scene-image-col video {
+    max-height: 120px; /* 이미지 높이 증가 */
+    object-fit: cover;
+  }
+  
+  .script-col {
+    min-width: 300px;
+    max-width: none; /* 최대 너비 제한 제거 */
+    flex: 1 1 auto; /* 남은 공간 차지하되 다른 컬럼들도 확보 */
+  }
+  
+  /* 연출가이드 컬럼 - 클릭해서 펼치기 */
+  .director-guide-col {
+    min-width: 180px;
+    max-width: none; /* 최대 너비 제한 제거 */
+    width: auto; /* 가용 공간 사용 */
+  }
+  
+  .director-guide-col.tablet-view {
+    cursor: pointer;
+    padding: 8px;
+  }
+  
+  .director-guide-preview {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  
+  .preview-icon {
+    flex-shrink: 0;
+    font-size: 0.8rem;
+    margin-top: 2px;
+  }
+  
+  .preview-text {
+    flex: 1;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  
+  .director-guide-col.expanded .director-guide-preview {
+    flex-direction: column;
+  }
+  
+  .director-guide-col.expanded .preview-text {
+    display: none;
+  }
+  
+  .director-guide-col.expanded .expanded-content {
+    display: block;
+    margin-top: 8px;
+    padding: 8px;
+    background: var(--bg-primary);
+    border-radius: 6px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 0.85rem;
+  }
+  
+  .director-guide-col:not(.expanded) .expanded-content {
+    display: none;
+  }
+  
+  /* 에셋 컬럼 조정 */
+  .assets-col {
+    min-width: 180px;
+  }
+  
+  /* TTS 컬럼 조정 */
+  .tts-col {
+    min-width: 150px;
+  }
+  
+  /* 버튼 크기 조정 */
+  .btn-add-row,
+  .btn-delete-row {
+    padding: 6px 10px;
+    font-size: 0.85rem;
+  }
+  
+  /* 선택 액션 바 조정 */
+  .selection-actions {
+    padding: 10px;
+  }
+  
+  .selection-buttons button {
+    padding: 8px 12px;
+    font-size: 0.85rem;
+  }
+}
+
+/* 시퀀스 헤더 행 스타일 */
+.sequence-header-row {
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+  border: none;
+}
+
+.sequence-header-cell {
+  padding: 10px 20px;
+  text-align: left;
+  border: none;
+}
+
+.sequence-header-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sequence-name-label {
+  color: white;
+  font-weight: 600;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* 연출가이드 인라인 스타일 (태블릿/데스크탑) */
+.director-guide-inline {
+  margin-top: 12px;
+}
+
+/* 데스크탑에서는 항상 표시되도록 */
+@media (min-width: 1025px) {
+  .director-guide-inline {
+    border-top: none;
+    padding-top: 0;
+  }
+}
+
+/* 태블릿에서만 상단 구분선 */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .director-guide-inline {
+    padding-top: 12px;
+    border-top: 1px solid var(--border-color);
+  }
+}
+
+.director-guide-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(74, 222, 128, 0.1);
+  border: 1px solid rgba(74, 222, 128, 0.3);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #4ade80; /* 카이로스 그린 */
+  transition: all 0.2s;
+  font-weight: 500;
+}
+
+.director-guide-toggle:hover {
+  background: rgba(74, 222, 128, 0.15);
+  border-color: rgba(74, 222, 128, 0.4);
+  color: #4ade80;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(74, 222, 128, 0.15);
+}
+
+.toggle-icon {
+  font-size: 0.75rem;
+  transition: transform 0.2s;
+}
+
+.director-guide-content-inline {
+  margin-top: 10px;
+  padding: 14px;
+  background: rgba(74, 222, 128, 0.05); /* 카이로스 그린 배경 */
+  border-radius: 8px;
+  border: 1px solid rgba(74, 222, 128, 0.2); /* 카이로스 그린 테두리 */
+  box-shadow: 0 2px 8px rgba(74, 222, 128, 0.08);
+}
+
+.director-guide-content-inline .guide-text {
+  margin: 0;
+  white-space: pre-wrap;
+  line-height: 1.6;
+  font-size: 0.9rem; /* 스크립트보다 작은 글씨 */
+  color: #4ade80; /* 카이로스 메인 그린 콜러 */
+  font-weight: 400; /* 가는 폰트 */
+}
+
+.director-guide-content-inline .empty-hint {
+  color: rgba(74, 222, 128, 0.6);
+  font-style: italic;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.director-guide-content-inline .empty-hint:hover {
+  color: #4ade80;
 }
 
 /* 씬타입 배지 스타일 */

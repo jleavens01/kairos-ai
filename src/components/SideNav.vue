@@ -1,10 +1,14 @@
 <template>
-  <nav class="side-nav" :class="{ 'mobile-nav-open': isMobile && isMobileNavOpen, 'mobile-nav-closed': isMobile && !isMobileNavOpen }">
+  <nav class="side-nav" :class="{ 
+    'mobile-nav-open': (isMobile || isTablet) && isMobileNavOpen, 
+    'mobile-nav-closed': (isMobile || isTablet) && !isMobileNavOpen,
+    'collapsed': isCollapsed && !isMobile && !isTablet 
+  }">
     <div class="nav-header">
       <router-link to="/home" class="logo-link">
         <h2 class="app-title">Kairos AI</h2>
       </router-link>
-      <button v-if="isMobile" @click="closeMobileNav" class="close-button">×</button>
+      <button v-if="isMobile || isTablet" @click="closeMobileNav" class="close-button">×</button>
     </div>
     
     <div class="nav-content">
@@ -12,11 +16,11 @@
       <div v-if="!authStore.isLoggedIn" class="nav-section">
         <router-link to="/home" class="nav-item" @click="closeMobileNav">
           <Home :size="20" />
-          <span class="nav-text">홈</span>
+          <span class="nav-text" v-if="!isCollapsed || isMobile || isTablet">홈</span>
         </router-link>
         <router-link to="/login" class="nav-item" @click="closeMobileNav">
           <LogIn :size="20" />
-          <span class="nav-text">로그인</span>
+          <span class="nav-text" v-if="!isCollapsed || isMobile || isTablet">로그인</span>
         </router-link>
       </div>
 
@@ -24,7 +28,7 @@
       <div v-else class="nav-section">
         <router-link to="/projects" class="nav-item main-nav-item" @click="closeMobileNav">
           <FolderOpen :size="20" />
-          <span class="nav-text">프로젝트</span>
+          <span class="nav-text" v-if="!isCollapsed || isMobile || isTablet">프로젝트</span>
         </router-link>
         
         <!-- 최근 프로젝트 목록 -->
@@ -46,18 +50,18 @@
         
         <router-link to="/library" class="nav-item" @click="closeMobileNav">
           <BookOpen :size="20" />
-          <span class="nav-text">라이브러리</span>
+          <span class="nav-text" v-if="!isCollapsed || isMobile || isTablet">라이브러리</span>
         </router-link>
         
         <router-link to="/explore" class="nav-item" @click="closeMobileNav">
           <Compass :size="20" />
-          <span class="nav-text">Explore</span>
+          <span class="nav-text" v-if="!isCollapsed || isMobile || isTablet">Explore</span>
         </router-link>
 
         
         <router-link to="/billing" class="nav-item" @click="closeMobileNav">
           <CreditCard :size="20" />
-          <span class="nav-text">결제</span>
+          <span class="nav-text" v-if="!isCollapsed || isMobile || isTablet">결제</span>
         </router-link>
       </div>
     </div>
@@ -128,6 +132,10 @@ const props = defineProps({
   isMobileNavOpen: {
     type: Boolean,
     default: false
+  },
+  isCollapsed: {
+    type: Boolean,
+    default: false
   }
 });
 
@@ -141,16 +149,21 @@ const router = useRouter();
 const route = useRoute();
 
 const isMobile = ref(false);
+const isTablet = ref(false);
 const recentProjects = ref([]);
 const currentProjectId = computed(() => route.params.projectId);
 const showProfileMenu = ref(false);
 
-const checkMobile = () => {
-  isMobile.value = window.innerWidth <= 768;
+const checkScreenSize = () => {
+  const width = window.innerWidth;
+  isMobile.value = width <= 768;
+  isTablet.value = width > 768 && width <= 1024;
 };
 
+const checkMobile = checkScreenSize; // 이전 버전 호환성
+
 const closeMobileNav = () => {
-  if (isMobile.value) {
+  if (isMobile.value || isTablet.value) {
     emit('update:isMobileNavOpen', false);
   }
 };
@@ -266,10 +279,12 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   box-shadow: var(--shadow-md);
-  transition: transform 0.3s ease-in-out, background-color 0.3s;
+  transition: transform 0.3s ease-in-out, width 0.3s ease-in-out, background-color 0.3s;
   border-right: 1px solid var(--border-color);
   z-index: 1000; /* 가장 상위로 설정 */
 }
+
+/* 데스크톱에서는 항상 전체 너비 유지 */
 
 .dark .side-nav {
   background-color: #1a1a1a;
@@ -312,6 +327,8 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
 }
+
+/* collapse button 제거됨 */
 
 .nav-content {
   flex: 1;
@@ -592,10 +609,10 @@ onUnmounted(() => {
   color: var(--primary-color);
 }
 
-/* 모바일 스타일 */
-@media (max-width: 768px) {
+/* 모바일 및 태블릿 스타일 */
+@media (max-width: 1024px) {
   .side-nav {
-    z-index: 1000; /* 모바일에서도 가장 상위 */
+    z-index: 1000; /* 모바일/태블릿에서 가장 상위 */
   }
 
   .mobile-nav-closed {
