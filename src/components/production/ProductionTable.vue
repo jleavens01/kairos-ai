@@ -2787,6 +2787,7 @@ const showFullImage = (mediaUrl) => {
 const switchGlobalMediaType = (newType) => {
   globalMediaType.value = newType
   console.log(`전체 미디어 타입이 ${newType}로 변경되었습니다.`)
+}
 
 // 모바일에서 개별 씬 미디어 타입 토글
 const toggleSceneMediaType = (sceneId) => {
