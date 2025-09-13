@@ -93,13 +93,13 @@ const setImageSrc = () => {
 .lazy-image-wrapper {
   position: relative;
   width: 100%;
-  height: 100%;
-  overflow: hidden;
+  height: auto;
+  overflow: visible;
 }
 
 .lazy-image-placeholder {
   width: 100%;
-  height: 100%;
+  height: 200px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -130,8 +130,8 @@ const setImageSrc = () => {
 
 .lazy-image {
   width: 100%;
-  height: 100%;
-  object-fit: cover;
+  height: auto;
+  object-fit: contain;
   opacity: 0;
   transition: opacity 0.3s ease;
 }
@@ -142,7 +142,7 @@ const setImageSrc = () => {
 
 .error-placeholder {
   width: 100%;
-  height: 100%;
+  height: 200px;
   display: flex;
   flex-direction: column;
   align-items: center;

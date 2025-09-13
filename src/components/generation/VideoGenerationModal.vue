@@ -1653,8 +1653,8 @@ const generateVideo = async () => {
 
 .image-preview-wrapper img {
   width: 100%;
-  height: 100%;
-  object-fit: cover;
+  height: auto;
+  object-fit: contain;
 }
 
 .btn-remove-image {
@@ -1762,8 +1762,8 @@ const generateVideo = async () => {
   top: 0;
   left: 0;
   width: 100%;
-  height: 100%;
-  object-fit: cover;
+  height: auto;
+  object-fit: contain;
 }
 
 .library-item:hover {
@@ -2324,8 +2324,8 @@ const generateVideo = async () => {
     top: 0 !important;
     left: 0 !important;
     width: 100% !important;
-    height: 100% !important;
-    object-fit: cover !important;
+    height: auto !important;
+    object-fit: contain !important;
   }
   
   .library-item-info {

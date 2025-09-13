@@ -6297,10 +6297,7 @@ input[type="checkbox"] {
   color: #6b7280;
 }
 
-/* 연출가이드 스타일 */
-.director-guide-content {
-  /* 세로 제한 제거 - 전체 내용 표시 */
-}
+
 
 .guide-text {
   margin: 0;

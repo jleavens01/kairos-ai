@@ -1601,7 +1601,7 @@ defineExpose({
 
 @media (max-width: 600px) {
   .video-grid {
-    column-count: 1 !important; /* 모바일에서는 항상 1열 */
+    column-count: 1 !important;
   }
 }
 
@@ -1722,6 +1722,7 @@ defineExpose({
   width: 100%;
   height: auto;
   display: block;
+  object-fit: contain;
 }
 
 .preview-video {

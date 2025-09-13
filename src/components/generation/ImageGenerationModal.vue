@@ -2364,7 +2364,7 @@ onMounted(async () => {
   gap: 10px;
   width: 100%;
   margin-bottom: 10px;
-  grid-auto-rows: 100px; /* 고정 높이 */
+  grid-auto-rows: minmax(100px, auto); /* 최소 높이 유지하면서 자동 조절 */
 }
 
 .reference-image-item {
@@ -2992,7 +2992,7 @@ onMounted(async () => {
   gap: 8px;
   max-height: 300px;
   overflow-y: auto;
-  grid-auto-rows: 100px; /* 고정 높이 */
+  grid-auto-rows: minmax(100px, auto); /* 최소 높이 유지하면서 자동 조절 */
   padding: 8px;
   background: var(--bg-secondary);
   border-radius: 8px;
@@ -3083,7 +3083,7 @@ onMounted(async () => {
 .style-option .style-thumb {
   width: 40px;
   height: 40px;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: 4px;
   margin-right: 12px;
 }
@@ -3118,7 +3118,7 @@ onMounted(async () => {
 .style-preview img {
   width: 100px;
   height: 100px;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: 6px;
   margin-bottom: 8px;
 }
@@ -3139,7 +3139,7 @@ onMounted(async () => {
 .style-preview-compact img {
   width: 60px;
   height: 60px;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: 6px;
   border: 2px solid var(--border-color);
   vertical-align: middle;

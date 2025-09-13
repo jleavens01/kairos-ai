@@ -1789,7 +1789,8 @@ defineExpose({
 .character-full-image img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  background: var(--bg-secondary);
 }
 .character-placeholder {
   width: 100%;
@@ -2068,13 +2069,13 @@ defineExpose({
   color: var(--text-primary);
   font-size: 0.9rem;
 }
-/* 통합 갤러리 - Masonry 레이아웃 */
+/* 통합 갤러리 - Masonry 레이아웃 (CSS 컬럼) */
 .image-grid {
-  /* CSS 멀티 컬럼 레이아웃 사용 */
   column-gap: 20px;
   padding: 0;
   transition: column-count 0.3s ease;
 }
+
 /* 반응형 미디어 쿼리는 컬럼 컨트롤이 없을 때만 적용 */
 @media (max-width: 1440px) {
   .image-grid:not([style*="column-count"]) {
@@ -2088,7 +2089,7 @@ defineExpose({
 }
 @media (max-width: 600px) {
   .image-grid {
-    column-count: 1 !important; /* 모바일에서는 항상 1열 */
+    column-count: 1 !important;
   }
 }
 .gallery-item {
@@ -2097,10 +2098,10 @@ defineExpose({
   overflow: hidden;
   cursor: pointer;
   transition: all 0.3s;
-  break-inside: avoid; /* 컬럼 중간에서 아이템이 잘리지 않도록 */
-  margin-bottom: 20px; /* 아래 간격 */
-  display: inline-block; /* 컬럼 레이아웃에서 올바르게 표시 */
-  width: 100%; /* 컬럼 너비에 맞춤 */
+  break-inside: avoid;
+  margin-bottom: 20px;
+  display: inline-block;
+  width: 100%;
 }
 /* 생성 제안 카드 스타일 */
 .gallery-item.suggestion-card {
@@ -2146,7 +2147,7 @@ defineExpose({
   height: auto;
   display: block;
   object-fit: contain;
-  /* 최대 높이 제한 제거 - 원본 비율 유지 */
+  /* 원본 비율 유지 */
 }
 /* 오버레이 정보 */
 .image-overlay-info {
