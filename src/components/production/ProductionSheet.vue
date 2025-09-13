@@ -12,32 +12,6 @@
     
     <!-- 스토리보드 영역 -->
     <div v-else class="production-content">
-      <!-- 모바일 헤더 (원고 입력 + 미디어 스위치) -->
-      <div v-if="isMobile" class="mobile-production-header">
-        <button @click="handleOpenScriptInput" class="btn-script-input">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-            <polyline points="14 2 14 8 20 8"></polyline>
-            <line x1="16" y1="13" x2="8" y2="13"></line>
-            <line x1="16" y1="17" x2="8" y2="17"></line>
-          </svg>
-          <span>원고 입력</span>
-        </button>
-        
-        <div class="media-switch-container">
-          <span class="media-label" :class="{ active: mediaType === 'image' }">이미지</span>
-          <label class="media-switch">
-            <input 
-              type="checkbox" 
-              :checked="mediaType === 'video'"
-              @change="switchMediaType"
-            >
-            <span class="switch-slider"></span>
-          </label>
-          <span class="media-label" :class="{ active: mediaType === 'video' }">비디오</span>
-        </div>
-      </div>
-      
       <!-- 스토리보드 테이블 -->
       <ProductionTable 
         :scenes="scenes"
@@ -52,7 +26,7 @@
         @update-scene="handleUpdateScene"
         @character-extraction="handleOpenCharacterExtraction"
         @open-news-collector="handleOpenNewsCollector"
-        @update:media-type="mediaType = $event"
+        @update:media-type="updateMediaType"
       />
     </div>
 
@@ -109,10 +83,14 @@ const props = defineProps({
   canEdit: {
     type: Boolean,
     default: true
+  },
+  mediaType: {
+    type: String,
+    default: 'image'
   }
 })
 
-const emit = defineEmits(['update'])
+const emit = defineEmits(['update', 'update:mediaType'])
 
 const productionStore = useProductionStore()
 
@@ -121,12 +99,14 @@ const showScriptModal = ref(false)
 const showCharacterModal = ref(false)
 const showNewsModal = ref(false)
 const selectedScenes = ref([])
-const mediaType = ref('image')
+const mediaType = ref(props.mediaType || 'image')
 const isMobile = ref(window.innerWidth <= 768)
+const isTabletPortrait = ref(window.innerWidth >= 769 && window.innerWidth <= 900)
 
 // 화면 크기 감지
 const handleResize = () => {
   isMobile.value = window.innerWidth <= 768
+  isTabletPortrait.value = window.innerWidth >= 769 && window.innerWidth <= 900
 }
 
 onMounted(() => {
@@ -157,9 +137,22 @@ const handleOpenNewsCollector = () => {
 // 미디어 타입 전환
 const switchMediaType = () => {
   mediaType.value = mediaType.value === 'image' ? 'video' : 'image'
-  // ProductionTable에 전달하기 위해 이벤트 발생
+  // Parent에게 이벤트 발생
   emit('update:mediaType', mediaType.value)
 }
+
+// Update media type from parent or child
+const updateMediaType = (newType) => {
+  mediaType.value = newType
+  emit('update:mediaType', newType)
+}
+
+// Watch for external mediaType changes
+watch(() => props.mediaType, (newType) => {
+  if (newType && newType !== mediaType.value) {
+    mediaType.value = newType
+  }
+})
 
 const handleScriptAnalyzed = async (data) => {
   showScriptModal.value = false

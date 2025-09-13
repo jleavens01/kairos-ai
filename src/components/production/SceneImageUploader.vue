@@ -30,7 +30,7 @@
       :src="imageUrl" 
       :alt="`씬 ${sceneNumber} 이미지`"
       class="scene-thumbnail"
-      @click.stop="$emit('view-image', imageUrl)"
+      @click.stop="preventDefaultAction"
     />
     
     <!-- 비디오 표시 -->
@@ -41,7 +41,9 @@
       class="scene-video"
       :muted="true"
       :loop="true"
-      @click.stop="$emit('view-image', videoUrl)"
+      controls
+      playsinline
+      @click.stop="toggleVideoPlayback"
       @mouseenter="playVideo"
       @mouseleave="pauseVideo"
     ></video>
@@ -81,7 +83,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { supabase } from '@/utils/supabase'
 
 const props = defineProps({
@@ -146,6 +148,87 @@ watch(() => props.mediaType, (newType) => {
 const switchLocalMediaType = () => {
   localMediaType.value = localMediaType.value === 'image' ? 'video' : 'image'
 }
+
+// Intersection Observer for auto-play
+let observer = null
+
+// 비디오 자동 재생을 위한 Intersection Observer 설정
+const setupIntersectionObserver = () => {
+  if (!videoElement.value) return
+
+  // 기존 observer가 있으면 정리
+  if (observer) {
+    observer.disconnect()
+  }
+
+  // Intersection Observer 옵션 설정
+  const options = {
+    root: null, // viewport를 root로 사용
+    rootMargin: '0px',
+    threshold: 0.5 // 비디오의 50% 이상이 보일 때 재생
+  }
+
+  observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        // 비디오가 화면에 보이면 재생
+        if (videoElement.value && videoElement.value.paused) {
+          videoElement.value.play().catch(err => {
+            console.log('Auto-play failed:', err)
+            // 자동 재생이 실패하면 muted로 다시 시도
+            videoElement.value.muted = true
+            videoElement.value.play().catch(err2 => {
+              console.log('Muted auto-play also failed:', err2)
+            })
+          })
+        }
+      } else {
+        // 비디오가 화면에서 벗어나면 일시정지
+        if (videoElement.value && !videoElement.value.paused) {
+          videoElement.value.pause()
+        }
+      }
+    })
+  }, options)
+
+  observer.observe(videoElement.value)
+}
+
+// 컴포넌트 마운트 시 Observer 설정
+onMounted(() => {
+  if (currentMediaType.value === 'video' && videoElement.value) {
+    nextTick(() => {
+      setupIntersectionObserver()
+    })
+  }
+})
+
+// 컴포넌트 언마운트 시 Observer 정리
+onUnmounted(() => {
+  if (observer) {
+    observer.disconnect()
+  }
+})
+
+// currentMediaType이 변경될 때 Observer 재설정
+watch(currentMediaType, (newType) => {
+  if (newType === 'video') {
+    nextTick(() => {
+      setupIntersectionObserver()
+    })
+  } else if (observer) {
+    observer.disconnect()
+  }
+})
+
+// videoUrl이 변경될 때 Observer 재설정
+watch(() => props.videoUrl, (newUrl) => {
+  if (newUrl && currentMediaType.value === 'video') {
+    nextTick(() => {
+      setupIntersectionObserver()
+    })
+  }
+})
 
 // Methods
 const handleDragOver = (event) => {
@@ -327,6 +410,24 @@ const pauseVideo = () => {
     videoElement.value.pause()
     videoElement.value.currentTime = 0 // 처음으로 되돌리기
   }
+}
+
+// 비디오 클릭 시 재생/일시정지 토글
+const toggleVideoPlayback = () => {
+  if (videoElement.value) {
+    if (videoElement.value.paused) {
+      videoElement.value.play()
+    } else {
+      videoElement.value.pause()
+    }
+  }
+}
+
+// 이미지 클릭 시 기본 동작 방지
+const preventDefaultAction = (event) => {
+  event.preventDefault()
+  event.stopPropagation()
+  // 아무 동작도 하지 않음
 }
 
 const removeMedia = async () => {

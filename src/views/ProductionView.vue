@@ -425,19 +425,37 @@ const tabs = ref([
   padding: 24px;
 }
 
+/* 태블릿 세로모드 (769px - 900px) */
+@media (min-width: 769px) and (max-width: 900px) {
+  .view-header {
+    display: none; /* 프로덕션 헤더 숨김 */
+  }
+  
+  .production-tabs {
+    gap: 8px;
+    margin-top: 0;
+  }
+  
+  .tab-btn {
+    font-size: 13px;  /* 모바일과 동일한 크기 */
+    padding: 8px 12px;  /* 모바일과 동일한 패딩 */
+  }
+}
+
 /* 반응형 */
 @media (max-width: 768px) {
   .production-view {
     padding: 16px;
   }
   
-  .view-header h1 {
-    font-size: 24px;
+  .view-header {
+    display: none; /* 프로덕션 헤더 숨김 */
   }
   
   .production-tabs {
     padding: 6px;
     gap: 4px;
+    margin-top: 0;
   }
   
   .tab-btn {

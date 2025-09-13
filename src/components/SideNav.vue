@@ -609,6 +609,11 @@ onUnmounted(() => {
   color: var(--primary-color);
 }
 
+/* 태블릿 세로모드 (769px - 900px) - 모바일과 동일한 스타일 적용 */
+@media (min-width: 769px) and (max-width: 900px) {
+  /* 모바일과 동일하게 기본 스타일 사용 - 특별한 오버라이드 없음 */
+}
+
 /* 모바일 및 태블릿 스타일 */
 @media (max-width: 1024px) {
   .side-nav {

@@ -161,6 +161,64 @@ onUnmounted(() => {
   }
 }
 
+/* --- 태블릿 세로모드 스타일 (769px - 900px) --- */
+@media (min-width: 769px) and (max-width: 900px) {
+  .app-layout {
+    flex-direction: column; /* 모바일과 같은 레이아웃 */
+  }
+  
+  .main-content {
+    margin-left: 0; /* 사이드네비 공간 제거 */
+    width: 100%;
+    padding: 1rem;
+    padding-top: 4rem;
+    box-sizing: border-box;
+  }
+  
+  /* 햄버거 메뉴 버튼 표시 */
+  .hamburger-menu-button {
+    display: block;
+    position: fixed;
+    top: 1rem;
+    left: 1rem;
+    z-index: 101;
+    background: var(--primary-gradient);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 0.25rem 0.5rem;
+    font-size: 1.5rem;
+    cursor: pointer;
+    box-shadow: var(--shadow-sm);
+    transition: all 0.3s;
+  }
+  
+  /* 사이드네비 숨김 처리 - 모바일처럼 동작 */
+  
+  /* 폰트 사이즈 관련 스타일 제거 - 모바일과 동일하게 */
+  /*
+  .side-nav .nav-item {
+    font-size: 0.9rem;
+    padding: 0.6rem 1rem;
+  }
+  
+  .side-nav .nav-header {
+    font-size: 0.75rem;
+  }
+  */
+  
+  /* 오버레이 */
+  .side-nav-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 99;
+  }
+}
+
 /* --- 모바일 반응형 스타일 --- */
 @media (max-width: 768px) {
   .app-layout {

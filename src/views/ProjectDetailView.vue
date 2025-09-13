@@ -31,7 +31,19 @@
             </button>
           </div>
           <div class="tabs-right">
-            <!-- 스토리보드 탭 액션 버튼 (편집 권한 필요) -->
+            <!-- 스토리보드 탭: 미디어 스위치 + 원고 입력 버튼 -->
+            <div v-if="activeTab === 'production' && isMobile" class="media-switch-container">
+              <span class="media-label" :class="{ active: mediaType === 'image' }">이미지</span>
+              <label class="media-switch">
+                <input 
+                  type="checkbox" 
+                  :checked="mediaType === 'video'"
+                  @change="switchMediaType"
+                >
+                <span class="switch-slider"></span>
+              </label>
+              <span class="media-label" :class="{ active: mediaType === 'video' }">비디오</span>
+            </div>
             <button 
               v-if="activeTab === 'production' && canEdit"
               @click="handleOpenScriptInput" 
@@ -108,7 +120,9 @@
               ref="productionSheetRef"
               :project-id="projectId"
               :can-edit="canEdit"
+              :media-type="mediaType"
               @update="handleProductionUpdate"
+              @update:media-type="mediaType = $event"
             />
           </div>
 
@@ -253,13 +267,15 @@ const tabs = [
   { id: 'media', label: '비디오', mobileLabel: '비디오' },
   { id: 'avatar', label: '아바타', mobileLabel: '아바타' },
   { id: 'export', label: '내보내기', mobileLabel: '내보내기' },
-  { id: 'settings', label: '설정', mobileLabel: '⚙️' }
+  { id: 'settings', label: '⚙️', mobileLabel: '⚙️' }
 ]
 
-// 모바일 여부 감지
+// 화면 크기 감지
 const isMobile = ref(window.innerWidth <= 768)
+const isTabletPortrait = ref(window.innerWidth >= 769 && window.innerWidth <= 900)
 window.addEventListener('resize', () => {
   isMobile.value = window.innerWidth <= 768
+  isTabletPortrait.value = window.innerWidth >= 769 && window.innerWidth <= 900
 })
 
 // 탭 변경 함수
@@ -276,6 +292,7 @@ const imageFilterCategory = ref('')
 const videoFilterModel = ref('')
 const showImageKeptOnly = ref(false)
 const showVideoKeptOnly = ref(false)
+const mediaType = ref('image') // 이미지/비디오 전환 상태
 
 // 컴포넌트 refs
 const productionSheetRef = ref(null)
@@ -391,6 +408,11 @@ const copyShareLink = () => {
 // 탭 액션 버튼 핸들러
 const handleOpenScriptInput = () => {
   productionSheetRef.value?.openScriptInput()
+}
+
+// 미디어 타입 전환
+const switchMediaType = () => {
+  mediaType.value = mediaType.value === 'image' ? 'video' : 'image'
 }
 
 const handleOpenImageGeneration = () => {
@@ -509,6 +531,90 @@ const toggleVideoKeptView = () => {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* 미디어 스위치 스타일 - ProductionTable과 동일한 스타일 */
+.media-switch-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+}
+
+.media-label {
+  color: #6b7280;  /* 비활성 상태: 밝은 회색 */
+  font-weight: 500;
+  transition: all 0.2s;
+  font-size: 0.85rem;
+}
+
+/* 이미지 활성화 시 파란색 */
+.media-label.active:first-of-type {
+  color: #60a5fa;
+  font-weight: 600;
+}
+
+/* 비디오 활성화 시 초록색 */
+.media-label.active:last-of-type {
+  color: #10b981;
+  font-weight: 600;
+}
+
+.media-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+
+.media-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.switch-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #60a5fa; /* 이미지 모드: 파란색 */
+  transition: all 0.3s;
+  border-radius: 24px;
+}
+
+.switch-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.4s;
+  border-radius: 50%;
+}
+
+.media-switch input:checked + .switch-slider {
+  background-color: #10b981; /* 비디오 모드: 선명한 초록색 */
+}
+
+.media-switch input:checked + .switch-slider:before {
+  transform: translateX(20px);
+}
+
+.media-switch:hover .switch-slider {
+  opacity: 0.9;
+}
+
+.media-switch input:not(:checked):hover + .switch-slider {
+  background-color: #3b82f6; /* 이미지 모드 호버: 진한 파란색 */
+}
+
+.media-switch input:checked:hover + .switch-slider {
+  background-color: #059669; /* 비디오 모드 호버: 진한 초록색 */
 }
 
 .dark .tabs {
@@ -745,6 +851,80 @@ const toggleVideoKeptView = () => {
 
 .btn-copy:hover {
   opacity: 0.9;
+}
+
+/* 태블릿 세로 모드 (769px - 900px) - 모바일과 동일한 탭 스타일 */
+@media (min-width: 769px) and (max-width: 900px) {
+  .tabs-left {
+    display: flex;
+    gap: 0;
+    width: 100%;
+    justify-content: space-between;
+    background-color: #2d3748;
+  }
+
+  .dark .tabs-left {
+    background-color: #1a1a1a;
+  }
+
+  .tab-button {
+    padding: 12px 6px;
+    font-size: 0.75rem;
+    min-width: 0;
+    flex: 1;
+    white-space: nowrap;
+    border-radius: 0;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.7);
+    position: relative;
+  }
+
+  /* 마지막 버튼 (설정) 스타일 - 폰트 크기도 작게 */
+  .tab-button:last-child {
+    font-size: 0.75rem;  /* 다른 버튼과 동일한 크기로 변경 */
+    padding: 12px 8px;
+    max-width: 45px;
+    flex: 0 0 auto;
+  }
+
+  /* 활성 탭 스타일 - 설정 제외 */
+  .tab-button.active:not(:last-child) {
+    background: transparent;
+    color: #4ade80;
+    border-bottom-color: #4ade80;
+    font-weight: 600;
+  }
+
+  /* 설정 버튼 활성화 시 색상만 변경 */
+  .tab-button:last-child.active {
+    color: #4ade80;
+    border-bottom-color: transparent;
+  }
+
+  .tab-button:hover {
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .tab-action-btn {
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+
+  .filter-select {
+    padding: 8px 12px;
+    font-size: 0.85rem;
+  }
+
+  /* tab-content 좌우 패딩 제거 */
+  .tab-content {
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
 }
 
 /* 모바일 반응형 */
